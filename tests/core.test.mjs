@@ -620,3 +620,78 @@ test('future record lists are merged by id on import and replaced on restore', (
   assert.deepEqual(c.replaceState(local, incoming).state.things, incoming.things);
   assert.deepEqual(c.replaceState(local, incoming).state.extra, { x: 1 });
 });
+
+// ---- Completed workouts: delete, restore, correct ----
+
+const finished = () => {
+  const st = c.defaultState();
+  const session = c.startSession({ id: 'r', name: 'A', exercises: [{ id: 'e1', name: 'Penkki', sets: 2, reps: '8', weight: '60 kg' }] }, 1000);
+  session.exercises[0].sets.forEach((s) => { s.done = true; });
+  st.history = [c.summarize(session, 1000 + 3600000), { id: 'old', name: 'Vanha', startedAt: 0, endedAt: 5000, setsDone: 3, setsTotal: 3 }];
+  return st;
+};
+
+test('deleting and restoring a workout keeps its position and is idempotent', () => {
+  const st = finished();
+  const id = st.history[0].id;
+  const removed = c.deleteHistoryEntry(st, id);
+  assert.equal(removed.ok, true);
+  assert.deepEqual(st.history.map((h) => h.id), ['old']);
+  assert.equal(c.deleteHistoryEntry(st, id).ok, false);
+  assert.equal(c.restoreHistoryEntry(st, removed.entry, removed.index).ok, true);
+  assert.equal(st.history[0].id, id);
+  assert.equal(c.restoreHistoryEntry(st, removed.entry, removed.index).ok, false);
+  assert.equal(st.history.length, 2);
+});
+
+test('editing a logged set corrects reps, weight and done state and recounts sets', () => {
+  const st = finished(), id = st.history[0].id;
+  assert.equal(c.editHistorySet(st, id, 0, 1, 'done', false, 777).ok, true);
+  assert.equal(st.history[0].setsDone, 1);
+  assert.equal(st.history[0].editedAt, 777);
+  assert.equal(c.editHistorySet(st, id, 0, 0, 'actualReps', '7').ok, true);
+  assert.equal(st.history[0].exercises[0].sets[0].actualReps, '7');
+  assert.equal(c.editHistorySet(st, id, 0, 0, 'actualWeight', '62,5').ok, true);
+  assert.equal(st.history[0].exercises[0].sets[0].actualWeight, '62,5');
+  assert.equal(c.editHistorySet(st, id, 0, 0, 'actualWeight', '60').ok, true);
+  assert.equal('actualWeight' in st.history[0].exercises[0].sets[0], false);
+  assert.equal(c.editHistorySet(st, id, 0, 0, 'actualReps', '').ok, true);
+  assert.equal('actualReps' in st.history[0].exercises[0].sets[0], false);
+});
+
+test('invalid history edits are rejected and change nothing', () => {
+  const st = finished(), id = st.history[0].id, before = JSON.stringify(st);
+  for (const [field, value] of [['actualReps', '101'], ['actualReps', '-1'], ['actualReps', '5x'], ['actualWeight', '105 lbs'], ['actualWeight', '-5'], ['actualWeight', '1e3'], ['nope', '1']]) {
+    assert.equal(c.editHistorySet(st, id, 0, 0, field, value).ok, false, `${field} ${value}`);
+  }
+  assert.equal(c.editHistorySet(st, id, 5, 0, 'done', true).ok, false);
+  assert.equal(c.editHistorySet(st, 'missing', 0, 0, 'done', true).ok, false);
+  assert.equal(JSON.stringify(st), before);
+});
+
+test('legacy summary-only workouts can be deleted but their sets cannot be edited', () => {
+  const st = finished();
+  assert.equal(c.editHistorySet(st, 'old', 0, 0, 'done', true).ok, false);
+  assert.equal(c.shortenHistoryDuration(st, 'old', '1').ok, false);
+  assert.equal(c.deleteHistoryEntry(st, 'old').ok, true);
+});
+
+test('a workout duration can only be shortened', () => {
+  const st = finished(), id = st.history[0].id;
+  assert.equal(c.shortenHistoryDuration(st, id, '90').ok, false);
+  assert.equal(c.shortenHistoryDuration(st, id, '60').ok, false);
+  assert.equal(c.shortenHistoryDuration(st, id, '0').ok, false);
+  assert.equal(c.shortenHistoryDuration(st, id, '45,5').ok, false);
+  assert.equal(c.shortenHistoryDuration(st, id, '45', 888).ok, true);
+  assert.equal(st.history[0].endedAt - st.history[0].startedAt, 45 * 60000);
+  assert.equal(st.history[0].editedAt, 888);
+});
+
+test('editedAt survives normalization and is dropped when invalid', () => {
+  const st = finished(), id = st.history[0].id;
+  c.editHistorySet(st, id, 0, 0, 'actualReps', '9', 4242);
+  assert.equal(c.parseBackup(JSON.stringify(c.buildBackup(st))).state.history[0].editedAt, 4242);
+  const bad = c.buildBackup(finished());
+  bad.data.history[0].editedAt = 'x';
+  assert.equal('editedAt' in c.parseBackup(JSON.stringify(bad)).state.history[0], false);
+});

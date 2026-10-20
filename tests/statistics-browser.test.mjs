@@ -111,6 +111,7 @@ try {
         await run('tracking metadata and optional per-set inputs survive training, reload and completion without rewriting history', async (page) => {
           const state = configuredState(Date.now() - DAY);
           state.settings.autoRest = false;
+          state.settings.advancedLogging = true;
           await seed(page, state);
           await tap(button(page, 'Muokkaa: Vertailutreeni'));
           const panel = page.locator('.tracking-editor').first();

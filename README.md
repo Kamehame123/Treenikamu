@@ -42,7 +42,9 @@ compared with only part of today; custom past ranges include their whole last da
   Dumbbell loads stay per dumbbell, without silently doubling them. External
   volume is recorded kg times actual reps, including warm-ups; its cross-exercise
   total depends on exercise selection and is not muscle growth or mechanical work.
-- Expand **Kuormittavuus (valinnainen)** during training to enter actual reps (or
+- Turn on **Kuormittavuuden kirjaus** in the settings (off by default; saved data
+  is never hidden or removed by turning it off) to show **Kuormittavuus
+  (valinnainen)** during training and enter actual reps (or
   seconds for a timed target), optional per-set RIR and working/warm-up type.
   Repetition/weight quick adjustments still work as before. New sessions with
   tracking metadata default to working sets; older unclassified records remain
@@ -158,9 +160,18 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 - Mark sets done as before; tapping a set button or adjusting reps with the `-` / `+`
   buttons and `+ Sarja` is sufficient for automatic progression without opening the
   optional results panel. When RIR is not manually entered, effort is inferred
-  from completed set performance relative to target. Expand the exercise's optional
+  from completed set performance relative to target. Turn on the logging setting and
+  expand the exercise's optional
   panel to enter exact RIR (0-5; 5 means
   at least 5) or pain. Detailed completed workouts are visible in history.
+- After saving, a summary card shows sets, duration and the known volume, with a
+  "Muokkaa tulosta" shortcut for forgotten sets or weights.
+- History lists 10 workouts and pages 20 more at a time. Each workout can be
+  corrected (done state, reps, weight per set; duration can only be shortened) or
+  deleted after confirmation, and a delete can be undone right away. Summary-only
+  legacy entries can be deleted but have no sets to edit. Editing the workout that
+  produced a progression revision tells you to run "Tarkista seuraava treeni" again;
+  that recomputes from the targets that preceded the revision instead of stacking it.
 - Rest intervals (`recommendedRestSeconds`) are calculated automatically for each
   exercise and set rather than requiring a manual global seconds setting:
   180 s for heavy multi-joint work (<= 6 reps), 120-150 s for moderate compound
@@ -289,6 +300,12 @@ copied into performance history merely by marking a set done.
 A session exercise may carry one more optional field, `weightStep`, copied from a
 routine's saved progression step when a workout starts. Sessions and history
 without it use the automatic step; nothing is migrated or rewritten.
+A corrected history record may carry one more optional field, `editedAt` (a timestamp);
+records without it are unchanged. Deleting a workout removes it from history and
+statistics and is saved as a critical write; the undo banner lives only until the page
+is reloaded, so use a backup export if you need a longer safety net. Merging an older
+backup into the app can bring back workouts deleted since (the local copy wins only
+when the same workout still exists locally); use replace to restore a backup exactly.
 
 Normalization happens in memory, without replacing saved browser bytes on load.
 It is deterministic for valid saved records and safe to retry. Successful writes

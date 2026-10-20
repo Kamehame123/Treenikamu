@@ -366,6 +366,62 @@ try {
           assert.deepEqual(after.history, []);
         });
 
+        await run('completed workouts can be paged, corrected, shortened, deleted and restored without touching legacy data', async (p) => {
+          const state = core.defaultState();
+          const session = core.startSession(state.routines[0], 1000);
+          session.exercises[0].weight = '60 kg';
+          session.exercises.forEach((e) => e.sets.forEach((set) => { set.done = true; }));
+          const full = { ...core.summarize(session, 1000 + 90 * 60000), id: 'full' };
+          const legacy = Array.from({ length: 12 }, (_, i) => ({ id: `legacy-${i}`, name: `Vanha ${i}`, startedAt: 0, endedAt: Date.UTC(2020, 0, 1 + i), setsDone: 3, setsTotal: 3 }));
+          state.history = [full, ...legacy];
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          const idle = () => p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
+
+          assert.equal(await p.locator('.hist').count(), 10);
+          assert.match(await p.locator('[data-hist="legacy-0"] .muted').first().innerText(), /2020/);
+          await tap(p.locator('[data-key="morehistory"]'));
+          assert.equal(await p.locator('.hist').count(), 13);
+          assert.equal(await p.locator('[data-key="morehistory"]').count(), 0);
+
+          await tap(p.locator('[data-key="hedit-full"]'));
+          const reps = p.locator('[data-key="hr-0-0"]');
+          await reps.fill('150'); await p.keyboard.press('Tab'); await idle();
+          assert.ok(await p.getByRole('alert').first().isVisible());
+          assert.equal((await saved(p)).history[0].exercises[0].sets[0].actualReps, undefined);
+          await p.locator('[data-key="hr-0-0"]').fill('9'); await p.keyboard.press('Tab'); await idle();
+          let after = await saved(p);
+          assert.equal(after.history[0].exercises[0].sets[0].actualReps, '9');
+          assert.ok(after.history[0].editedAt > 0);
+          await p.locator('[data-key="hd-0-1"]').evaluate((e) => e.click()); await idle();
+          assert.equal((await saved(p)).history[0].setsDone, full.setsTotal - 1);
+          await p.locator('[data-key="hdur-full"]').fill('120'); await p.keyboard.press('Tab'); await idle();
+          assert.equal((await saved(p)).history[0].endedAt - full.startedAt, 90 * 60000);
+          await p.locator('[data-key="hdur-full"]').fill('45'); await p.keyboard.press('Tab'); await idle();
+          assert.equal((await saved(p)).history[0].endedAt - full.startedAt, 45 * 60000);
+          await tap(p.locator('[data-key="hedit-full"]'));
+          assert.match(await p.locator('[data-hist="full"]').innerText(), /muokattu/);
+
+          // Legacy summary-only entries only offer a duration-free delete.
+          await tap(p.locator('[data-key="hedit-legacy-0"]'));
+          assert.equal(await p.locator('[data-hist="legacy-0"] input').count(), 0);
+          await tap(p.locator('[data-key="hedit-legacy-0"]'));
+
+          const before = (await saved(p)).history;
+          await tapConfirm(p.locator('[data-key="hdel-full"]'), false);
+          assert.deepEqual((await saved(p)).history, before);
+          await tapConfirm(p.locator('[data-key="hdel-full"]'));
+          assert.equal((await saved(p)).history.some((h) => h.id === 'full'), false);
+          assert.equal((await saved(p)).history.length, 12);
+          await tap(p.locator('[data-key="undodelete"]'));
+          assert.deepEqual((await saved(p)).history, before);
+          assert.equal((await saved(p)).history[0].id, 'full');
+
+          const results = await new AxeBuilder({ page: p }).analyze();
+          assert.deepEqual(results.violations.map((v) => v.id), []);
+        });
+
         await run('the previous result of each movement is shown, and unknown values stay unknown', async (p) => {
           const state = core.defaultState();
           const session = core.startSession(state.routines[0]);

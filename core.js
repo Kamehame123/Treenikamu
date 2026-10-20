@@ -70,7 +70,7 @@ export function defaultState() {
     session: null,
     history: [],
     customExercises: [],
-    settings: { restSeconds: 90, autoRest: true },
+    settings: { restSeconds: 90, autoRest: true, advancedLogging: false },
     restEnd: null,
   };
 }
@@ -216,11 +216,13 @@ function normalizeState(raw) {
         setsTotal: clampInt(h.setsTotal, 0, 9999, 0),
         ...(typeof h.routineId === 'string' ? { routineId: cleanText(h.routineId, 80) } : {}),
         ...(h.fatigued === true ? { fatigued: true } : {}),
+        ...(timestamp(h.editedAt, 0) ? { editedAt: timestamp(h.editedAt, 0) } : {}),
         ...(Array.isArray(h.exercises) && h.exercises.length ? { exercises: sanitizeSession({ ...h, exercises: h.exercises }).exercises } : {}),
       })),
     settings: {
       restSeconds: clampInt(raw.settings?.restSeconds, 10, 600, 90),
       autoRest: raw.settings?.autoRest !== false,
+      advancedLogging: raw.settings?.advancedLogging === true,
     },
     restEnd: session ? timestamp(raw.restEnd, null) : null,
   };
@@ -521,6 +523,61 @@ export function summarize(session, now = Date.now()) {
     exercises: snapshot.exercises,
     ...(snapshot.fatigued ? { fatigued: true } : {}),
   };
+}
+
+// ---- Completed workouts: delete and correct (always on a transaction copy of the state) ----
+
+const NOT_FOUND = { ok: false, error: 'Harjoitusta ei löytynyt. Näkymä on päivitetty.' };
+
+export function deleteHistoryEntry(state, id) {
+  const index = state.history.findIndex((h) => h.id === id);
+  if (index < 0) return NOT_FOUND;
+  const [entry] = state.history.splice(index, 1);
+  return { ok: true, entry, index };
+}
+
+// Puts a just-deleted workout back where it was; never overwrites an existing record.
+export function restoreHistoryEntry(state, entry, index) {
+  if (!entry || state.history.some((h) => h.id === entry.id)) return { ok: false, error: 'Harjoitus on jo palautettu.' };
+  if (state.history.length >= MAX_HISTORY) return { ok: false, error: 'Historia on täynnä. Poista vanhoja harjoituksia ensin.' };
+  state.history.splice(Math.min(Math.max(0, index), state.history.length), 0, entry);
+  return { ok: true };
+}
+
+// Corrects one logged set of a completed workout. An empty reps or weight means unknown/planned.
+export function editHistorySet(state, id, ei, si, field, value, now = Date.now()) {
+  const entry = state.history.find((h) => h.id === id);
+  if (!entry) return NOT_FOUND;
+  const exercise = entry.exercises?.[ei], set = exercise?.sets[si];
+  if (!set) return { ok: false, error: 'Sarjaa ei löytynyt.' };
+  const raw = typeof value === 'string' ? value.trim() : value;
+  if (field === 'done') set.done = raw === true;
+  else if (field === 'actualReps') {
+    if (raw === '') delete set.actualReps;
+    else if (!/^\d+$/.test(raw) || Number(raw) > 100) return { ok: false, error: 'Anna toistot kokonaislukuna väliltä 0–100.' };
+    else set.actualReps = String(Number(raw));
+  } else if (field === 'actualWeight') {
+    if (raw === '') delete set.actualWeight;
+    else if (!/^\d+(?:[.,]\d+)?$/.test(raw) || parseWeight(raw) === null) return { ok: false, error: 'Anna paino kilogrammoina väliltä 0–10 000, esim. 22,5.' };
+    else writeSetWeight(exercise, set, Math.round((parseWeight(raw) + Number.EPSILON) * 100) / 100);
+  } else return { ok: false, error: 'Tätä kenttää ei voi muokata.' };
+  entry.setsDone = entry.exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+  entry.editedAt = now;
+  return { ok: true };
+}
+
+// A forgotten finish makes a workout look hours long; the end can only be moved earlier.
+export function shortenHistoryDuration(state, id, minutes, now = Date.now()) {
+  const entry = state.history.find((h) => h.id === id);
+  if (!entry) return NOT_FOUND;
+  const text = String(minutes ?? '').trim();
+  const length = Number(text) * 60000;
+  if (!entry.startedAt || !/^\d+$/.test(text) || length < 60000 || length >= entry.endedAt - entry.startedAt) {
+    return { ok: false, error: 'Kestoa voi vain lyhentää: anna kokonaisia minuutteja, vähintään 1 ja alle nykyisen keston.' };
+  }
+  entry.endedAt = entry.startedAt + length;
+  entry.editedAt = now;
+  return { ok: true };
 }
 
 export function formatDuration(ms) {

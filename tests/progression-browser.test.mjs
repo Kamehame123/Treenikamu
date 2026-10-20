@@ -11,6 +11,7 @@ const idle = (page) => page.waitForFunction(() => document.getElementById('app')
 function fixture({ reps = '10', autoProgress = false, complete = false, fatigued = false, pain = false } = {}) {
   const state = core.defaultState();
   state.settings.autoRest = false;
+  state.settings.advancedLogging = true;
   state.routines = [core.sanitizeRoutine({
     id: 'r', name: 'Kasvu', autoProgress,
     exercises: [{ id: 'e', name: 'Kyykky', sets: 3, reps, weight: '100 kg',

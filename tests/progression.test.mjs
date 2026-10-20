@@ -549,3 +549,19 @@ test('progression settings are bounded defensively and invalid editor values are
   assert.equal(sanitized.exercises[0].progression.maxReps, 15);
   assert.equal(sanitized.exercises[0].progression.weightStep, 2.5);
 });
+
+test('re-revising after correcting the source workout recomputes instead of stacking the increase', () => {
+  const state = fixture('15');
+  const summary = record(state, 0, { reps: ['16', '16', '16'] });
+  assert.equal(revise(state).ok, true);
+  const raised = exercise(state).weight;
+  assert.notEqual(raised, '100 kg');
+  assert.equal(revise(state).ok, false);
+  // The workout is corrected afterwards: it was really only 10 reps, so no load increase is earned.
+  summary.exercises[0].sets.forEach((set) => { set.actualReps = '10'; });
+  summary.editedAt = NOW + 1000;
+  state.routines[0].revision.createdAt = NOW;
+  assert.equal(revise(state).ok, true);
+  assert.notEqual(exercise(state).weight, raised);
+  assert.equal(state.routines[0].revision.before[0].weight, '100 kg');
+});

@@ -1,0 +1,127 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as core from '../core.js';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap } from './support.mjs';
+
+const { server, url } = await startServer();
+const saved = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')));
+
+test('detailed logging defaults to off for new and existing data, and only an explicit true enables it', () => {
+  assert.equal(core.defaultState().settings.advancedLogging, false);
+  const legacy = { v: core.SCHEMA, routines: core.defaultState().routines, settings: { restSeconds: 60, autoRest: false } };
+  const loaded = core.sanitizeState(legacy);
+  assert.deepEqual(loaded.settings, { restSeconds: 60, autoRest: false, advancedLogging: false });
+  for (const value of ['true', 1, null]) assert.equal(core.sanitizeState({ ...legacy, settings: { advancedLogging: value } }).settings.advancedLogging, false);
+  assert.equal(core.sanitizeState({ ...legacy, settings: { advancedLogging: true } }).settings.advancedLogging, true);
+});
+
+async function seedWorkout(page, { finished = 0, rir = null } = {}) {
+  const state = core.defaultState();
+  state.settings.autoRest = false;
+  state.session = core.startSession(state.routines[0]);
+  state.session.exercises.forEach((exercise, i) => {
+    if (i < finished) exercise.sets.forEach((set) => { set.done = true; });
+  });
+  if (rir !== null) state.session.exercises[0].rir = rir;
+  await page.goto(url);
+  await page.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+  await page.reload();
+  await page.locator('.ex').first().waitFor();
+  return state;
+}
+
+try {
+  for (const [name, engine, device] of [['chromium', chromium, 'Pixel 7'], ['webkit', webkit, 'iPhone 14']]) {
+    const browser = await engine.launch();
+    try {
+      await test(`${name}: simplified workout view`, async (t) => {
+        const run = async (title, work, options = {}) => t.test(title, { timeout: 30000 }, async () => {
+          const context = await browser.newContext({ ...devices[device], reducedMotion: 'reduce', serviceWorkers: 'block', ...options });
+          const page = await context.newPage(); page.setDefaultTimeout(5000);
+          const errors = [];
+          page.on('pageerror', (error) => errors.push(error.message));
+          try { await work(page); assert.deepEqual(errors, []); } finally { await context.close(); }
+        });
+
+        await run('the logging panel is hidden by default, keeps saved values, and returns when enabled in settings', async (p) => {
+          const before = await seedWorkout(p, { rir: '2' });
+          assert.equal(await p.locator('.exercise-log').count(), 0);
+          assert.deepEqual((await saved(p)).session, before.session);
+          await tap(p.getByRole('button', { name: 'Takaisin harjoituksiin' }));
+          await p.locator('.settings summary').click();
+          const toggle = p.getByRole('switch', { name: 'Näytä kuormittavuuden kirjaus harjoituksen aikana' });
+          assert.equal(await toggle.isChecked(), false);
+          await toggle.click();
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          assert.equal((await saved(p)).settings.advancedLogging, true);
+          await p.reload();
+          await tap(p.locator('[data-action="resume"]'));
+          await p.locator('.exercise-log summary').first().click();
+          assert.equal(await p.locator('[data-log="rir"]').first().inputValue(), '2');
+        });
+
+        await run('the recovery toggle sits below the exercises', async (p) => {
+          await seedWorkout(p);
+          const order = await p.evaluate(() => {
+            const list = document.querySelector('.exercise-list'), recovery = document.querySelector('.recovery-check');
+            const end = document.querySelector('.session-end');
+            return [list.compareDocumentPosition(recovery) & Node.DOCUMENT_POSITION_FOLLOWING, recovery.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING];
+          });
+          assert.deepEqual(order.map(Boolean), [true, true]);
+          await p.locator('[data-log="fatigued"]').check();
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          assert.equal((await saved(p)).session.fatigued, true);
+        });
+
+        await run('the rail lists every exercise with its set count, greens finished ones and jumps on tap', async (p) => {
+          const state = await seedWorkout(p, { finished: 2 });
+          const boxes = p.locator('.track-box');
+          assert.equal(await boxes.count(), state.session.exercises.length);
+          assert.deepEqual(await boxes.allInnerTexts(), state.session.exercises.map((e) => String(e.sets.length)));
+          assert.deepEqual(await boxes.evaluateAll((list) => list.map((b) => b.classList.contains('done'))), state.session.exercises.map((_, i) => i < 2));
+          assert.equal(await boxes.nth(2).getAttribute('aria-current'), 'step');
+          const done = boxes.first();
+          const colors = await done.evaluate((b) => { const s = getComputedStyle(b); return [s.backgroundColor, s.color]; });
+          assert.deepEqual(colors, ['rgb(168, 240, 152)', 'rgb(0, 0, 0)']);
+          const last = state.session.exercises.length - 1;
+          await p.evaluate(() => window.scrollTo(0, 0));
+          const railTop = await p.locator('.track-rail').evaluate((r) => r.getBoundingClientRect().top);
+          await boxes.nth(last).click();
+          await p.waitForFunction((i) => {
+            const r = document.getElementById(`exercise-${i}`).getBoundingClientRect();
+            return r.top >= 0 && r.bottom <= innerHeight;
+          }, last);
+          assert.equal(await p.locator('.track-rail').evaluate((r) => r.getBoundingClientRect().top), railTop);
+          const before = (await saved(p)).session;
+          await boxes.nth(0).click();
+          assert.deepEqual((await saved(p)).session, before);
+        });
+
+        await run('the rail stays clear of the sets and meets accessibility, touch-size and overflow checks', async (p) => {
+          await seedWorkout(p, { finished: 1 });
+          for (const colorScheme of ['dark', 'light']) {
+            await p.emulateMedia({ colorScheme });
+            for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1280, height: 900 }]) {
+              await p.setViewportSize(viewport);
+              const label = `${colorScheme} ${viewport.width}px`;
+              const violations = (await new AxeBuilder({ page: p }).analyze()).violations;
+              assert.deepEqual(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), [], label);
+              assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, label);
+              assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('button, input, summary')].filter((e) => {
+                const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 47.9 || r.height < 47.9);
+              }).map((e) => e.outerHTML.slice(0, 100))), [], label);
+              assert.equal(await p.evaluate(() => {
+                const rail = document.querySelector('.track-rail').getBoundingClientRect();
+                return [...document.querySelectorAll('.ex, .session-intro, .session-header button, .session-time')].every((e) => e.getBoundingClientRect().right <= rail.left + 0.5);
+              }), true, `${label}: content clears the rail`);
+              assert.equal(await p.evaluate(() => {
+                const rail = document.querySelector('.track-rail').getBoundingClientRect();
+                return rail.top >= 0 && rail.bottom <= innerHeight && rail.right <= innerWidth;
+              }), true, `${label}: rail fits the viewport`);
+            }
+          }
+        }, { bypassCSP: true });
+      });
+    } finally { await browser.close(); }
+  }
+} finally { server.kill(); }

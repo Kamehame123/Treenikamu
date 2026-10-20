@@ -343,7 +343,10 @@ export function reviseRoutine(state, routineId, now = Date.now()) {
   const history = state.history.filter((h) => h.routineId === routineId).sort((a, b) => b.endedAt - a.endedAt);
   const latest = history[0];
   if (!latest?.exercises?.length) return { ok: false, message: 'Tarvitaan uusi harjoitus, jossa on liikkeiden toteutuneet toistot ja RIR. Vanhoista sarjamääristä ei arvata kehitystä.' };
-  if (routine.revision?.sourceId === latest.id) return { ok: false, message: 'Tämä harjoituskerta on jo tarkistettu. Myös peruttu tarkistus odottaa uutta harjoituskertaa, jotta sama lisäys ei toistu.' };
+  const corrected = routine.revision?.sourceId === latest.id && latest.editedAt > routine.revision.createdAt;
+  if (routine.revision?.sourceId === latest.id && !corrected) return { ok: false, message: 'Tämä harjoituskerta on jo tarkistettu. Myös peruttu tarkistus odottaa uutta harjoituskertaa, jotta sama lisäys ei toistu.' };
+  // The earlier result was corrected afterwards: recompute from the targets that existed before it, not on top of it.
+  if (corrected && canUndoRevision(routine)) routine.exercises = structuredClone(routine.revision.before);
   const before = structuredClone(routine.exercises);
   const decisions = before.map((exercise) => recommendExercise(exercise, latest, history[1], latest.fatigued === true, now));
   routine.exercises = decisions.map((d) => d.exercise);
