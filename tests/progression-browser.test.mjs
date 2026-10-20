@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, expandRoutines } from './support.mjs';
 
 const { server, url } = await startServer();
 const button = (page, name) => page.getByRole('button', { name, exact: true });
@@ -162,10 +162,12 @@ try {
           const state = fixture({ complete: true });
           await seed(page, state);
           await tap(button(page, 'Takaisin harjoituksiin'));
+          await expandRoutines(page);
           await page.getByRole('switch', { name: 'Tarkista automaattisesti: Kasvu' }).check();
           await idle(page);
           await page.reload();
           await tap(button(page, 'Takaisin harjoituksiin'));
+          await expandRoutines(page);
           assert.equal(await page.getByRole('switch', { name: 'Tarkista automaattisesti: Kasvu' }).isChecked(), true);
           await tap(button(page, 'Jatka harjoitusta'));
           await tap(button(page, 'Tallenna harjoitus'));
@@ -281,6 +283,7 @@ try {
           for (let i = 0; i < 3; i++) await tap(page.locator(`[data-key="s0-${i}"]`));
           await log(page, 'rir', '2');
           await tap(button(page, 'Takaisin harjoituksiin'));
+          await expandRoutines(page);
           await page.getByRole('switch', { name: 'Tarkista automaattisesti: Kasvu' }).uncheck(); await idle(page);
           await tap(button(page, 'Jatka harjoitusta'));
           await tap(button(page, 'Tallenna harjoitus'));

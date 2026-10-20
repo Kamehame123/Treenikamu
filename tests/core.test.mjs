@@ -80,6 +80,40 @@ test('quick rep bounds and invalid actions report errors without changing record
   }
 });
 
+test('quick weight adjustments step by 1 kg, keep decimals and clear the override at the planned weight', () => {
+  const r = routine();
+  r.exercises[0].weight = '22,5 kg';
+  const s = c.startSession(r), exercise = s.exercises[0], set = exercise.sets[0];
+  assert.equal(c.setWeightValue(exercise, set), 22.5);
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 23.5 });
+  assert.equal(set.actualWeight, '23,5');
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 22.5 });
+  assert.equal('actualWeight' in set, false);
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 21.5 });
+  assert.equal(exercise.weight, '22,5 kg');
+  assert.equal(r.exercises[0].weight, '22,5 kg');
+});
+
+test('quick weight handles empty plans, bounds and non-numeric weights without changing records', () => {
+  const s = c.startSession(routine()), exercise = s.exercises[0], set = exercise.sets[0];
+  exercise.weight = '';
+  assert.equal(c.setWeightValue(exercise, set), 0);
+  assert.equal(c.adjustSetWeight(s, 0, 0, -1).ok, false);
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 1 });
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 0 });
+  assert.equal('actualWeight' in set, false);
+  for (const weight of ['2 x 10 kg', 'oma paino']) {
+    exercise.weight = weight;
+    const before = structuredClone(s);
+    assert.equal(c.adjustSetWeight(s, 0, 0, 1).ok, false);
+    assert.deepEqual(s, before);
+  }
+  exercise.weight = '10000';
+  assert.equal(c.adjustSetWeight(s, 0, 0, 1).ok, false);
+  assert.equal(c.adjustSetWeight(s, 9, 0, 1).ok, false);
+  assert.equal(c.adjustSetWeight(null, 0, 0, 1).ok, false);
+});
+
 test('adjusted actual reps survive reload, history and backup restore without changing targets', () => {
   const state = c.defaultState();
   state.session = c.startSession(state.routines[0]);

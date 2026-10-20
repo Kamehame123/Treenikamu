@@ -29,16 +29,20 @@ async function seedWorkout(page, { current = 0, almostDone = false, tall = false
   return state;
 }
 
+// A card taller than the usable space is not centered; its next set entry is.
 async function centered(page, selector) {
   await page.waitForFunction((selector) => {
-    const element = document.querySelector(selector);
-    const rect = element.getBoundingClientRect();
     const viewport = window.visualViewport;
     const top = (viewport?.offsetTop ?? 0) + document.querySelector('.session-header').getBoundingClientRect().height + 12;
     const rest = document.getElementById('rest');
     const viewportBottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight);
     const bottom = Math.min(viewportBottom, rest.hidden ? viewportBottom : rest.getBoundingClientRect().top) - 12;
-    return rect.top >= top - 2 && rect.bottom <= bottom + 2 && Math.abs((rect.top + rect.bottom) / 2 - (top + bottom) / 2) < 3;
+    return [selector, `${selector} .set-entry:has(.set.next)`].some((query) => {
+      const element = document.querySelector(query);
+      if (!element) return false;
+      const rect = element.getBoundingClientRect();
+      return rect.top >= top - 2 && rect.bottom <= bottom + 2 && Math.abs((rect.top + rect.bottom) / 2 - (top + bottom) / 2) < 3;
+    });
   }, selector);
 }
 
@@ -76,6 +80,25 @@ try {
           try { await work(page); assert.deepEqual(errors, []); } finally { await context.close(); }
         });
 
+        await run('routines are listed compactly and expand on demand with their details and actions', async (p) => {
+          await p.goto(url);
+          const first = p.locator('.routine-details').first();
+          assert.equal(await p.locator('.routine-details').count() >= 1, true);
+          assert.equal(await first.evaluate((d) => d.open), false);
+          assert.equal(await p.getByRole('button', { name: 'Aloita harjoitus', exact: true }).count(), 0);
+          const summary = first.locator('summary');
+          assert.equal(await summary.isVisible(), true);
+          assert.match(await summary.innerText(), /liikettä/);
+          assert.equal((await summary.boundingBox()).height >= 48, true);
+          await summary.click();
+          assert.equal(await first.evaluate((d) => d.open), true);
+          assert.equal(await first.locator('.routine-pills li').count() > 0, true);
+          assert.equal(await first.getByRole('button', { name: 'Aloita harjoitus', exact: true }).isVisible(), true);
+          assert.equal(await first.getByRole('button', { name: /^Muokkaa: /, exact: false }).isVisible(), true);
+          await p.reload();
+          assert.equal(await p.locator('.routine-details').first().evaluate((d) => d.open), false);
+        });
+
         await run('workout actions come before the backup reminder without hiding or changing backups', async (p) => {
           await p.goto(url);
           let state;
@@ -99,7 +122,7 @@ try {
               await p.setViewportSize(viewport);
               const layout = await p.evaluate((resume) => {
                 window.scrollTo(0, 0);
-                const action = document.querySelector(resume ? '[data-action="resume"]' : '[data-action="start"]');
+                const action = document.querySelector(resume ? '[data-action="resume"]' : '.routine-details > summary');
                 const backup = document.querySelector('.backup');
                 const rect = action.getBoundingClientRect();
                 return {
@@ -199,7 +222,7 @@ try {
           for (const viewport of [{ width: 320, height: 640 }, { width: 844, height: 390 }]) {
             await p.setViewportSize(viewport);
             await seedWorkout(p, { current: 2, tall: true });
-            await centered(p, '[data-key="s2-18"]');
+            await centered(p, '.set-entry:has([data-key="s2-18"])');
             const rect = await p.locator('[data-key="s2-18"]').boundingBox();
             assert.equal(await p.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.set')?.dataset.key, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }), 's2-18');
           }
@@ -237,8 +260,7 @@ try {
           assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '3 x 25kg');
           await p.reload();
           assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '3 x 25kg');
-          await p.locator('.exercise-log summary').first().click();
-          assert.equal(await p.locator('[data-log="actualReps"][data-e="0"][data-s="0"]').inputValue(), '3');
+          assert.equal(await p.locator('#exercise-0 .set-entry').first().locator('.rep-adjust b').innerText(), '3');
           p.once('dialog', (dialog) => dialog.accept());
           await tap(button(p, 'Lopeta kesken'));
           after = await saved(p);
@@ -252,7 +274,7 @@ try {
           assert.deepEqual(parsed.state.history, after.history);
         });
 
-        await run('rep controls respect bounds, ranges, direct logs, keyboard input and timed sets', async (p) => {
+        await run('rep controls respect bounds, ranges, keyboard input and timed sets', async (p) => {
           await seedWorkout(p, { setReps: ['1', '8–12', '45 s'], autoRest: false });
           const minus = p.locator('[data-key="reps-minus-0-0"]');
           const plus = p.locator('[data-key="reps-plus-0-0"]');
@@ -262,49 +284,39 @@ try {
           await tap(p.locator('[data-key="reps-minus-0-1"]'));
           assert.equal((await saved(p)).session.exercises[0].sets[1].actualReps, '11');
           assert.equal(await p.locator('#exercise-0 .set-entry').nth(2).locator('.rep-adjust').count(), 0);
+          assert.equal(await p.locator('#exercise-0 .set-entry').nth(2).locator('.weight-adjust').count(), 1);
           assert.equal(await p.locator('#exercise-4 .rep-adjust').count(), 0);
           assert.equal(await p.locator('[data-key="s0-2"] .set-value').innerText(), '45 s');
-          await p.locator('.exercise-log summary').first().click();
-          const direct = p.locator('[data-log="actualReps"][data-e="0"][data-s="0"]');
-          await direct.fill('100');
-          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
-          assert.equal(await plus.isDisabled(), true);
-          await tap(minus);
-          assert.equal(await direct.inputValue(), '99');
-          await direct.fill('');
-          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
-          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '1 toistoa');
           await plus.focus(); await p.keyboard.press('Space');
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
           assert.equal(await plus.evaluate((e) => e === document.activeElement), true);
-          assert.equal(await direct.inputValue(), '2');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '1 toistoa');
           await p.evaluate(() => {
             const plus = document.querySelector('[data-key="reps-plus-0-0"]');
             for (let i = 0; i < 5; i++) plus.click();
           });
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
-          assert.equal((await saved(p)).session.exercises[0].sets[0].actualReps, '7');
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualReps, '6');
           assert.equal((await saved(p)).session.exercises[0].sets[0].done, false);
         });
 
-        await run('typing in result fields keeps the same focused input so mobile keyboards stay open', async (p) => {
-          await seedWorkout(p, { setReps: ['8', '8', '8'], weight: '25 kg', autoRest: false });
-          await p.locator('.exercise-log summary').first().click();
-          const field = p.locator('[data-log="actualReps"][data-e="0"][data-s="0"]');
-          await field.focus();
-          await p.evaluate(() => { window.typedField = document.activeElement; });
-          await field.pressSequentially('12');
+        await run('weight controls step by 1 kg, keep focus, and return to the plan without leaving an override', async (p) => {
+          await seedWorkout(p, { setReps: ['8', '8', '8'], weight: '22,5 kg', autoRest: false });
+          const plus = p.locator('[data-key="weight-plus-0-0"]');
+          await plus.focus(); await p.keyboard.press('Space');
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
-          assert.equal(await p.evaluate(() => document.activeElement === window.typedField && window.typedField.isConnected), true);
-          assert.equal(await field.inputValue(), '12');
-          assert.equal((await saved(p)).session.exercises[0].sets[0].actualReps, '12');
-          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '12 x 25kg');
-          const weight = p.locator('[data-log="actualWeight"][data-e="0"][data-s="0"]');
-          await weight.focus();
-          await weight.pressSequentially('27,5');
-          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
-          assert.equal(await weight.inputValue(), '27,5');
-          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '12 x 27,5kg');
+          assert.equal(await plus.evaluate((e) => e === document.activeElement), true);
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '23,5');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '8 x 23,5kg');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-planned').innerText(), 'Tavoite: 8 x 22,5kg');
+          assert.equal(await p.locator('#exercise-0 .set-entry').first().locator('.weight-adjust b').innerText(), '23,5');
+          assert.equal(await p.locator('[data-key="weight-plus-0-1"]').evaluate((e) => e.closest('.set-entry').querySelector('.weight-adjust b').textContent), '22,5');
+          await tap(p.locator('[data-key="weight-minus-0-0"]'));
+          assert.equal('actualWeight' in (await saved(p)).session.exercises[0].sets[0], false);
+          await tap(p.locator('[data-key="weight-minus-0-0"]'));
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '21,5');
+          assert.equal((await saved(p)).session.exercises[0].weight, '22,5 kg');
+          assert.equal((await saved(p)).session.exercises[0].sets[0].done, false);
         });
 
         await run('failed rep writes keep the original record and expose recoverable pending reps', async (p) => {
@@ -351,7 +363,7 @@ try {
           assert.deepEqual(await targets().evaluateAll((es) => es.map((e) => e.value)), ['5', '8', '12']);
           await tap(button(p, 'Tallenna harjoitus'));
           assert.deepEqual((await saved(p)).routines.at(-1).exercises[0].setReps, ['5', '8', '12']);
-          assert.match(await p.locator('.routine').last().innerText(), /5 \/ 8 \/ 12/);
+          assert.match(await p.locator('.routine').last().textContent(), /5 \/ 8 \/ 12/);
           await tap(p.locator('.routine').last().getByRole('button', { name: 'Aloita harjoitus', exact: true }));
           assert.deepEqual(await p.locator('.set-value').allTextContents(), ['5 x 25kg', '8 x 25kg', '12 x 25kg']);
           assert.match(await p.locator('[data-key="s0-1"]').getAttribute('aria-label'), /8 x 25kg/);
@@ -439,7 +451,7 @@ try {
                 const violations = (await new AxeBuilder({ page: p }).analyze()).violations;
                 assert.deepEqual(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), []);
                 assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-                assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.per-set-toggle input, .set-targets input, .set, .rep-adjust button')].filter((e) => {
+                assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.per-set-toggle input, .set-targets input, .set, .rep-adjust button, .weight-adjust button')].filter((e) => {
                   const rect = e.getBoundingClientRect();
                   return rect.width < 48 || rect.height < 48;
                 }).map((e) => e.outerHTML)), []);

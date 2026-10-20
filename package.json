@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "icons": "node tools/gen-icons.mjs",
-    "test": "node --test tests/core.test.mjs tests/assets.test.mjs tests/library.test.mjs tests/progression.test.mjs tests/cheers.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/assets.test.mjs tests/library.test.mjs tests/progression.test.mjs tests/cheers.test.mjs tests/statistics.test.mjs",
     "test:launcher": "node --test tests/launcher.test.mjs",
     "test:setup": "playwright install chromium webkit",
     "test:review": "node --test tests/review.test.mjs",
@@ -12,6 +12,7 @@
     "test:workflow": "node --test tests/workflow.test.mjs",
     "test:progression": "node --test tests/progression-browser.test.mjs",
     "test:updates": "node --test tests/updates.test.mjs",
+    "test:statistics": "node --test tests/statistics-browser.test.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "start": "node tools/serve.mjs"
   },

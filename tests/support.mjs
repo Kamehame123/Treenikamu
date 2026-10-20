@@ -15,7 +15,13 @@ export const { chromium, webkit, devices } = require('playwright');
 export const AxeBuilder = require('@axe-core/playwright').default;
 export const root = fileURLToPath(new URL('../', import.meta.url));
 
+// Routine cards on the home view start collapsed, and closed content is not in the accessibility tree.
+export async function expandRoutines(page) {
+  await page.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+}
+
 export async function tap(locator) {
+  await expandRoutines(locator.page());
   await locator.click();
   await locator.page().waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
 }

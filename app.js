@@ -3,6 +3,8 @@ import { progressionConfig, progressionRange, prescription, reviseRoutine, undoR
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
 import { pickCheer } from './cheers.js';
+import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
+import { escapeHtml as esc, statisticsView, statisticsSummary, trackingEditor } from './statistics-ui.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -11,7 +13,6 @@ const $live = document.getElementById('live');
 const DRAFT_KEY = 'gym-tracker-draft-v1';
 const BACKUP_KEY = 'gym-tracker-last-backup';
 const BACKUP_REMIND_DAYS = 7;
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const blankEx = () => ({ id: core.uid(), name: '', sets: 3, reps: '10', weight: '', setReps: null });
 const paths = {
@@ -59,6 +60,7 @@ let view = draft ? 'edit' : state.session ? 'workout' : 'home';
 let renderedView;
 let editError = '';
 let settingsOpen = false;
+const statisticsFilters = { range: '12w', from: localDateKey(shiftDays(Date.now(), -83)), to: localDateKey(Date.now()), routineId: '', exerciseKey: '', page: 0 };
 let picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target: null, adding: true, keepOpen: false, added: [] };
 let customError = '';
 let customOpen = false;
@@ -81,6 +83,7 @@ let pendingActions = 0;
 let actionQueue = Promise.resolve();
 const revisionMessages = new Map();
 const openLogs = new Set();
+const openRoutines = new Set();
 let logError = '';
 const byId = (id, source = state) => source.routines.find((r) => r.id === id);
 
@@ -295,16 +298,16 @@ function homeView() {
   const thisWeek = state.history.filter((h) => h.endedAt >= +weekStart).length;
   const resume = s ? `<section class="resume card"><div class="row"><span class="eyebrow accent"><span class="pulse" aria-hidden="true"></span> HARJOITUS KESKEN</span><span class="badge now">${core.progress(s).pct}%</span></div><h2>${esc(s.name)}</h2><p class="muted">${core.progress(s).done}/${core.progress(s).total} sarjaa tehty · Jatka siitä, mihin jäit.</p>${progressBar(core.progress(s))}<button class="btn primary big" data-action="resume" data-key="resume">Jatka harjoitusta ${icon('arrow')}</button></section>` : '';
   const routines = state.routines.map((r, i) => {
-    const pills = r.exercises.slice(0, 4).map((e) => `<span class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></span>`).join(' ') + (r.exercises.length > 4 ? ` <span class="pill pill-muted">+${r.exercises.length - 4} muuta</span>` : '');
-    return `<li class="card routine"><div class="row routine-head"><span class="routine-icon">${icon('weight')}</span><div class="grow"><span class="eyebrow">OHJELMA ${String(i + 1).padStart(2, '0')}</span><h3>${esc(r.name)}</h3><p class="routine-meta">${r.exercises.length} liikettä <span>·</span> ${r.exercises.reduce((n, e) => n + e.sets, 0)} sarjaa</p></div><button class="btn ghost icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div><div class="routine-pills">${pills}</div><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button>${progressionControls(r)}</li>`;
-  }).join('');
+    const pills = r.exercises.map((e) => `<li class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></li>`).join('');
+    return `<li class="card routine"><details class="routine-details" data-routine-panel="${esc(r.id)}" ${openRoutines.has(r.id) ? 'open' : ''}><summary><span class="routine-icon">${icon('weight')}</span><span class="grow"><span class="eyebrow">OHJELMA ${String(i + 1).padStart(2, '0')}</span><h3>${esc(r.name)}</h3><span class="routine-meta">${r.exercises.length} liikettä <span>·</span> ${r.exercises.reduce((n, e) => n + e.sets, 0)} sarjaa</span></span><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="routine-body"><ul class="routine-pills" aria-label="Liikkeet: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div>${progressionControls(r)}</div></details></li>`;  }).join('');
   const history = state.history.slice(0, 10).map((h) => `<li><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h3>${esc(h.name)}</h3><span class="muted">${new Date(h.endedAt).toLocaleDateString('fi-FI', { month: 'short', day: 'numeric' })} · ${core.formatDuration(h.endedAt - h.startedAt)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${historyDetails(h)}</li>`).join('');
   const ios = (/iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) && !navigator.standalone;
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${resume}<section class="home-hero"><div><p class="eyebrow accent">OMA TREENISI · SARJA KERRALLAAN</p><h1 class="hero-title" tabindex="-1">Treenipäiväkirja</h1><p class="hero-copy">Suunnittele ohjelma ja kirjaa sarjat yhdellä napautuksella.</p></div><div class="hero-art" aria-hidden="true"><div class="art-weight">${icon('weight')}</div></div></section>
     <div class="stats"><div><strong>${thisWeek}</strong><span>tällä viikolla</span></div><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
+    <button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot ja kehitys</button>
     <div class="home-grid"><section>${sectionHead('Harjoitukset', 'OMAT OHJELMASI')}<ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${backupCard()}${coachingGuide()}</section>
-    <div class="home-aside"><section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${history ? `<ul class="list history-list">${history}</ul>` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
+    <div class="home-aside">${statisticsSummary(state)}<section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${history ? `<ul class="list history-list">${history}</ul>` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><p class="muted small-copy">Moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p><div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details><section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
 }
 
@@ -337,7 +340,11 @@ function patchLoggedSet(ei, si) {
 }
 
 function exerciseLog(e, ei) {
-  return `<details class="exercise-log" data-log-panel="${esc(e.id)}" ${openLogs.has(e.id) ? 'open' : ''}><summary>Kuormittavuus (valinnainen)</summary><p class="muted small-copy">Toistot ja painot kirjataan sarjojen − / + -painikkeilla. Tässä voit halutessasi ilmoittaa RIR-arvon (0–5) tai kivusta.</p><label class="field">RIR – vaikeimman sarjan jälkeen varastoon jääneet toistot<input type="number" inputmode="numeric" min="0" max="5" step="1" value="${esc(e.rir ?? '')}" data-log="rir" data-e="${ei}" data-key="rir-${ei}" placeholder="0–5 (5 = vähintään 5)" aria-label="${esc(e.name)}: RIR"></label><label class="check"><span>Tunsin kipua<small>Älä jatka kipua aiheuttavaa liikettä. Kuormaa ei nosteta.</small></span><input type="checkbox" data-log="pain" data-e="${ei}" data-key="pain-${ei}" aria-label="${esc(e.name)}: kipua" ${e.pain ? 'checked' : ''}></label></details>`;
+  const rows = e.sets.map((set, si) => {
+    const timed = /^\d+(?:[.,]\d+)?\s*(?:s\b|sek|min)/i.test(set.reps ?? e.reps);
+    return `<fieldset class="set-stat-log"><legend>Sarja ${si + 1}: tilastot</legend><div class="stat-filter-grid"><label class="field">${timed ? 'Toteutunut kesto (s)' : 'Toteutuneet toistot'}<input type="number" min="0" max="${timed ? 86400 : 100}" step="1" inputmode="numeric" value="${esc(timed ? set.actualSeconds ?? '' : set.actualReps ?? '')}" data-log="${timed ? 'actualSeconds' : 'actualReps'}" data-e="${ei}" data-s="${si}" data-key="stat-result-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: ${timed ? 'toteutunut kesto' : 'toteutuneet toistot'}"></label><label class="field">Sarjan RIR (0–5)<input type="number" min="0" max="5" step="1" inputmode="numeric" value="${esc(set.setRir ?? '')}" data-log="setRir" data-e="${ei}" data-s="${si}" data-key="set-rir-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: RIR"></label></div><fieldset class="set-kind-options"><legend>Sarjan tyyppi</legend>${[['', 'Luokittelematon'], ['working', 'Työsarja'], ['warmup', 'Lämmittely']].map(([value, label]) => `<label class="choice-option"><input type="radio" name="set-kind-${ei}-${si}" data-log="kind" data-e="${ei}" data-s="${si}" value="${value}" ${(set.kind ?? '') === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset></fieldset>`;
+  }).join('');
+  return `<details class="exercise-log" data-log-panel="${esc(e.id)}" ${openLogs.has(e.id) ? 'open' : ''}><summary>Kuormittavuus (valinnainen)</summary><p class="muted small-copy">Toistot ja painot kirjataan myös sarjojen − / + -painikkeilla. Tilastojen suoritusarvio vaatii toteutuneet toistot, tunnetun kg-kuorman, työsarjamerkinnän ja sarjakohtaisen RIR:n. Tyhjä tulos on tuntematon. RIR 5 tarkoittaa vähintään viittä varatoistoa.</p>${rows}<label class="field">RIR – vaikeimman sarjan jälkeen varastoon jääneet toistot<input type="number" inputmode="numeric" min="0" max="5" step="1" value="${esc(e.rir ?? '')}" data-log="rir" data-e="${ei}" data-key="rir-${ei}" placeholder="0–5 (5 = vähintään 5)" aria-label="${esc(e.name)}: RIR"></label><label class="check"><span>Tunsin kipua<small>Älä jatka kipua aiheuttavaa liikettä. Kuormaa ei nosteta.</small></span><input type="checkbox" data-log="pain" data-e="${ei}" data-key="pain-${ei}" aria-label="${esc(e.name)}: kipua" ${e.pain ? 'checked' : ''}></label></details>`;
 }
 
 function recoveryControls(s) {
@@ -363,7 +370,7 @@ function progressionEditor(e, i) {
   const config = progressionConfig(e);
   const savedRange = e.progression?.minReps !== undefined && e.progression?.maxReps !== undefined;
   const restSecs = recommendedRestSeconds(e);
-  return `<details class="progression-editor"><summary>Automaattinen kehitys: ${config.minReps}–${config.maxReps} toistoa · askel ${config.weightStep} kg · lepo ${restSecs} s</summary><p class="muted small-copy">${savedRange ? 'Tallennettu kehitysalue säilytetään.' : esc(progressionRange(e).reason)} Sovellus laskee toistot, kuorman noston tai kevennyksen, lisäsarjojen vaikutuksen ja lepoajan (${restSecs} s) automaattisesti ilman käsin säätämistä.</p><button class="btn secondary" data-action="autorange" data-i="${i}" data-key="autorange-${esc(e.id)}">Valitse toistoalue automaattisesti</button><div class="grid3"><label class="field">Alaraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.minReps ?? config.minReps)}" data-progression="minReps" data-i="${i}" data-key="minReps-${esc(e.id)}"></label><label class="field">Yläraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.maxReps ?? config.maxReps)}" data-progression="maxReps" data-i="${i}" data-key="maxReps-${esc(e.id)}"></label><label class="field">Pienin painoaskel (kg)<input type="number" min="0.01" max="100" step="0.01" inputmode="decimal" value="${esc(e.progression?.weightStep ?? config.weightStep)}" data-progression="weightStep" data-i="${i}" data-key="weightStep-${esc(e.id)}"></label></div><label class="check"><span>Paino on ulkoinen kg-kuorma<small>Poista valinta avustetuille liikkeille tai muille kuormayksiköille: paino muuttuu silloin vain käsin.</small></span><input type="checkbox" data-progression="autoLoad" data-i="${i}" data-key="autoLoad-${esc(e.id)}" ${config.autoLoad ? 'checked' : ''}></label></details>`;
+  return `<details class="progression-editor"><summary>Automaattinen kehitys: ${config.minReps}–${config.maxReps} toistoa · askel ${config.weightStep} kg · lepo ${restSecs} s</summary><p class="muted small-copy">${savedRange ? 'Tallennettu kehitysalue säilytetään.' : esc(progressionRange(e).reason)} Sovellus laskee toistot, kuorman noston tai kevennyksen, lisäsarjojen vaikutuksen ja lepoajan (${restSecs} s) automaattisesti ilman käsin säätämistä.</p><button class="btn secondary" data-action="autorange" data-i="${i}" data-key="autorange-${esc(e.id)}">Valitse toistoalue automaattisesti</button><div class="grid3"><label class="field">Alaraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.minReps ?? config.minReps)}" data-progression="minReps" data-i="${i}" data-key="minReps-${esc(e.id)}"></label><label class="field">Yläraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.maxReps ?? config.maxReps)}" data-progression="maxReps" data-i="${i}" data-key="maxReps-${esc(e.id)}"></label><label class="field">Pienin painoaskel (kg)<input type="number" min="0.01" max="100" step="0.01" inputmode="decimal" value="${esc(e.progression?.weightStep ?? config.weightStep)}" data-progression="weightStep" data-i="${i}" data-key="weightStep-${esc(e.id)}"></label></div><label class="check"><span>Paino on ulkoinen kg-kuorma<small>Poista valinta avustetuille liikkeille tai muille kuormayksiköille: paino muuttuu silloin vain käsin.</small></span><input type="checkbox" data-progression="autoLoad" data-i="${i}" data-key="autoLoad-${esc(e.id)}" ${config.autoLoad ? 'checked' : ''}></label></details>${trackingEditor(e, i)}`;
 }
 
 function setTargetFields(e, i) {
@@ -421,6 +428,7 @@ function chooseExercise(exercise) {
   }
   if (!row.name.trim()) row.reps = exercise.reps;
   row.name = exercise.name;
+  row.tracking = libraryTracking(exercise);
   delete draft.customEntry;
   picker.added.push(exercise.id);
   if (picker.keepOpen) { picker.target = null; customOpen = false; }
@@ -443,7 +451,7 @@ function render() {
   if (view === 'library' && !draft) view = 'home';
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
-  $app.innerHTML = view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
+  $app.innerHTML = view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="statistics-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -551,15 +559,19 @@ async function changeRevision(id, undo = false) {
   }, { critical: true });
   const message = ok || !result?.ok ? result?.message : 'Tarkistusta ei voitu tallentaa. Edelliset tavoitteet säilyvät; yritä uudelleen.';
   revisionMessages.set(id, message || 'Tarkistus ei onnistunut. Tarkista tallennuksen tila.');
+  openRoutines.add(id);
   render(); announce(revisionMessages.get(id));
 }
 
 function logInput(t) {
   const field = t.dataset.log;
   const value = t.type === 'checkbox' ? t.checked : t.value.trim();
-  const valid = !t.validity.badInput && (field !== 'rir' || value === '' || (/^\d+$/.test(value) && Number(value) <= 5));
+  const numericLimit = ({ rir: 5, setRir: 5, actualReps: 100, actualSeconds: 86400 })[field];
+  const valid = !t.validity.badInput && (numericLimit === undefined || value === '' ||
+    (/^\d+$/.test(value) && Number(value) <= numericLimit)) &&
+    (field !== 'kind' || ['', 'working', 'warmup'].includes(value));
   if (!valid) {
-    logError = 'Anna kokonaisluku RIR 0–5. Tyhjä tarkoittaa tuntematonta.';
+    logError = 'Tarkista sarjan tiedot: toistot 0–100, RIR 0–5 ja kesto 0–86400 sekuntia kokonaislukuina. Tyhjä tarkoittaa tuntematonta.';
     announce(logError); render(); return;
   }
   const options = sessionOptions(), ei = +t.dataset.e, si = +t.dataset.s;
@@ -595,6 +607,28 @@ async function shareBackup(text) {
 }
 
 const actions = {
+  statistics() { readLatest(); view = 'statistics'; render(); },
+  statrange(t) { statisticsFilters.range = t.dataset.range; statisticsFilters.page = 0; render(); },
+  statpage(t) { statisticsFilters.page = Math.max(0, Number(t.dataset.page)); render(); },
+  statexercise(t) {
+    statisticsFilters.exerciseKey = t.dataset.id; statisticsFilters.page = 0; render();
+    document.querySelector('.stat-filters')?.scrollIntoView({ block: 'start' });
+  },
+  indexsettings() {
+    const panel = document.getElementById('index-settings');
+    if (panel) { panel.open = true; panel.querySelector('summary').focus(); panel.scrollIntoView({ block: 'start' }); }
+  },
+  async saveindex() {
+    const keys = [...document.querySelectorAll('input[name="benchmark"]:checked')].map((t) => t.value);
+    if (state.statistics && !confirm('Aloitetaanko uusi indeksivertailu nykyisistä tuloksista? Vanha indeksin lähtötaso korvataan. Harjoitushistoria säilyy.')) return;
+    let message = '';
+    const ok = await mutate((next) => {
+      const result = configureIndex(buildStatistics(next.history), keys);
+      if (!result.ok) { message = result.error; return false; }
+      next.statistics = result.index;
+    }, { critical: true });
+    announce(ok ? 'Kehitysindeksin lähtötaso tallennettu. Harjoitushistoria säilyy.' : message || 'Indeksiä ei voitu tallentaa. Tarkista tallennuksen tila.');
+  },
   async installupdate() { await installUpdate(); },
   laterupdate() { updateDismissed = true; renderUpdateNotice(); announce('Päivitys siirretty myöhemmäksi.'); },
   async checkupdates() {
@@ -732,7 +766,7 @@ const actions = {
       if (p.done && byId(routineId, next)?.autoProgress) revisionResult = reviseRoutine(next, routineId);
     }, { ...sessionOptions(), critical: true });
     if (ok) {
-      if (revisionResult) revisionMessages.set(routineId, revisionResult.message);
+      if (revisionResult) { revisionMessages.set(routineId, revisionResult.message); openRoutines.add(routineId); }
       view = 'home'; render(); announce(`Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}`);
     }
   },
@@ -898,7 +932,12 @@ document.addEventListener('submit', (e) => {
 });
 document.addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.log && t.type !== 'checkbox') {
+  if (t.dataset.tracking && draft && t.type !== 'radio') {
+    const exercise = draft.exercises[+t.dataset.i];
+    exercise.tracking = sanitizeTracking({ ...exercise.tracking, [t.dataset.tracking]: t.value });
+    rememberDraft(); return;
+  }
+  if (t.dataset.log && !['checkbox', 'radio'].includes(t.type)) {
     // Keep valid edits durable before blur; unfinished input is validated on change.
     if (t.validity.valid) logInput(t);
     return;
@@ -929,6 +968,23 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.statFilter || t.dataset.statDate) {
+    const field = t.dataset.statFilter || t.dataset.statDate;
+    statisticsFilters[field] = t.value;
+    statisticsFilters.page = 0;
+    if (field === 'routineId') statisticsFilters.exerciseKey = '';
+    render();
+    document.querySelector(`[data-key="stat-${field}"]`)?.focus({ preventScroll: true });
+    return;
+  }
+  if (t.dataset.tracking && draft && t.type === 'radio') {
+    const exercise = draft.exercises[+t.dataset.i];
+    if (t.dataset.tracking === 'loadType' && Object.hasOwn(LOAD_TYPES, t.value)) {
+      exercise.tracking = sanitizeTracking({ ...exercise.tracking, loadType: t.value });
+      rememberDraft();
+    }
+    return;
+  }
   if (t.dataset.log) { logInput(t); return; }
   if (t.dataset.progression === 'autoLoad' && draft) {
     const exercise = draft.exercises[+t.dataset.i];
@@ -973,6 +1029,10 @@ document.addEventListener('toggle', (e) => {
   if (e.target.matches('.exercise-log')) {
     if (e.target.open) openLogs.add(e.target.dataset.logPanel);
     else openLogs.delete(e.target.dataset.logPanel);
+  }
+  if (e.target.matches('.routine-details')) {
+    if (e.target.open) openRoutines.add(e.target.dataset.routinePanel);
+    else openRoutines.delete(e.target.dataset.routinePanel);
   }
   if (e.target.matches('.settings')) settingsOpen = e.target.open;
   if (e.target.matches('.custom-exercise')) customOpen = e.target.open;

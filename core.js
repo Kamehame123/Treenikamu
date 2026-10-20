@@ -14,6 +14,7 @@
 // - Files from a newer app version are refused, never guessed at.
 import { CATEGORIES, EQUIPMENT, normalizeSearch } from './exercises.js';
 import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight } from './progression.js';
+import { sanitizeTracking, sanitizeIndex, exerciseKey } from './statistics.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
@@ -100,6 +101,7 @@ function sanitizeExercises(raw) {
         id: cleanText(e?.id, 80) || uid(),
         name: cleanText(e?.name),
         ...sanitizeTargets(e),
+        ...(sanitizeTracking(e?.tracking) ? { tracking: sanitizeTracking(e.tracking) } : {}),
         ...(e?.progression ? { progression: sanitizeProgression(e) } : {}),
         ...(e?.recoveryBase ? { recoveryBase: sanitizeTargets(e.recoveryBase) } : {}),
       };
@@ -144,13 +146,18 @@ export function sanitizeSession(s) {
       name: cleanText(e?.name) || 'Liike',
       reps: cleanText(e?.reps, 20) || '10',
       weight: cleanText(e?.weight, 20),
+      ...(sanitizeTracking(e?.tracking) ? { tracking: sanitizeTracking(e.tracking) } : {}),
       ...(cleanText(e?.rir, 20) ? { rir: cleanText(e.rir, 20) } : {}),
       ...(e?.pain === true ? { pain: true } : {}),
+      ...(e?.deload === true ? { deload: true } : {}),
       sets: (Array.isArray(e?.sets) && e.sets.length ? e.sets : [{}]).slice(0, MAX_SETS).map((x) => ({
         done: x?.done === true,
         ...(cleanText(x?.reps, 20) ? { reps: cleanText(x.reps, 20) } : {}),
         ...(cleanText(x?.actualReps, 20) ? { actualReps: cleanText(x.actualReps, 20) } : {}),
         ...(cleanText(x?.actualWeight, 20) ? { actualWeight: cleanText(x.actualWeight, 20) } : {}),
+        ...(['working', 'warmup'].includes(x?.kind) ? { kind: x.kind } : {}),
+        ...(cleanText(x?.setRir, 20) ? { setRir: cleanText(x.setRir, 20) } : {}),
+        ...(cleanText(x?.actualSeconds, 20) ? { actualSeconds: cleanText(x.actualSeconds, 20) } : {}),
       })),
     }))),
   };
@@ -195,6 +202,7 @@ function normalizeState(raw) {
     routines,
     session,
     customExercises: sanitizeCustomExercises(raw.customExercises),
+    ...(sanitizeIndex(raw.statistics) ? { statistics: sanitizeIndex(raw.statistics) } : {}),
     history: (Array.isArray(raw.history) ? raw.history : [])
       .filter((h) => h && typeof h === 'object')
       .slice(0, MAX_HISTORY)
@@ -264,7 +272,7 @@ export function parseBackup(text) {
   }
 }
 
-const CORE_KEYS = ['v', 'routines', 'history', 'settings', 'session', 'restEnd', 'customExercises'];
+const CORE_KEYS = ['v', 'routines', 'history', 'settings', 'session', 'restEnd', 'customExercises', 'statistics'];
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Adds what the backup has and this device lacks. Safe to repeat: re-importing the same
@@ -290,6 +298,14 @@ export function mergeState(local, incoming) {
   const added = incoming.history.filter((h) => !seen.has(h.id)).map((h) =>
     routineLinks.has(h.routineId) ? { ...h, routineId: routineLinks.get(h.routineId) } : h);
   next.history = [...next.history, ...added].sort((a, b) => b.endedAt - a.endedAt).slice(0, MAX_HISTORY);
+  if (!next.statistics && incoming.statistics) {
+    const keys = new Map();
+    for (const h of incoming.history) {
+      for (const e of h.exercises ?? []) keys.set(exerciseKey(e, h.routineId), exerciseKey(e, routineLinks.get(h.routineId) ?? h.routineId));
+    }
+    next.statistics = { ...structuredClone(incoming.statistics),
+      benchmarks: incoming.statistics.benchmarks.map((b) => ({ ...b, key: keys.get(b.key) ?? b.key })) };
+  }
   const kept = new Set(next.history.map((h) => h.id));
   result.history = added.filter((h) => kept.has(h.id)).length;
   const ownIds = new Set((next.customExercises ?? []).map((e) => e.id));
@@ -314,6 +330,7 @@ export function mergeState(local, incoming) {
 // the backup has none, so the app never ends up with zero workouts.
 export function replaceState(local, incoming) {
   const next = structuredClone(local);
+  if (!incoming.statistics) delete next.statistics;
   for (const key of Object.keys(incoming).filter((k) => !['v', 'session', 'restEnd'].includes(k))) next[key] = incoming[key];
   if (!next.routines.length) next.routines = structuredClone(local.routines);
   const result = { routines: next.routines.length, history: next.history.length, skipped: 0, session: false };
@@ -370,8 +387,11 @@ export function startSession(routine, now = Date.now()) {
       name: e.name,
       reps: e.reps,
       weight: e.weight,
+      ...(e.tracking ? { tracking: structuredClone(e.tracking) } : {}),
+      ...(e.recoveryBase ? { deload: true } : {}),
       sets: Array.from({ length: e.sets }, (_, i) => ({
         done: false,
+        ...(e.tracking ? { kind: 'working' } : {}),
         ...(e.setReps ? { reps: e.setReps[i] } : {}),
       })),
     })),
@@ -431,7 +451,7 @@ export function addSet(session, ei) {
   const e = session?.exercises[ei];
   if (e && e.sets.length < MAX_SETS) {
     const reps = e.sets.at(-1)?.reps;
-    e.sets.push({ done: false, ...(reps ? { reps } : {}) });
+    e.sets.push({ done: false, ...(e.tracking ? { kind: 'working' } : {}), ...(reps ? { reps } : {}) });
   }
 }
 

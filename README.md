@@ -8,6 +8,105 @@ The home screen prioritizes starting or resuming a workout. Backup reminders and
 the coaching guide appear below the workout list; backup reminders and export
 remain available with the same weekly schedule.
 
+## Training statistics
+
+Open **Tilastot ja kehitys** from home. All calculations and charts run locally,
+including offline; no account, analytics service, CDN or external chart library
+is needed. Statistics are derived from saved history, not separately accumulated
+counters. A running or discarded workout is not counted.
+
+The dashboard includes 4-week, 12-week, year, all-time and custom-date ranges,
+routine/exercise filters, equivalent previous-period comparisons, completed and
+working sets, actual reps, external-load volume, recorded session time, actual
+timed work, an activity calendar, weekly charts/tables, exercise records and
+session drill-down, primary exercise-category sets, per-set RIR distributions,
+and recorded pain/fatigue flags. Charts have captions and accessible data tables.
+The calendar shows at most the last 84 selected days; weekly charts/tables show
+at most the last 104 selected weeks. Period totals still cover the entire range.
+Exercise-session charts/tables use matching 50-session pages, with older and
+newer navigation so long histories remain available without unbounded chart DOM.
+Dates use the device's local calendar, Monday-start weeks and workout end dates.
+Comparisons end at the equivalent local time, avoiding a full previous day being
+compared with only part of today; custom past ranges include their whole last day.
+
+### Recording and interpreting measurements
+
+- Library selection now saves canonical identity, category, equipment and load
+  convention. **Tilastojen liiketiedot** in the routine editor also lets you set
+  the load convention and an equipment/technique identifier. Each routine's
+  exercise identities remain separate, even for the same library exercise.
+  Changing the exercise name, load convention or equipment identifier starts a
+  separate performance series. Historical snapshots are never rewritten.
+- Numeric loads are not sufficient to infer their meaning. Unknown, assisted,
+  bodyweight and other-unit loads never become kg volume or estimated strength.
+  Dumbbell loads stay per dumbbell, without silently doubling them. External
+  volume is recorded kg times actual reps, including warm-ups; its cross-exercise
+  total depends on exercise selection and is not muscle growth or mechanical work.
+- Expand **Kuormittavuus (valinnainen)** during training to enter actual reps (or
+  seconds for a timed target), optional per-set RIR and working/warm-up type.
+  Repetition/weight quick adjustments still work as before. New sessions with
+  tracking metadata default to working sets; older unclassified records remain
+  unclassified. The exercise-level hardest-set RIR is never assigned to all sets.
+- Checked sets with no actual reps remain unknown. A blank actual load retains
+  the existing "planned load used" convention. Zero recorded reps/load/time is
+  distinct from missing data. Summary-only legacy history contributes only
+  workout/set/time counts; detailed measurements are not reconstructed.
+- Session time includes rests and time left open. Muscle-category counts show
+  classified working sets in the library's primary category, not full direct and
+  indirect muscle workload. Pain/fatigue are counts of explicit flags, not
+  diagnoses or proof that unflagged sessions were pain-free or well recovered.
+  Coverage and exclusions are visible alongside totals; recording more complete
+  data can itself change comparisons.
+
+### Combined progress: Kehitysindeksi
+
+Choose 2-6 representative benchmark exercises in statistics. Each requires three
+completed sessions with eligible working sets at the same per-set RIR (0-3),
+with the latest within 28 local calendar days. Eligible sets have actual 1-10
+reps and a known positive external kg load. Warm-ups, unknown set types,
+pain-flagged exercises, fatigue-flagged sessions and snapshotted automatic deload
+exercises cannot establish performance observations. This does not ask users to
+test a true maximum or train to failure.
+
+For each exercise and exact RIR, take the best eligible set estimate per session.
+The estimate uses Epley's `load * (1 + reps / 30)`; a single rep uses its load
+directly. No RIR is added to the rep count. Baseline and current performance are
+the medians of the three most recent comparable sessions. Baselines, exact RIR
+and the benchmark basket are frozen on explicit setup:
+
+`index = 100 * exp(mean(log(current / baseline)))`
+
+Each benchmark has equal weight. An index of 110 means the geometric aggregate
+of these exercise-performance ratios is 10% above the saved baseline, **not**
+10% more muscle, health or total-body strength. Adding sets/exercises does not
+increase a benchmark's weight. A missing benchmark or one whose latest comparable
+observation is older than 28 days suppresses the whole index; remaining weights
+are never redistributed. Excluded deload/fatigue sessions neither create fake
+losses nor keep old estimates fresh. Filter changes do not change the index.
+Starting a new comparison explicitly replaces the old baseline/basket, not
+workout history. Index configuration is backed up; merge preserves a locally
+configured index, otherwise adopts and remaps the imported configuration.
+Replacing with an older backup without an index clears the old configuration.
+
+This index is an explainable **product heuristic**, not a scientifically
+validated composite physiological measure. Three samples, exact-RIR matching,
+equal weights and 28-day freshness are conservative design choices, not clinical
+thresholds. Rep/load estimates vary by exercise, technique and person; subjective
+RIR and changes in exercise execution remain sources of error.
+
+Evidence informing the separation of performance, consistency and workload:
+[ACSM 2026](https://acsm.org/resistance-training-guidelines-update-2026/),
+[Currier et al. 2023](https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/),
+[Nuzzo et al. 2024, rep/1RM variability](https://pmc.ncbi.nlm.nih.gov/articles/PMC10933212/),
+and [RIR measurement limitations](https://pmc.ncbi.nlm.nih.gov/articles/PMC4961270/).
+Chart alternatives follow [W3C complex-image guidance](https://www.w3.org/WAI/tutorials/images/complex/).
+These sources do not validate the composite index itself.
+
+All metadata and index settings are additive schema-1 fields. Existing storage
+keys, backup envelopes and old records remain compatible. Run `npm test` for
+logic/compatibility tests and `npm run test:statistics` for mobile Chromium and
+WebKit, accessibility, storage-failure, logging and offline coverage.
+
 ## Home-screen launch
 
 Launching the installed app from its home-screen icon requests full-screen mode,
