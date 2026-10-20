@@ -9,6 +9,7 @@
     "test:setup": "playwright install chromium webkit",
     "test:review": "node --test tests/review.test.mjs",
     "test:library": "node --test tests/library-browser.test.mjs",
+    "test:workflow": "node --test tests/workflow.test.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "start": "node tools/serve.mjs"
   },

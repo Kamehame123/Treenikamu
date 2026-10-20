@@ -2,6 +2,8 @@ import * as core from './core.js';
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
 
+// Views restore their own position; browser reload restoration must not undo it.
+history.scrollRestoration = 'manual';
 const $app = document.getElementById('app');
 const $live = document.getElementById('live');
 const DRAFT_KEY = 'gym-tracker-draft-v1';
@@ -46,7 +48,7 @@ let view = draft ? 'edit' : state.session ? 'workout' : 'home';
 let renderedView;
 let editError = '';
 let settingsOpen = false;
-let picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target: null };
+let picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target: null, adding: true, keepOpen: false, added: [] };
 let customError = '';
 let customOpen = false;
 const customEntry = () => draft.customEntry ??= { name: '', category: 'Koko keho', equipment: 'Muu väline', reps: '10' };
@@ -168,15 +170,19 @@ function choiceMenu(id, label, values, selected, all = '', custom = false) {
   return `<div class="field"><span id="${id}-label">${label}</span><details class="choice-menu" id="${id}"><summary data-key="${id}" aria-labelledby="${id}-label ${id}-value"><span id="${id}-value">${esc(selected || all)}</span><span aria-hidden="true">⌄</span></summary><fieldset><legend class="sr">${label}</legend>${choices.map((value, i) => `<label class="choice-option"><input type="radio" name="${id}" value="${esc(value)}" ${custom ? `data-custom="${field}"` : `data-filter="${field}"`} data-key="${id}-${i}" ${value === selected ? 'checked' : ''}><span>${esc(value || all)}</span></label>`).join('')}</fieldset></details></div>`;
 }
 function libraryMatches() { return findExercises(picker.query, { ...picker, custom: state.customExercises }); }
+function hasLibraryFilters() { return !!(picker.query || picker.category || picker.equipment || picker.customOnly); }
 function libraryResults(rows) {
-  return rows.slice(0, picker.limit).map((e) => `<li><button class="exercise-choice" data-action="chooseex" data-id="${esc(e.id)}" data-key="choice-${esc(e.id)}"><span class="choice-icon">${icon('weight')}</span><span class="grow"><span class="sr">Valitse liike: </span><strong>${esc(e.name)}</strong><span class="choice-meta">${esc(e.category)} · ${esc(e.equipment)}${e.custom ? ' · Oma liike' : ''}</span></span>${icon('plus')}</button></li>`).join('');
+  return rows.slice(0, picker.limit).map((e) => {
+    const added = picker.added.includes(e.id);
+    return `<li><button class="exercise-choice" data-action="chooseex" data-id="${esc(e.id)}" data-key="choice-${esc(e.id)}" ${added ? 'aria-disabled="true"' : ''}><span class="choice-icon">${icon('weight')}</span><span class="grow"><span class="sr">${added ? 'Lisätty harjoitukseen: ' : 'Valitse liike: '}</span><strong>${esc(e.name)}</strong><span class="choice-meta">${added ? 'Lisätty · ' : ''}${esc(e.category)} · ${esc(e.equipment)}${e.custom ? ' · Oma liike' : ''}</span></span>${icon(added ? 'check' : 'plus')}</button></li>`;
+  }).join('');
 }
 function libraryView() {
   const rows = libraryMatches(), own = customEntry();
-  return `<header class="editor-header"><button class="btn ghost back" data-action="backedit" data-key="backedit">${icon('back')} Takaisin harjoitukseen</button><span class="eyebrow">${EXERCISES.length} + ${state.customExercises.length} OMAA</span></header>${warn()}<div class="library-top"><h1 tabindex="-1">Liikekirjasto</h1><p class="editor-copy">${picker.target ? 'Valitse liike tähän kohtaan. Tavoitteet säilyvät.' : 'Valitse harjoitukseen lisättävä liike.'} Haku toimii myös englanniksi.</p></div>
-    <div role="search" aria-label="Liikkeiden haku" class="library-filters card"><label class="field">Hae liikettä<input type="search" id="exercise-search" data-key="exercise-search" maxlength="120" value="${esc(picker.query)}" placeholder="Esim. kyykky, ylätalja tai bench press" aria-controls="library-results" autocomplete="off"></label><div class="filter-grid">${choiceMenu('library-category', 'Lihasryhmä', CATEGORIES, picker.category, 'Kaikki lihasryhmät')}${choiceMenu('library-equipment', 'Väline', EQUIPMENT, picker.equipment, 'Kaikki välineet')}</div><label class="check library-own"><span>Vain omat liikkeet</span><input type="checkbox" id="library-own" data-key="library-own" ${picker.customOnly ? 'checked' : ''}></label></div>
+  return `<header class="editor-header"><button class="btn ghost back" data-action="backedit" data-key="backedit">${icon('back')} Takaisin harjoitukseen</button><span class="eyebrow">${EXERCISES.length} + ${state.customExercises.length} OMAA</span></header>${warn()}<div class="library-top"><h1 tabindex="-1">Liikekirjasto</h1><p class="editor-copy">${!picker.adding ? 'Valitse liike tähän kohtaan. Tavoitteet säilyvät.' : picker.keepOpen ? 'Napauta liikkeitä lisätäksesi ne. Palaa lopuksi harjoitukseen.' : 'Valitse harjoitukseen lisättävä liike.'} Haku toimii myös englanniksi.</p>${picker.adding ? `<button class="btn library-multi" data-action="multiex" data-key="multiex" aria-pressed="${picker.keepOpen}">${icon(picker.keepOpen ? 'check' : 'plus')} Lisää useita peräkkäin</button>` : ''}</div>
+    <div role="search" aria-label="Liikkeiden haku" class="library-filters card"><label class="field">Hae liikettä<input type="search" id="exercise-search" data-key="exercise-search" maxlength="120" value="${esc(picker.query)}" placeholder="Esim. kyykky, ylätalja tai bench press" aria-controls="library-results" autocomplete="off"></label><div class="filter-grid">${choiceMenu('library-category', 'Lihasryhmä', CATEGORIES, picker.category, 'Kaikki lihasryhmät')}${choiceMenu('library-equipment', 'Väline', EQUIPMENT, picker.equipment, 'Kaikki välineet')}</div><label class="check library-own"><span>Vain omat liikkeet</span><input type="checkbox" id="library-own" data-key="library-own" ${picker.customOnly ? 'checked' : ''}></label><button class="btn secondary library-reset" data-action="resetfilters" data-key="resetfilters" ${hasLibraryFilters() ? '' : 'hidden'}>Tyhjennä haku ja suodattimet</button></div>
     <details class="custom-exercise card" ${customOpen ? 'open' : ''}><summary>Lisää oma liike ${icon('plus')}</summary><p class="small-copy muted">Oma liike tallentuu kirjastoon ja varmuuskopioon. Voit valita sen myöhemmin uudelleen.</p><form id="custom-exercise-form" novalidate><label class="field">Oman liikkeen nimi<input type="text" data-custom="name" data-key="custom-name" maxlength="60" value="${esc(own.name)}" required autocomplete="off"></label><div class="filter-grid">${choiceMenu('custom-category', 'Oman liikkeen lihasryhmä', CATEGORIES, own.category, '', true)}${choiceMenu('custom-equipment', 'Oman liikkeen väline', EQUIPMENT, own.equipment, '', true)}</div><label class="field">Oletustoistot / aika<input type="text" data-custom="reps" data-key="custom-reps" maxlength="20" value="${esc(own.reps)}" required></label><p id="custom-error" role="alert" tabindex="-1" class="banner" ${customError ? '' : 'hidden'}>${esc(customError)}</p><button type="submit" class="btn primary big">Tallenna ja lisää harjoitukseen ${icon('plus')}</button></form></details>
-    <div class="section-head library-count"><h2>Liikkeet</h2><span id="library-count" class="muted small-copy" role="status">${rows.length} hakutulosta</span></div><ul id="library-results" class="list library-results">${libraryResults(rows)}</ul><div id="library-empty" class="empty-state" ${rows.length ? 'hidden' : ''}><h3>Liikettä ei löytynyt</h3><p>Kokeile toista hakusanaa tai lisää oma liike.</p><button class="btn secondary" data-action="newcustom" data-key="newcustom">Lisää haettu nimi omana liikkeenä</button></div><button class="btn secondary library-more" data-action="moreex" data-key="moreex" ${rows.length <= picker.limit ? 'hidden' : ''}>Näytä lisää liikkeitä</button>`;
+    <div class="section-head library-count"><h2>Liikkeet</h2><span id="library-count" class="muted small-copy" role="status">${rows.length} hakutulosta</span></div><ul id="library-results" class="list library-results">${libraryResults(rows)}</ul><div id="library-empty" class="empty-state" ${rows.length ? 'hidden' : ''}><h3>Liikettä ei löytynyt</h3><p>Kokeile toista hakusanaa tai lisää oma liike.</p><button class="btn secondary" data-action="newcustom" data-key="newcustom">Lisää haettu nimi omana liikkeenä</button></div><button class="btn secondary library-more" data-action="moreex" data-key="moreex" ${rows.length <= picker.limit ? 'hidden' : ''}>Näytä lisää liikkeitä</button>${picker.keepOpen ? `<div class="library-done"><p class="small-copy muted" role="status">${picker.added.length} lisätty harjoitukseen${draftOk ? '' : ' · Luonnos ei tallentunut. Pidä välilehti auki.'}</p><button class="btn primary big" data-action="backedit" data-key="library-done">Valmis · takaisin harjoitukseen ${icon('check')}</button></div>` : ''}`;
 }
 function updateLibraryResults() {
   const rows = libraryMatches();
@@ -184,13 +190,14 @@ function updateLibraryResults() {
   document.getElementById('library-count').textContent = `${rows.length} hakutulosta`;
   document.getElementById('library-empty').hidden = rows.length > 0;
   document.querySelector('[data-action="moreex"]').hidden = rows.length <= picker.limit;
+  document.querySelector('[data-action="resetfilters"]').hidden = !hasLibraryFilters();
 }
-function openLibrary(target = null) {
-  picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target };
+function openLibrary(target = null, adding = true) {
+  picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target, adding, keepOpen: false, added: [] };
   customOpen = false; customError = ''; view = 'library'; rememberDraft(); render();
 }
 function chooseExercise(exercise) {
-  if (!exercise || !draft) return;
+  if (!exercise || !draft || picker.added.includes(exercise.id)) return;
   let row = picker.target && draft.exercises.find((e) => e.id === picker.target);
   if (!row) {
     if (draft.exercises.length >= 60) { announce('Harjoituksessa voi olla enintään 60 liikettä.'); return; }
@@ -199,8 +206,11 @@ function chooseExercise(exercise) {
   if (!row.name.trim()) row.reps = exercise.reps;
   row.name = exercise.name;
   delete draft.customEntry;
-  view = 'edit'; rememberDraft(); render();
-  document.querySelector(`[data-key="name-${CSS.escape(row.id)}"]`)?.focus();
+  picker.added.push(exercise.id);
+  if (picker.keepOpen) { picker.target = null; customOpen = false; }
+  else view = 'edit';
+  rememberDraft(); render();
+  if (!picker.keepOpen) document.querySelector(`[data-key="name-${CSS.escape(row.id)}"]`)?.focus();
   announce(`${exercise.name} lisätty harjoitukseen.`);
 }
 
@@ -222,6 +232,40 @@ function render() {
   window.scrollTo(0, changed ? 0 : scroll);
   renderedView = view;
   tick(); syncWakeLock();
+}
+
+// Center within usable space, not behind the sticky header or floating timer.
+// Oversized exercises show the next set instead of centering an unreadable card.
+function showCurrentExercise({ focus = false, instant = false } = {}) {
+  if (view !== 'workout' || !state.session || !storageOk || document.hidden) return;
+  const index = core.currentExercise(state.session);
+  const card = document.getElementById(`exercise-${index}`);
+  const nextSet = card?.querySelector('.set.next') || card?.querySelector('.set');
+  const viewport = window.visualViewport;
+  const top = (viewport?.offsetTop ?? 0) + (document.querySelector('.session-header')?.getBoundingClientRect().height ?? 0) + 12;
+  const viewportBottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight);
+  const rest = document.getElementById('rest');
+  const bottom = Math.min(viewportBottom, rest && !rest.hidden ? rest.getBoundingClientRect().top : viewportBottom) - 12;
+  const height = Math.max(0, bottom - top);
+  const target = card && card.getBoundingClientRect().height <= height ? card : nextSet || document.querySelector('[data-action="finish"]');
+  if (!target || height < 48) return;
+  const rect = target.getBoundingClientRect();
+  if (focus) (nextSet || target).focus({ preventScroll: true });
+  window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - top - Math.max(0, (height - rect.height) / 2)), behavior: instant || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+}
+
+let exerciseScroll;
+let scrollInteraction = 0;
+function cancelExerciseScroll() { clearTimeout(exerciseScroll); scrollInteraction++; }
+function scheduleExerciseScroll(sessionId, index) {
+  cancelExerciseScroll();
+  // Leave time to undo a mistaken last-set tap. Any new interaction cancels it.
+  exerciseScroll = setTimeout(() => {
+    if (state.session?.id === sessionId && core.currentExercise(state.session) === index) showCurrentExercise();
+  }, 350);
+}
+for (const event of ['pointerdown', 'touchstart', 'wheel', 'keydown']) {
+  document.addEventListener(event, cancelExerciseScroll, { passive: true });
 }
 
 let lastRestBeep = 0;
@@ -285,7 +329,7 @@ const actions = {
     });
     if (state.session) { view = 'workout'; render(); }
   },
-  resume() { view = 'workout'; render(); },
+  resume() { view = 'workout'; render(); showCurrentExercise({ focus: true }); },
   home() {
     if (draft && JSON.stringify({ name: draft.name, exercises: draft.exercises }) !== draft.initial && !confirm('Hylätäänkö harjoituksen tallentamattomat muutokset?')) return;
     clearDraft(); view = 'home'; render();
@@ -300,17 +344,23 @@ const actions = {
     dirty = false; saveConflict = false; storageOk = true; readLatest(); render();
   },
   async set(t) {
-    await mutate((next) => {
+    let advance = null;
+    const interaction = scrollInteraction;
+    const ok = await mutate((next) => {
       const ei = +t.dataset.e, si = +t.dataset.s, ex = next.session?.exercises[ei];
       if (!ex?.sets[si]) return false;
+      const current = core.currentExercise(next.session);
       const done = core.toggleSet(next.session, ei, si);
       if (done) {
         navigator.vibrate?.(15);
         const p = core.progress(next.session);
         next.restEnd = next.settings.autoRest && p.done < p.total ? Date.now() + next.settings.restSeconds * 1000 : null;
+        const following = core.currentExercise(next.session);
+        if (ei === current && following > current) advance = { sessionId: next.session.id, index: following };
       }
       announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${next.settings.restSeconds} sekuntia.` : ''}`);
     }, sessionOptions());
+    if (ok && advance && storageOk && interaction === scrollInteraction) scheduleExerciseScroll(advance.sessionId, advance.index);
   },
   async addset(t) { await mutate((next) => core.addSet(next.session, +t.dataset.e), sessionOptions()); },
   async rmset(t) {
@@ -341,9 +391,15 @@ const actions = {
   new() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
   edit(t) { const r = byId(t.dataset.id); if (r) openDraft(r, false); },
   addex() { if (draft.exercises.length >= 60) return; openLibrary(draft.exercises.find((e) => !e.name.trim())?.id ?? null); },
-  pickex(t) { openLibrary(t.dataset.id); },
+  pickex(t) { openLibrary(t.dataset.id, false); },
   backedit() { view = 'edit'; render(); document.querySelector(picker.target ? `[data-key="pick-${CSS.escape(picker.target)}"]` : '[data-key="addex"]')?.focus(); },
   chooseex(t) { chooseExercise([...EXERCISES, ...state.customExercises].find((e) => e.id === t.dataset.id)); },
+  multiex() { if (!picker.adding) return; picker.keepOpen = !picker.keepOpen; render(); },
+  resetfilters() {
+    Object.assign(picker, { query: '', category: '', equipment: '', customOnly: false, limit: 40 });
+    render(); document.getElementById('exercise-search')?.focus();
+    announce('Haku ja suodattimet tyhjennetty.');
+  },
   moreex() { picker.limit += 40; updateLibraryResults(); document.querySelectorAll('.exercise-choice')[picker.limit - 40]?.focus(); },
   newcustom() {
     customOpen = true; customEntry().name = picker.query.slice(0, 60); rememberDraft(); render();
@@ -389,12 +445,7 @@ const actions = {
     }, { critical: true });
     if (ok) { clearDraft(); view = 'home'; render(); }
   },
-  jump() {
-    const index = core.currentExercise(state.session);
-    const card = document.getElementById(`exercise-${index}`);
-    card?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
-    card?.querySelector('.set.next, .set')?.focus({ preventScroll: true });
-  },
+  jump() { showCurrentExercise({ focus: true }); },
   export() {
     const blob = new Blob([newerSchema ? storage.getItem(core.STORAGE_KEY) : JSON.stringify(core.buildBackup(state), null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -437,9 +488,10 @@ $file.addEventListener('change', async () => {
 });
 
 function enqueueAction(work) {
+  cancelExerciseScroll();
   pendingActions++;
   $app.setAttribute('aria-busy', 'true');
-  actionQueue = actionQueue.then(work).catch(() => {
+  actionQueue = actionQueue.then(() => { cancelExerciseScroll(); return work(); }).catch(() => {
     announce('Muutosta ei voitu tehdä. Yritä uudelleen.');
   }).finally(() => {
     pendingActions--;
@@ -488,6 +540,7 @@ document.addEventListener('toggle', (e) => {
 }, true);
 window.addEventListener('storage', (e) => {
   if (e.key !== core.STORAGE_KEY && e.key !== null) return;
+  cancelExerciseScroll();
   if (!dirty) {
     readLatest();
     // Avoid replacing a focused editor input while someone is typing.
@@ -495,6 +548,7 @@ window.addEventListener('storage', (e) => {
   } else announce('Toinen välilehti muutti tallennettua harjoitusta. Pidä tämä välilehti auki, kunnes muutokset ovat tallessa.');
 });
 document.addEventListener('visibilitychange', () => {
+  cancelExerciseScroll();
   if (document.visibilityState === 'visible') { readLatest(); if (view !== 'edit') render(); }
   tick(); syncWakeLock();
 });
@@ -510,3 +564,4 @@ if ('serviceWorker' in navigator) {
   }).catch(() => { /* No offline promise when registration is denied. */ });
 }
 render();
+if (view === 'workout') showCurrentExercise({ instant: true });
