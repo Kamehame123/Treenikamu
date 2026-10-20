@@ -4,6 +4,26 @@ Finnish, local-first resistance-training diary. Run `npm start` to serve the app
 Run `npm test` for pure logic and asset tests; `npm run test:progression` exercises
 the progression UI in Chromium and WebKit. Browser tests use isolated storage.
 
+The home screen prioritizes starting or resuming a workout. Backup reminders and
+the coaching guide appear below the workout list; backup reminders and export
+remain available with the same weekly schedule.
+
+## Home-screen launch
+
+Launching the installed app from its home-screen icon requests full-screen mode,
+without browser controls, on devices that support the manifest's `fullscreen`
+display mode. Unsupported platforms fall back to standalone mode. On iPhone and
+iPad, install using Safari's Share > Add to Home Screen; iOS controls the status
+bar and may keep system indicators visible even when browser controls are hidden.
+Opening a normal bookmark or browser tab does not request full-screen mode.
+
+For an existing installation, open the app online to receive the update, then
+close all app windows and browser tabs for it and reopen using the installed
+icon. Installed display settings may take additional time to update, depending
+on the browser. Do not uninstall the app or clear site data to force an update:
+training records are stored on the device. This change keeps the same start URL,
+scope, storage keys and user data; no data migration or reset is required.
+
 ## Workout progression
 
 Each routine has an **off-by-default** automatic revision switch and a manual
@@ -128,7 +148,10 @@ New optional fields are actual reps/loads and effort/pain on session exercises,
 fatigue on sessions, routine IDs and exercise snapshots on newly completed history
 records, and progression configuration/revision/recovery metadata on routines.
 Snapshots are independent: revising a plan cannot rewrite completed training.
-The existing 100-workout history retention policy is unchanged.
+History keeps up to 10,000 completed workouts (the oldest are trimmed beyond that).
+Browser storage (`localStorage`, usually about 5 MB) is the practical limit; if a
+write fails the app shows the storage warning and offers an export. Backup files up
+to 50 MB can be imported.
 Quick rep adjustments reuse the existing optional `actualReps` field. They survive
 reload, workout completion, and backup/restore without any additional migration.
 Untouched sets still have unknown actual reps; planned targets are never silently
@@ -145,6 +168,21 @@ Merge/replace imports include all new metadata. The service worker caches all
 application assets together and does not force an update over existing windows.
 When merge creates a separate copy of a conflicting routine, its incoming history and active session
 are linked to that copy; repeating that import reuses the same copy.
+
+## Data safety and hosting
+
+- Saved data that cannot be read (corrupt JSON or an unexpected shape) is never
+  overwritten. Writes are blocked and the app offers "Vie alkuperäiset tiedot"
+  (export the raw text) and "Aloita tyhjästä", which first stores a verified copy
+  under `gym-tracker-v1-unreadable-<timestamp>` before starting fresh.
+- Result fields update in place while typing, so the mobile keyboard stays open.
+- Export in an installed iOS app uses the system share sheet; elsewhere it downloads
+  a file. The "last backup" time is recorded only after delivery succeeds.
+- `npm start` serves on `127.0.0.1` only. To test on a phone over the LAN use
+  `npm start -- 8080 0.0.0.0`; note that service workers/install need HTTPS or localhost.
+- `index.html` carries a Content-Security-Policy `<meta>` so the policy also applies
+  on static hosts; `serve.mjs` additionally sends it as a header.
+- A maskable icon (`icon-maskable-512.png`) is included for Android adaptive icons.
 
 ## Installed-app updates
 

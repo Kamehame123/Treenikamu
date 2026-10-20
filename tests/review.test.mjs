@@ -81,6 +81,28 @@ try {
           assert.equal(await p.evaluate(() => localStorage.getItem('gym-tracker-v1')), future);
           assert.ok(await p.getByRole('alert').isVisible());
         });
+        await check('unreadable saved data is preserved, blocks writes, and can be exported or moved aside', async (p) => {
+          await p.goto(url);
+          const broken = '{"routines":[{"name":"Penkki"';
+          await p.evaluate((raw) => localStorage.setItem('gym-tracker-v1', raw), broken);
+          await p.reload();
+          const alert = p.getByRole('alert');
+          await alert.waitFor();
+          assert.match(await alert.innerText(), /ei voitu lukea/);
+          await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
+          assert.equal(await p.evaluate(() => localStorage.getItem('gym-tracker-v1')), broken);
+          const download = p.waitForEvent('download');
+          await tap(p.getByRole('button', { name: 'Vie alkuperäiset tiedot' }));
+          assert.equal(await readFile(await (await download).path(), 'utf8'), broken);
+          p.once('dialog', (dialog) => dialog.accept());
+          await tap(p.getByRole('button', { name: 'Aloita tyhjästä' }));
+          await p.getByRole('heading', { name: 'Treenipäiväkirja', exact: true }).waitFor();
+          assert.equal(await alert.count(), 0);
+          const rescued = await p.evaluate((raw) => Object.keys(localStorage).filter((k) => k.startsWith('gym-tracker-v1-unreadable-') && localStorage.getItem(k) === raw), broken);
+          assert.equal(rescued.length, 1);
+          await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
+          assert.ok(await p.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).session));
+        });
         await check('a newer-schema save in another tab immediately announces read-only mode', async (p, ctx) => {
           await p.goto(url); await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
           const other = await ctx.newPage(); await other.goto(url);

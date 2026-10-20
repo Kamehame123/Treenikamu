@@ -454,15 +454,39 @@ test('merge keeps a differing workout with the same id as a separate copy', () =
 
 test('merge respects the history and workout caps', () => {
   const local = c.defaultState();
-  local.history = Array.from({ length: 100 }, (_, i) => ({ id: `l${i}`, name: 'A', startedAt: 1, endedAt: 1000 + i, setsDone: 1, setsTotal: 1 }));
+  local.history = Array.from({ length: c.MAX_HISTORY }, (_, i) => ({ id: `l${i}`, name: 'A', startedAt: 1, endedAt: 1000 + i, setsDone: 1, setsTotal: 1 }));
   local.routines = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, name: `R${i}`, exercises: [{ id: 'e', name: 'X', sets: 1, reps: '1', weight: '' }] }));
   const incoming = { ...c.defaultState(), history: [{ id: 'old', name: 'A', startedAt: 1, endedAt: 2, setsDone: 1, setsTotal: 1 }], session: null };
   incoming.routines = [{ id: 'extra', name: 'Extra', exercises: [{ id: 'e', name: 'X', sets: 1, reps: '1', weight: '' }] }];
   const { state, result } = c.mergeState(local, incoming);
-  assert.equal(state.history.length, 100);
-  assert.equal(result.history, 0);
+  assert.equal(state.history.length, c.MAX_HISTORY);
   assert.equal(state.routines.length, 100);
   assert.equal(result.skipped, 1);
+});
+
+test('history keeps well over 100 workouts and only the 10,000 cap trims it', () => {
+  assert.equal(c.MAX_HISTORY, 10000);
+  const make = (n) => Array.from({ length: n }, (_, i) => ({ id: `h${i}`, name: 'A', startedAt: 1, endedAt: 1000 + i, setsDone: 1, setsTotal: 1 }));
+  const loaded = c.sanitizeState({ ...c.defaultState(), history: make(250) });
+  assert.equal(loaded.history.length, 250);
+  assert.equal(c.sanitizeState({ ...c.defaultState(), history: make(c.MAX_HISTORY + 5) }).history.length, c.MAX_HISTORY);
+  const local = c.defaultState(); local.history = make(150);
+  const incoming = { ...c.defaultState(), history: [{ id: 'older', name: 'A', startedAt: 1, endedAt: 2, setsDone: 1, setsTotal: 1 }] };
+  const merged = c.mergeState(local, incoming);
+  assert.equal(merged.state.history.length, 151);
+  assert.equal(merged.result.history, 1);
+});
+
+test('unparseable saved text is detected and never overwritten', () => {
+  for (const bad of ['{not json', '[1,2]', '42', '"text"', '{"routines":']) {
+    assert.equal(c.storageProblem(bad), 'unreadable', bad);
+    const store = mem([[c.STORAGE_KEY, bad]]);
+    assert.equal(c.saveState(store, c.defaultState()), false);
+    assert.equal(store.getItem(c.STORAGE_KEY), bad);
+  }
+  for (const ok of [null, '', 'null', '{}', JSON.stringify(c.defaultState())]) assert.equal(c.storageProblem(ok), null, String(ok));
+  assert.equal(c.storageProblem(JSON.stringify({ v: c.SCHEMA + 1 })), 'newer');
+  assert.equal(c.saveState(mem(), c.defaultState()), true);
 });
 
 test('a running workout is never replaced by an imported one', () => {

@@ -1,7 +1,7 @@
 // Bump VERSION on every release. All files are cached together so app.js and core.js can never be mixed across versions.
-const VERSION = '16';
+const VERSION = '17';
 const CACHE = `gym-tracker-v${VERSION}`;
-const ASSETS = ['./', './index.html', './app.js', './core.js', './progression.js', './exercises.js', './styles.css', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'];
+const ASSETS = ['./', './index.html', './app.js', './core.js', './progression.js', './exercises.js', './styles.css', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
   // cache:'reload' bypasses the HTTP cache so a new version never stores stale files.

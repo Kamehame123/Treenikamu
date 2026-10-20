@@ -6,9 +6,14 @@ const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; 
 const crc = (b) => { let c = ~0; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return ~c >>> 0; };
 const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
 
-function png(size) {
+function png(size, scale = 1) {
   const bg = [16, 19, 19], fg = [188, 243, 178];
-  const u = size / 512, rect = (x, y, x0, y0, w, h) => x >= x0 * u && x < (x0 + w) * u && y >= y0 * u && y < (y0 + h) * u;
+  const u = size / 512;
+  // Scaling about the centre lets the maskable variant keep its glyph inside the safe zone.
+  const rect = (x, y, x0, y0, w, h) => {
+    const lx = (x / u - 256) / scale + 256, ly = (y / u - 256) / scale + 256;
+    return lx >= x0 && lx < x0 + w && ly >= y0 && ly < y0 + h;
+  };
   const raw = Buffer.alloc((size * 3 + 1) * size);
   for (let y = 0; y < size; y++) {
     raw[y * (size * 3 + 1)] = 0;
@@ -22,3 +27,5 @@ function png(size) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 for (const s of [180, 192, 512]) writeFileSync(new URL(`../icon-${s}.png`, import.meta.url), png(s));
+// Maskable: full-bleed background with the glyph shrunk into the 80% safe zone.
+writeFileSync(new URL('../icon-maskable-512.png', import.meta.url), png(512, 0.8));

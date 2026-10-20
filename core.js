@@ -21,9 +21,9 @@ export const MAX_SETS = 20;
 export const MAX_CUSTOM_EXERCISES = 500;
 export const BACKUP_FORMAT = 'gym-tracker-backup';
 export const BACKUP_VERSION = 1;
-export const MAX_BACKUP_BYTES = 5 * 1024 * 1024;
+export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
 const MAX_ROUTINES = 100;
-const MAX_HISTORY = 100;
+export const MAX_HISTORY = 10000;
 
 // MIGRATIONS[n] upgrades schema n data to schema n + 1. Empty until the first breaking change.
 export const MIGRATIONS = {};
@@ -238,7 +238,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 // Accepts the current envelope and the legacy raw-state export. Never throws.
 export function parseBackup(text) {
   const fail = (error) => ({ ok: false, error });
-  if (typeof text !== 'string' || text.length > MAX_BACKUP_BYTES) return fail('Varmuuskopiotiedosto on liian suuri (enintään 5 Mt).');
+  if (typeof text !== 'string' || text.length > MAX_BACKUP_BYTES) return fail('Varmuuskopiotiedosto on liian suuri (enintään 50 Mt).');
   let raw;
   try { raw = JSON.parse(text); } catch { return fail('Tiedosto ei ole kelvollista JSON-muotoa.'); }
   if (!isObject(raw)) return fail('Tiedosto ei ole sovelluksen varmuuskopio.');
@@ -334,10 +334,21 @@ export function hasNewerSchema(text) {
   catch { return false; }
 }
 
+// 'newer': written by a newer app version. 'unreadable': stored text that cannot be parsed
+// into a record. Either way the saved bytes must never be overwritten by this app.
+export function storageProblem(text) {
+  if (typeof text !== 'string' || !text) return null;
+  let raw;
+  try { raw = JSON.parse(text); } catch { return 'unreadable'; }
+  if (raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return 'unreadable';
+  return Number(raw.v) > SCHEMA ? 'newer' : null;
+}
+
 // Returns false when persistence fails (quota / private mode) so the UI can warn.
 export function saveState(storage, state) {
   try {
-    if (hasNewerSchema(storage.getItem?.(STORAGE_KEY))) return false;
+    if (storageProblem(storage.getItem?.(STORAGE_KEY))) return false;
     storage.setItem(STORAGE_KEY, JSON.stringify(state));
     return true;
   } catch {

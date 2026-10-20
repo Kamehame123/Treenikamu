@@ -76,6 +76,52 @@ try {
           try { await work(page); assert.deepEqual(errors, []); } finally { await context.close(); }
         });
 
+        await run('workout actions come before the backup reminder without hiding or changing backups', async (p) => {
+          await p.goto(url);
+          let state;
+          for (const scenario of ['new', 'overdue', 'recent', 'resume']) {
+            state = core.defaultState();
+            if (scenario !== 'new') state.history = [{ id: 'previous', name: 'Edellinen treeni', startedAt: 1000, endedAt: 2000, setsDone: 3, setsTotal: 3 }];
+            if (scenario === 'resume') {
+              state.session = core.startSession(state.routines[0]);
+              core.toggleSet(state.session, 0, 0);
+            }
+            await p.evaluate(({ state, recent }) => {
+              localStorage.setItem('gym-tracker-v1', JSON.stringify(state));
+              if (recent) localStorage.setItem('gym-tracker-last-backup', String(Date.now()));
+              else localStorage.removeItem('gym-tracker-last-backup');
+            }, { state, recent: scenario === 'recent' });
+            await p.reload();
+            if (state.session) await tap(button(p, 'Takaisin harjoituksiin'));
+            assert.equal(await p.locator('.backup').count(), 1);
+            assert.equal(await p.locator('.backup.due').count(), ['overdue', 'resume'].includes(scenario) ? 1 : 0);
+            for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+              await p.setViewportSize(viewport);
+              const layout = await p.evaluate((resume) => {
+                window.scrollTo(0, 0);
+                const action = document.querySelector(resume ? '[data-action="resume"]' : '[data-action="start"]');
+                const backup = document.querySelector('.backup');
+                const rect = action.getBoundingClientRect();
+                return {
+                  actionVisible: rect.top >= 0 && rect.bottom <= innerHeight,
+                  backupAfterList: backup.getBoundingClientRect().top >= document.querySelector('.routine-list').getBoundingClientRect().bottom,
+                  actionBeforeBackup: !!(action.compareDocumentPosition(backup) & Node.DOCUMENT_POSITION_FOLLOWING),
+                  overflow: document.documentElement.scrollWidth > innerWidth,
+                };
+              }, !!state.session);
+              assert.deepEqual(layout, { actionVisible: true, backupAfterList: true, actionBeforeBackup: true, overflow: false }, `${scenario} at ${viewport.width}px`);
+            }
+            assert.deepEqual(await saved(p), state);
+          }
+          const download = p.waitForEvent('download');
+          await tap(button(p, 'Vie varmuuskopio'));
+          const parsed = core.parseBackup(await readFile(await (await download).path(), 'utf8'));
+          assert.equal(parsed.ok, true);
+          assert.deepEqual(parsed.state.history, state.history);
+          assert.deepEqual(parsed.state.session, state.session);
+          assert.equal(await p.locator('.backup.due').count(), 0);
+        });
+
         await run('resume and reload center the current exercise without losing the session', async (p) => {
           const state = await seedWorkout(p, { current: 3 });
           await centered(p, '#exercise-3');
@@ -239,6 +285,26 @@ try {
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
           assert.equal((await saved(p)).session.exercises[0].sets[0].actualReps, '7');
           assert.equal((await saved(p)).session.exercises[0].sets[0].done, false);
+        });
+
+        await run('typing in result fields keeps the same focused input so mobile keyboards stay open', async (p) => {
+          await seedWorkout(p, { setReps: ['8', '8', '8'], weight: '25 kg', autoRest: false });
+          await p.locator('.exercise-log summary').first().click();
+          const field = p.locator('[data-log="actualReps"][data-e="0"][data-s="0"]');
+          await field.focus();
+          await p.evaluate(() => { window.typedField = document.activeElement; });
+          await field.pressSequentially('12');
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
+          assert.equal(await p.evaluate(() => document.activeElement === window.typedField && window.typedField.isConnected), true);
+          assert.equal(await field.inputValue(), '12');
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualReps, '12');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '12 x 25kg');
+          const weight = p.locator('[data-log="actualWeight"][data-e="0"][data-s="0"]');
+          await weight.focus();
+          await weight.pressSequentially('27,5');
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
+          assert.equal(await weight.inputValue(), '27,5');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '12 x 27,5kg');
         });
 
         await run('failed rep writes keep the original record and expose recoverable pending reps', async (p) => {

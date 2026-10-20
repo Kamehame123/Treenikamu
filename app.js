@@ -33,8 +33,15 @@ let storageOk = true;
 let durableRaw = null;
 try { storage = window.localStorage; durableRaw = storage.getItem(core.STORAGE_KEY); } catch { storageOk = false; }
 let state = core.loadState(storage);
-let newerSchema = core.hasNewerSchema(durableRaw);
-if (newerSchema) storageOk = false;
+let newerSchema = false;
+let unreadable = false;
+const locked = () => newerSchema || unreadable;
+function checkProblem(raw) {
+  const problem = core.storageProblem(raw);
+  newerSchema = problem === 'newer'; unreadable = problem === 'unreadable';
+  return problem !== null;
+}
+if (checkProblem(durableRaw)) storageOk = false;
 let dirty = false;
 let saveConflict = false;
 let saveMessage = '';
@@ -91,8 +98,7 @@ function readLatest() {
   if (dirty || !storageOk || !storage) return;
   try {
     const saved = storage.getItem(core.STORAGE_KEY);
-    newerSchema = core.hasNewerSchema(saved);
-    if (newerSchema) { storageOk = false; durableRaw = saved; return; }
+    if (checkProblem(saved)) { storageOk = false; durableRaw = saved; return; }
     if (saved) state = core.sanitizeState(JSON.parse(saved));
     else if (durableRaw !== null) state = core.defaultState();
     durableRaw = saved;
@@ -101,11 +107,13 @@ function readLatest() {
 
 // Every write reads the latest durable state while holding an origin-wide lock.
 // Never save stale state on pagehide: every actual mutation is saved immediately.
-async function mutate(change, { critical = false, sessionId = null } = {}) {
+// `patch` lets a successful save update the DOM in place instead of rebuilding the view,
+// so a field being typed in keeps focus (and the mobile keyboard stays open).
+async function mutate(change, { critical = false, sessionId = null, patch = null } = {}) {
   if (updateBusy) { announce('Päivitys on käynnissä. Odota sovelluksen avautumista uudelleen.'); return false; }
   const work = async () => {
-    try { newerSchema = core.hasNewerSchema(storage?.getItem(core.STORAGE_KEY)); } catch { /* Storage denial is handled below. */ }
-    if (newerSchema) { storageOk = false; render(); return false; }
+    try { checkProblem(storage?.getItem(core.STORAGE_KEY)); } catch { /* Storage denial is handled below. */ }
+    if (locked()) { storageOk = false; render(); return false; }
     if ((dirty || !storageOk) && storage) {
       try {
         if (storage.getItem(core.STORAGE_KEY) !== durableRaw) {
@@ -122,17 +130,28 @@ async function mutate(change, { critical = false, sessionId = null } = {}) {
     const next = clone(state);
     if (change(next) === false) return false;
     const saved = core.saveState(storage, next);
+    const wasHealthy = storageOk && !saveMessage;
     storageOk = saved;
     if (saved) { durableRaw = JSON.stringify(next); saveConflict = false; }
     saveMessage = saved ? '' : critical ? 'Muutosta ei voitu tallentaa. Harjoitus on yhä tallessa tässä välilehdessä. Yritä uudelleen ennen sulkemista.' : 'Muutokset ovat vain tässä välilehdessä. Tallennus ei onnistu. Älä sulje välilehteä ennen tallentamista.';
     if (saved || !critical) { state = next; dirty = !saved; }
-    render();
+    if (patch && saved && wasHealthy && view === renderedView) patch(); else render();
     return saved || !critical;
   };
   return navigator.locks ? navigator.locks.request(`${core.STORAGE_KEY}:write`, work) : work();
 }
 
-const warn = () => storageOk ? '' : `<div class="banner" role="alert">${icon('shield')}<div><strong>${newerSchema ? 'Päivitä sovellus' : 'Tallennus vaatii huomiota'}</strong><p>${esc(newerSchema ? 'Tiedot on tallennettu uudemmalla sovelluksella. Tämä versio ei muuta niitä. Sulje sovelluksen välilehdet, yhdistä verkkoon ja avaa uudelleen. Voit viedä alkuperäiset tiedot talteen.' : saveMessage || 'Tallennus ei ole käytettävissä. Muutokset katoavat, jos suljet välilehden.')}</p><div class="recovery-actions">${newerSchema ? '' : '<button class="btn small" data-action="retry" data-key="retry">Yritä tallentaa uudelleen</button>'}<button class="btn small" data-action="export" data-key="export-pending">${newerSchema ? 'Vie alkuperäiset tiedot' : 'Vie tallentamattomat muutokset'}</button>${saveConflict ? '<button class="btn small" data-action="reloadsaved" data-key="reloadsaved">Lataa tallennettu versio</button>' : ''}</div></div></div>`;
+const warn = () => {
+  if (storageOk) return '';
+  const title = newerSchema ? 'Päivitä sovellus' : unreadable ? 'Tallennettuja tietoja ei voitu lukea' : 'Tallennus vaatii huomiota';
+  const text = newerSchema ? 'Tiedot on tallennettu uudemmalla sovelluksella. Tämä versio ei muuta niitä. Sulje sovelluksen välilehdet, yhdistä verkkoon ja avaa uudelleen. Voit viedä alkuperäiset tiedot talteen.'
+    : unreadable ? 'Selaimeen tallennetut tiedot ovat vioittuneet. Niitä ei ole poistettu eikä korvattu, eikä mitään tallenneta ennen kuin valitset jatkotoimen. Vie alkuperäiset tiedot ensin talteen. "Aloita tyhjästä" siirtää vioittuneet tiedot erilliseen säilytyspaikkaan selaimessa ja aloittaa puhtaalta pöydältä.'
+    : saveMessage || 'Tallennus ei ole käytettävissä. Muutokset katoavat, jos suljet välilehden.';
+  const actions = locked()
+    ? `<button class="btn small" data-action="export" data-key="export-pending">Vie alkuperäiset tiedot</button>${unreadable ? '<button class="btn small" data-action="resetunreadable" data-key="resetunreadable">Aloita tyhjästä</button>' : ''}`
+    : `<button class="btn small" data-action="retry" data-key="retry">Yritä tallentaa uudelleen</button><button class="btn small" data-action="export" data-key="export-pending">Vie tallentamattomat muutokset</button>${saveConflict ? '<button class="btn small" data-action="reloadsaved" data-key="reloadsaved">Lataa tallennettu versio</button>' : ''}`;
+  return `<div class="banner" role="alert">${icon('shield')}<div><strong>${title}</strong><p>${esc(text)}</p><div class="recovery-actions">${actions}</div></div></div>`;
+};
 function lastBackupAt() {
   try { const t = Number(localStorage.getItem(BACKUP_KEY)); return Number.isFinite(t) && t > 0 ? t : 0; } catch { return 0; }
 }
@@ -224,15 +243,15 @@ async function registerUpdates() {
 
 async function installUpdate() {
   if (pendingActions > 1) { updateFailed('Odota keskeneräisten kirjausten tallentumista ja yritä päivittämistä uudelleen.'); return; }
-  if ((dirty || !storageOk) && !newerSchema) await mutate(() => {}, { critical: true });
-  if (dirty || saveConflict || (!storageOk && !newerSchema)) {
+  if ((dirty || !storageOk) && !locked()) await mutate(() => {}, { critical: true });
+  if (dirty || saveConflict || (!storageOk && !locked())) {
     updateFailed('Päivitystä ei aloitettu: kaikkia harjoitustietoja ei ole tallennettu. Käytä tallennuksen palautustoimintoja ja yritä uudelleen.'); return;
   }
   if (draft) rememberDraft();
   if (draft && !draftOk) { updateFailed('Muokkausluonnosta ei voitu tallentaa. Tallenna ohjelma tai korjaa luonnoksen tallennus ennen päivitystä.'); return; }
   if (logError) { updateFailed('Tarkista harjoituksen virheellinen kirjaus ennen päivitystä.'); return; }
   readLatest();
-  if (!storageOk && !newerSchema) { updateFailed('Tallennettua harjoitusta ei voitu lukea. Korjaa tallennuksen tila ennen päivitystä.'); return; }
+  if (!storageOk && !locked()) { updateFailed('Tallennettua harjoitusta ei voitu lukea. Korjaa tallennuksen tila ennen päivitystä.'); return; }
   if (reloadPending) { window.location.reload(); return; }
   const worker = updateRegistration?.waiting;
   if (!worker) { updateReady = false; updateFailed('Ladattua päivitystä ei enää löytynyt. Tarkista päivitykset uudelleen.'); return; }
@@ -265,7 +284,7 @@ function historyDetails(h) {
 }
 
 function coachingGuide() {
-  return `<details class="coaching-guide card"><summary>Miten tavoitteita tarkistetaan?</summary><div class="small-copy"><p>Yhtä parasta toistoaluetta ei ole. ACSM:n vuoden 2026 katsauksessa raskaammat kuormat tukivat maksimivoimaa ja suurempi viikkovolyymi lihaskasvua. Harjoita suuria lihasryhmiä säännöllisesti, yleensä vähintään kahdesti viikossa. Noin 10 sarjaa lihasryhmää kohti viikossa on hyödyllinen lihaskasvun suunnittelun vertailukohta, ei kaikille pakollinen vähimmäismäärä. Sovellus ei lisää sarjoja sokkona, koska se ei tunne koko viikkokuormitustasi.</p><p>Liikkeen nykyinen suunnitelma ja tunnistettava eristävä liike ohjaavat ehdotusta: esimerkiksi 3–6 toistoa jo voimapainotteiseen työhön, 6–12 yhdistettyyn voima-/massaharjoitteluun, 10–20 lihasmassapainotukseen tai 15–30 jo pitkille sarjoille. Nämä ovat käytännön valmennusvalintoja, eivät tutkimuksissa todistettuja liikekohtaisia optimeja. Tallennettu oma alue säilyy. Ensimmäisessä muutoksessa alue tallennetaan, jotta tavoiteraja ei karkaa aina toistoja lisättäessä. Muokkauksessa voit valita alueen itse tai laskea sen uudelleen.</p><p>Kirjaa toteutuneet toistot ja vaikeimman sarjan RIR: montako hyvää toistoa olisi vielä onnistunut (0–5; 5 = vähintään 5). Tyhjä paino tarkoittaa tavoitepainoa. Pelkkä sarjan kuittaus ei riitä nostoon. Kaikkien tavoitteiden onnistuminen vähintään RIR 2:lla sallii enintään yhden lisätoiston sarjaa kohti. Alueen ylärajan pitää onnistua kahdessa vertailukelpoisessa treenissä ennen yhtä painoaskelta (enintään 10 %); uudella painolla toistot vähenevät. Älä pakota tavoitetta tekniikan kustannuksella. Tarkat RIR- ja toistorajat ovat varovaisia ohjelmistosääntöjä, eivät yksilöllisesti validoitu malli.</p><p>Heikko palautuminen tai kaksi selvää alisuoriutumista voi keventää seuraavaa harjoituskertaa. Palautuneena onnistunut kevennys palauttaa aiemmat tavoitteet. Pakollista kalenteriviikkoa ei määrätä, ja joskus lepo on parempi vaihtoehto. Kipua ei käsitellä tavallisena väsymyksenä: lopeta kipua aiheuttava liike ja selvitä oire tarvittaessa ammattilaisen kanssa.</p><p>Lämmittele, lepää raskaissa moninivelliikkeissä yleensä 2–3 minuuttia tai pidempään ja muissa liikkeissä tarpeen mukaan. Uni, riittävä ravinto ja jatkuvuus tukevat kehitystä. Sovellus ei mittaa lihaskasvua tai tunne terveydentilaasi eikä voi taata tuloksia.</p><p>Tutkimuspohja: <a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">ACSM 2026</a>, <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/" target="_blank" rel="noopener noreferrer">voima- ja hypertrofiaharjoittelun meta-analyysi 2023</a>, <a href="https://doi.org/10.47206/ijsc.v1i1.81" target="_blank" rel="noopener noreferrer">IUSCA 2021</a>, <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10511399/" target="_blank" rel="noopener noreferrer">kevennyksen asiantuntijakonsensus</a>.</p></div></details>`;
+  return `<details class="coaching-guide card"><summary>Miten tavoitteita tarkistetaan?</summary><div class="small-copy"><p>Yhtä parasta toistoaluetta ei ole. ACSM:n vuoden 2026 katsauksessa raskaammat kuormat tukivat maksimivoimaa ja suurempi viikkovolyymi lihaskasvua. Harjoita suuria lihasryhmiä säännöllisesti, yleensä vähintään kahdesti viikossa. Noin 10 sarjaa lihasryhmää kohti viikossa on hyödyllinen lihaskasvun suunnittelun vertailukohta, ei kaikille pakollinen vähimmäismäärä. Sovellus ei lisää sarjoja sokkona, koska se ei tunne koko viikkokuormitustasi.</p><p>Liikkeen nykyinen suunnitelma ja tunnistettava eristävä liike ohjaavat ehdotusta: esimerkiksi 3–6 toistoa jo voimapainotteiseen työhön, 6–12 yhdistettyyn voima-/massaharjoitteluun, 10–20 lihasmassapainotukseen tai 15–30 jo pitkille sarjoille. Nämä ovat käytännön valmennusvalintoja, eivät tutkimuksissa todistettuja liikekohtaisia optimeja. Tallennettu oma alue säilyy. Ensimmäisessä muutoksessa alue tallennetaan, jotta tavoiteraja ei karkaa aina toistoja lisättäessä. Muokkauksessa voit valita alueen itse tai laskea sen uudelleen.</p><p>Kirjaa toteutuneet toistot ja vaikeimman sarjan RIR: montako hyvää toistoa olisi vielä onnistunut (0–5; 5 = vähintään 5). Tyhjä paino tarkoittaa tavoitepainoa. Pelkkä sarjan kuittaus ei riitä nostoon. Kaikkien tavoitteiden onnistuminen vähintään RIR 2:lla sallii enintään yhden lisätoiston sarjaa kohti. Alueen ylärajan pitää onnistua kahdessa vertailukelpoisessa treenissä ennen yhtä painoaskelta (enintään 10 %); uudella painolla toistot vähenevät. Älä pakota tavoitetta tekniikan kustannuksella. Tarkat RIR- ja toistorajat ovat varovaisia ohjelmistosääntöjä, eivät yksilöllisesti validoitu malli.</p><p>Heikko palautuminen tai kaksi selvää alisuoriutumista voi keventää seuraavaa harjoituskertaa. Palautuneena onnistunut kevennys palauttaa aiemmat tavoitteet. Pakollista kalenteriviikkoa ei määrätä, ja joskus lepo on parempi vaihtoehto. Kipua ei käsitellä tavallisena väsymyksenä: lopeta kipua aiheuttava liike ja selvitä oire tarvittaessa ammattilaisen kanssa.</p><p>Lämmittele, lepää raskaissa moninivelliikkeissä yleensä 2–3 minuuttia tai pidempään ja muissa liikkeissä tarpeen mukaan. Uni, riittävä ravinto ja jatkuvuus tukevat kehitystä. Sovellus ei mittaa lihaskasvua tai tunne terveydentilaasi eikä voi taata tuloksia.</p><p>Tutkimuspohja:</p><ul class="sources"><li><a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">ACSM 2026</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/" target="_blank" rel="noopener noreferrer">Voima- ja hypertrofiaharjoittelun meta-analyysi 2023</a></li><li><a href="https://doi.org/10.47206/ijsc.v1i1.81" target="_blank" rel="noopener noreferrer">IUSCA 2021</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10511399/" target="_blank" rel="noopener noreferrer">Kevennyksen asiantuntijakonsensus</a></li></ul></div></details>`;
 }
 
 function homeView() {
@@ -283,10 +302,31 @@ function homeView() {
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${resume}<section class="home-hero"><div><p class="eyebrow accent">OMA TREENISI · SARJA KERRALLAAN</p><h1 class="hero-title" tabindex="-1">Treenipäiväkirja</h1><p class="hero-copy">Suunnittele ohjelma ja kirjaa sarjat yhdellä napautuksella.</p></div><div class="hero-art" aria-hidden="true"><div class="art-weight">${icon('weight')}</div></div></section>
     <div class="stats"><div><strong>${thisWeek}</strong><span>tällä viikolla</span></div><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
-    ${backupCard()}${coachingGuide()}
-    <div class="home-grid"><section>${sectionHead('Harjoitukset', 'OMAT OHJELMASI')}<ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p></section>
+    <div class="home-grid"><section>${sectionHead('Harjoitukset', 'OMAT OHJELMASI')}<ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${backupCard()}${coachingGuide()}</section>
     <div class="home-aside"><section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${history ? `<ul class="list history-list">${history}</ul>` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Käynnistyy tehdyn sarjan jälkeen</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><label class="field">Lepoaika sekunteina<input type="number" inputmode="numeric" min="10" max="600" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label><p class="muted small-copy">10–600 sekuntia. Lepää tarvittaessa pidempään.</p><div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details><section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+}
+
+function setEntry(e, ei, si, nextSi) {
+  const set = e.sets[si];
+  const target = core.setTargetLabel(set.reps ?? e.reps, e.weight);
+  const count = core.setRepCount(e, set);
+  const logged = count !== null && set.actualReps !== undefined;
+  const value = logged ? core.setTargetLabel(count, set.actualWeight ?? e.weight) : target;
+  const adjustment = count === null ? '' : `<div class="rep-adjust" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: muuta toteutuneita toistoja"><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="-1" data-key="reps-minus-${ei}-${si}" aria-label="Vähennä toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 0 ? 'disabled' : ''}>−</button><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="1" data-key="reps-plus-${ei}-${si}" aria-label="Lisää toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 100 ? 'disabled' : ''}>+</button></div>`;
+  return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${logged ? ` Tavoite: ${esc(target)}` : ''} ${set.done ? 'Tehty' : 'Kirjaa'}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${logged ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} Tehty` : 'Kirjaa'}</span></button>${adjustment}</div>`;
+}
+
+// Updates the one set a log field affects without touching the field being typed in.
+function patchLoggedSet(ei, si) {
+  document.getElementById('log-error')?.remove();
+  const e = state.session?.exercises[ei];
+  const entry = e?.sets[si] && document.querySelector(`[data-key="s${ei}-${si}"]`)?.closest('.set-entry');
+  if (!entry) return;
+  const nextSi = ei === core.currentExercise(state.session) ? e.sets.findIndex((set) => !set.done) : -1;
+  const focusedKey = entry.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  entry.outerHTML = setEntry(e, ei, si, nextSi);
+  if (focusedKey) document.querySelector(`[data-key="${CSS.escape(focusedKey)}"]`)?.focus({ preventScroll: true });
 }
 
 function exerciseLog(e, ei) {
@@ -295,7 +335,7 @@ function exerciseLog(e, ei) {
 }
 
 function recoveryControls(s) {
-  return `${logError ? `<p class="banner" role="alert">${esc(logError)}</p>` : ''}<label class="check recovery-check"><span>Palautuminen on heikkoa<small>Voi keventää seuraavaa treeniä. Harkitse myös lepoa.</small></span><input type="checkbox" data-log="fatigued" data-key="fatigued" ${s.fatigued ? 'checked' : ''}></label>`;
+  return `${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<label class="check recovery-check"><span>Palautuminen on heikkoa<small>Voi keventää seuraavaa treeniä. Harkitse myös lepoa.</small></span><input type="checkbox" data-log="fatigued" data-key="fatigued" ${s.fatigued ? 'checked' : ''}></label>`;
 }
 
 function workoutView() {
@@ -304,14 +344,7 @@ function workoutView() {
     const done = core.exerciseDone(e);
     const completed = e.sets.filter((set) => set.done).length;
     const nextSi = ei === cur ? e.sets.findIndex((set) => !set.done) : -1;
-    const sets = e.sets.map((set, si) => {
-      const target = core.setTargetLabel(set.reps ?? e.reps, e.weight);
-      const count = core.setRepCount(e, set);
-      const logged = count !== null && set.actualReps !== undefined;
-      const value = logged ? core.setTargetLabel(count, set.actualWeight ?? e.weight) : target;
-      const adjustment = count === null ? '' : `<div class="rep-adjust" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: muuta toteutuneita toistoja"><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="-1" data-key="reps-minus-${ei}-${si}" aria-label="Vähennä toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 0 ? 'disabled' : ''}>−</button><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="1" data-key="reps-plus-${ei}-${si}" aria-label="Lisää toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 100 ? 'disabled' : ''}>+</button></div>`;
-      return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${logged ? ` Tavoite: ${esc(target)}` : ''} ${set.done ? 'Tehty' : 'Kirjaa'}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${logged ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} Tehty` : 'Kirjaa'}</span></button>${adjustment}</div>`;
-    }).join('');
+    const sets = e.sets.map((set, si) => setEntry(e, ei, si, nextSi)).join('');
     const individual = e.sets.some((set) => set.reps);
     const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
     return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''}</p></div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseLog(e, ei)}</li>`;
@@ -528,8 +561,28 @@ function logInput(t) {
       if (!target) { announce('Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.'); return false; }
       if (value === '' || value === false) delete target[field];
       else target[field] = value;
-    }, options);
+    }, { ...options, patch: () => patchLoggedSet(ei, si) });
   });
+}
+
+function downloadBackup(text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = document.createElement('a');
+  a.href = url; a.download = core.backupFileName(); a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return true;
+}
+
+// Installed iOS apps often drop blob downloads silently, so use the share sheet there.
+// Returns true (shared), false (cancelled), or null (use a normal download instead).
+async function shareBackup(text) {
+  const installed = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone;
+  if (!installed || !/iPad|iPhone|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return null;
+  try {
+    const file = new File([text], core.backupFileName(), { type: 'application/json' });
+    if (!navigator.canShare?.({ files: [file] })) return null;
+    await navigator.share({ files: [file], title: 'Treenipäiväkirjan varmuuskopio' });
+    return true;
+  } catch (error) { return error?.name === 'AbortError' ? false : null; }
 }
 
 const actions = {
@@ -555,8 +608,15 @@ const actions = {
   async revise(t) { await changeRevision(t.dataset.id); },
   async undorevision(t) { await changeRevision(t.dataset.id, true); },
   async start(t) {
+    // Ask before taking the cross-tab write lock so a dialog cannot block other tabs.
+    readLatest();
+    let confirmed = false;
+    if (state.session) {
+      if (!confirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.')) return;
+      confirmed = true;
+    }
     await mutate((next) => {
-      if (next.session && !confirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.')) return false;
+      if (next.session && !confirmed && !confirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.')) return false;
       const session = core.startSession(byId(t.dataset.id, next));
       if (!session) { announce('Lisää ensin vähintään yksi liike.'); return false; }
       next.session = session; next.restEnd = null;
@@ -607,10 +667,17 @@ const actions = {
   },
   async addset(t) { await mutate((next) => core.addSet(next.session, +t.dataset.e), sessionOptions()); },
   async rmset(t) {
+    readLatest();
+    const shown = state.session?.exercises[+t.dataset.e];
+    let confirmed = false;
+    if (shown?.sets.length > 1 && shown.sets.at(-1).done) {
+      if (!confirm('Poistetaanko tehty sarja? Myös sen suoritusmerkintä poistuu.')) return;
+      confirmed = true;
+    }
     await mutate((next) => {
       const ex = next.session?.exercises[+t.dataset.e];
       if (!ex || ex.sets.length < 2) return false;
-      if (ex.sets.at(-1).done && !confirm('Poistetaanko tehty sarja? Myös sen suoritusmerkintä poistuu.')) return false;
+      if (ex.sets.at(-1).done && !confirmed && !confirm('Poistetaanko tehty sarja? Myös sen suoritusmerkintä poistuu.')) return false;
       core.removeSet(next.session, +t.dataset.e);
       const p = core.progress(next.session); if (p.done === p.total) next.restEnd = null;
     }, sessionOptions());
@@ -619,13 +686,22 @@ const actions = {
   async plus() { await mutate((next) => { next.restEnd = Math.max(next.restEnd || 0, Date.now()) + 30000; }, sessionOptions()); },
   async finish() {
     let revisionResult, routineId;
+    readLatest();
+    let confirmed = false;
+    if (state.session) {
+      const shown = core.progress(state.session);
+      if (shown.done < shown.total) {
+        if (!confirm(`${shown.total - shown.done} sarjaa on tekemättä. Lopetetaanko silti?`)) return;
+        confirmed = true;
+      }
+    }
     const ok = await mutate((next) => {
       if (!next.session) return false;
       const p = core.progress(next.session);
-      if (p.done < p.total && !confirm(`${p.total - p.done} sarjaa on tekemättä. Lopetetaanko silti?`)) return false;
+      if (p.done < p.total && !confirmed && !confirm(`${p.total - p.done} sarjaa on tekemättä. Lopetetaanko silti?`)) return false;
       routineId = next.session.routineId;
       if (p.done) next.history.unshift(core.summarize(next.session));
-      next.history = next.history.slice(0, 100); next.session = null; next.restEnd = null;
+      next.history = next.history.slice(0, core.MAX_HISTORY); next.session = null; next.restEnd = null;
       if (p.done && byId(routineId, next)?.autoProgress) revisionResult = reviseRoutine(next, routineId);
     }, { ...sessionOptions(), critical: true });
     if (ok) {
@@ -701,14 +777,34 @@ const actions = {
     if (ok) { clearDraft(); view = 'home'; render(); }
   },
   jump() { showCurrentExercise({ focus: true }); },
-  export() {
-    const blob = new Blob([newerSchema ? storage.getItem(core.STORAGE_KEY) : JSON.stringify(core.buildBackup(state), null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = core.backupFileName(); a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch { /* Reminder date is optional. */ }
+  async export() {
+    const text = locked() ? storage.getItem(core.STORAGE_KEY) : JSON.stringify(core.buildBackup(state), null, 2);
+    const delivered = await shareBackup(text) ?? downloadBackup(text);
+    if (!delivered) { announce('Varmuuskopiota ei jaettu.'); return; }
+    if (!unreadable) try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch { /* Reminder date is optional. */ }
     if (view === 'home') render();
-    announce('Varmuuskopio ladattu. Säilytä se turvallisessa paikassa.');
+    announce('Varmuuskopio valmis. Säilytä se turvallisessa paikassa.');
+  },
+  async resetunreadable() {
+    if (!unreadable || !storage) return;
+    if (!confirm('Aloitetaanko tyhjästä? Vioittuneet tiedot siirretään talteen selaimen tallennustilaan, mutta sovellus ei enää näytä niitä. Vie ne ensin tiedostoksi, jos haluat säilyttää ne.')) return;
+    const run = async () => {
+      const raw = storage.getItem(core.STORAGE_KEY);
+      if (core.storageProblem(raw) !== 'unreadable') { checkProblem(raw); storageOk = !locked(); readLatest(); render(); return; }
+      const rescueKey = `${core.STORAGE_KEY}-unreadable-${Date.now()}`;
+      try {
+        storage.setItem(rescueKey, raw);
+        if (storage.getItem(rescueKey) !== raw) throw new Error('rescue copy mismatch');
+        storage.removeItem(core.STORAGE_KEY);
+      } catch {
+        try { storage.removeItem(rescueKey); } catch { /* Nothing more can be done. */ }
+        saveMessage = 'Vioittuneita tietoja ei voitu siirtää talteen. Mitään ei poistettu. Vapauta tilaa tai vie tiedot tiedostoksi.';
+        render(); announce(saveMessage); return;
+      }
+      state = core.defaultState(); durableRaw = null; unreadable = false; storageOk = true; dirty = false; saveMessage = '';
+      render(); announce(`Aloitettu tyhjästä. Vioittuneet tiedot on säilytetty selaimessa avaimella ${rescueKey}.`);
+    };
+    await (navigator.locks ? navigator.locks.request(`${core.STORAGE_KEY}:write`, run) : run());
   },
   async share() {
     const link = new URL('./', location.href).href;
@@ -728,7 +824,7 @@ $file.addEventListener('change', async () => {
   const file = $file.files[0], mode = importMode;
   $file.value = '';
   if (!file) return;
-  if (file.size > core.MAX_BACKUP_BYTES) return importDone('Varmuuskopio on liian suuri (enintään 5 Mt). Mitään ei muutettu.');
+  if (file.size > core.MAX_BACKUP_BYTES) return importDone('Varmuuskopio on liian suuri (enintään 50 Mt). Mitään ei muutettu.');
   let text;
   try { text = await file.text(); } catch { return importDone('Tiedostoa ei voitu lukea. Mitään ei muutettu.'); }
   const parsed = core.parseBackup(text);
@@ -860,7 +956,7 @@ window.addEventListener('storage', (e) => {
   if (!dirty) {
     readLatest();
     // Avoid replacing a focused editor input while someone is typing.
-    if (view !== 'edit' || newerSchema) render();
+    if (view !== 'edit' || locked()) render();
   } else announce('Toinen välilehti muutti tallennettua harjoitusta. Pidä tämä välilehti auki, kunnes muutokset ovat tallessa.');
 });
 document.addEventListener('visibilitychange', () => {
