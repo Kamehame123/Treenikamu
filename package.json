@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "icons": "node tools/gen-icons.mjs",
-    "test": "node --test tests/core.test.mjs tests/assets.test.mjs tests/library.test.mjs tests/progression.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/assets.test.mjs tests/library.test.mjs tests/progression.test.mjs tests/cheers.test.mjs",
     "test:launcher": "node --test tests/launcher.test.mjs",
     "test:setup": "playwright install chromium webkit",
     "test:review": "node --test tests/review.test.mjs",

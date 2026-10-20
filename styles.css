@@ -83,12 +83,11 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .coaching-guide p { margin-block: 10px; }
 .coaching-guide a { color: var(--accent); }
 .coaching-guide .sources { list-style: none; margin: 0; padding: 0; }
+.autorange-note, .progression-editor .notice { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 11px; background: var(--accent-soft); }
 .coaching-guide .sources a { display: flex; align-items: center; min-height: 48px; }
 .exercise-log, .progression-editor { border-top: 1px solid var(--line); margin-top: 10px; }
 .exercise-log > .field, .exercise-log > .check, .progression-editor > .check { margin-top: 12px; }
 .recovery-check { padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
-.log-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-block: 12px; }
-.log-row > span { grid-column: 1 / -1; font-size: 12px; font-weight: 650; }
 .history-log { padding-inline: 12px; font-size: 12px; overflow-wrap: anywhere; }
 .history-log li { margin-block: 8px; }
 .routine-head { align-items: flex-start; gap: 10px; margin-bottom: 12px; }
@@ -184,6 +183,7 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .progress::-webkit-progress-value { background: var(--accent); border-radius: 99px; transition: width .2s ease; }
 .progress::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
 .session-guide { color: var(--muted); font-size: 12px; }
+.cheer { margin-top: 10px; padding: 8px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 650; }
 .jump { margin-top: 10px; }
 .ex { padding: 14px 16px; scroll-margin-top: 72px; }
 .ex.current { border: 2px solid var(--accent); background: var(--card-hi); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow); }
@@ -198,18 +198,29 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .badge { display: inline-flex; align-items: center; flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 750; font-variant-numeric: tabular-nums; }
 .badge.now { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .badge.done-badge { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
-.set-entry { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.set { width: 100%; min-width: 0; min-height: 78px; display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1.5px solid var(--line-hi); border-radius: 13px; padding: 8px 4px; background: var(--input); color: var(--text); transition: transform .1s; }
-.rep-adjust { display: grid; grid-template-columns: repeat(2, minmax(48px, 1fr)); gap: 4px; }
-.rep-adjust .btn { padding: 4px; font-size: 20px; }
-.set-planned { max-width: 100%; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px 10px; }
+.set-entry { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.set { width: 100%; min-width: 0; min-height: 48px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; border: 1.5px solid var(--line-hi); border-radius: 13px; padding: 4px 14px; background: var(--input); color: var(--text); text-align: left; transition: transform .1s; }
+.set-label { grid-column: 1; grid-row: 1 / span 2; }
+.set-value { grid-column: 2; grid-row: 1; }
+.set-planned { grid-column: 2; grid-row: 2; max-width: 100%; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.set-foot { grid-column: 3; grid-row: 1 / span 2; display: inline-flex; align-items: center; gap: 4px; }
+.set-steppers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 6px; }
+.stepper { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 2px; padding: 2px; border: 1.5px solid var(--line-hi); border-radius: 16px; background: var(--input); }
+.step-btn { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 13px; background: var(--surface); color: var(--accent); transition: transform .1s, background .15s, color .15s; }
+.step-btn .icon { width: 22px; height: 22px; stroke-width: 2.4; }
+.step-btn:active:not(:disabled) { transform: scale(.88); background: var(--accent); color: var(--accent-ink); }
+.step-btn:disabled { color: var(--muted); }
+@media (hover: hover) { .step-btn:hover:not(:disabled) { background: var(--accent-soft); } }
+.step-value { display: flex; flex-direction: column; align-items: center; min-width: 0; line-height: 1.15; text-align: center; }
+.step-value b { max-width: 100%; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.step-value small { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
 .set.next { border: 2px solid var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-ring); }
 .set.next .set-foot { color: var(--accent); font-weight: 800; }
 .set-label { font-size: 9px; color: var(--muted); font-weight: 750; letter-spacing: .06em; }
 .set-value { font-size: 17px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; max-width: 100%; }
 .set-foot .icon { height: 12px; width: 12px; stroke-width: 2.2; }
-.set-foot { font-size: 10px; font-weight: 600; color: var(--muted); }
+.set-foot { font-size: 11px; font-weight: 600; color: var(--muted); }
 .set.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .set.done .set-foot, .set.done .set-label { color: var(--accent); font-weight: 750; }
 .exercise-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
@@ -298,7 +309,7 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 	.exercise-heading { gap: 8px; }
 	.exercise-heading h2 { font-size: 16px; }
 	.badge { padding: 3px 6px; font-size: 10px; }
-	.sets { gap: 6px; }
+	.sets { gap: 10px 8px; }
 	.rest { padding: 10px 12px; gap: 8px; }
 	.rest-info { gap: 8px; }
 	.rest-info > .icon { display: none; }

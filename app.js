@@ -1,7 +1,8 @@
 import * as core from './core.js';
-import { progressionConfig, progressionRange, prescription, parseWeight, reviseRoutine, undoRevision, canUndoRevision } from './progression.js';
+import { progressionConfig, progressionRange, prescription, reviseRoutine, undoRevision, canUndoRevision, recommendedRestSeconds } from './progression.js';
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
+import { pickCheer } from './cheers.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -15,7 +16,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const blankEx = () => ({ id: core.uid(), name: '', sets: 3, reps: '10', weight: '', setReps: null });
 const paths = {
   arrow: 'M5 12h14m-6-6 6 6-6 6', back: 'm14 6-6 6 6 6',
-  plus: 'M12 5v14M5 12h14', check: 'm5 12 4 4L19 6',
+  plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', check: 'm5 12 4 4L19 6',
   clock: 'M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
   weight: 'M7 9h10M7 15h10M7 6v12M4 9v6M17 6v12M20 9v6',
   shield: 'm12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3m-4 9 3 3 5-6',
@@ -280,11 +281,11 @@ function progressionControls(r) {
 
 function historyDetails(h) {
   if (!h.exercises?.length) return '';
-  return `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary><ul>${h.exercises.map((e) => `<li><strong>${esc(e.name)}</strong>: ${e.sets.map((set) => set.done ? `${esc(set.actualReps ?? '?')} toistoa${set.actualWeight || e.weight ? ` @ ${esc(set.actualWeight || e.weight)}` : ''}` : 'tekemättä').join(' / ')} · RIR ${esc(e.rir ?? '?')}${e.pain ? ' · kipua' : ''}</li>`).join('')}</ul>${h.fatigued ? '<p>Palautuminen oli heikkoa.</p>' : ''}</details>`;
+  return `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary><ul>${h.exercises.map((e) => `<li><strong>${esc(e.name)}</strong>: ${e.sets.map((set) => set.done ? `${esc(set.actualReps ?? core.setRepCount(e, set) ?? e.reps)} toistoa${set.actualWeight || e.weight ? ` @ ${esc(set.actualWeight || e.weight)}` : ''}` : 'tekemättä').join(' / ')} · RIR ${esc(e.rir ?? 'arvioitu')}${e.pain ? ' · kipua' : ''}</li>`).join('')}</ul>${h.fatigued ? '<p>Palautuminen oli heikkoa.</p>' : ''}</details>`;
 }
 
 function coachingGuide() {
-  return `<details class="coaching-guide card"><summary>Miten tavoitteita tarkistetaan?</summary><div class="small-copy"><p>Yhtä parasta toistoaluetta ei ole. ACSM:n vuoden 2026 katsauksessa raskaammat kuormat tukivat maksimivoimaa ja suurempi viikkovolyymi lihaskasvua. Harjoita suuria lihasryhmiä säännöllisesti, yleensä vähintään kahdesti viikossa. Noin 10 sarjaa lihasryhmää kohti viikossa on hyödyllinen lihaskasvun suunnittelun vertailukohta, ei kaikille pakollinen vähimmäismäärä. Sovellus ei lisää sarjoja sokkona, koska se ei tunne koko viikkokuormitustasi.</p><p>Liikkeen nykyinen suunnitelma ja tunnistettava eristävä liike ohjaavat ehdotusta: esimerkiksi 3–6 toistoa jo voimapainotteiseen työhön, 6–12 yhdistettyyn voima-/massaharjoitteluun, 10–20 lihasmassapainotukseen tai 15–30 jo pitkille sarjoille. Nämä ovat käytännön valmennusvalintoja, eivät tutkimuksissa todistettuja liikekohtaisia optimeja. Tallennettu oma alue säilyy. Ensimmäisessä muutoksessa alue tallennetaan, jotta tavoiteraja ei karkaa aina toistoja lisättäessä. Muokkauksessa voit valita alueen itse tai laskea sen uudelleen.</p><p>Kirjaa toteutuneet toistot ja vaikeimman sarjan RIR: montako hyvää toistoa olisi vielä onnistunut (0–5; 5 = vähintään 5). Tyhjä paino tarkoittaa tavoitepainoa. Pelkkä sarjan kuittaus ei riitä nostoon. Kaikkien tavoitteiden onnistuminen vähintään RIR 2:lla sallii enintään yhden lisätoiston sarjaa kohti. Alueen ylärajan pitää onnistua kahdessa vertailukelpoisessa treenissä ennen yhtä painoaskelta (enintään 10 %); uudella painolla toistot vähenevät. Älä pakota tavoitetta tekniikan kustannuksella. Tarkat RIR- ja toistorajat ovat varovaisia ohjelmistosääntöjä, eivät yksilöllisesti validoitu malli.</p><p>Heikko palautuminen tai kaksi selvää alisuoriutumista voi keventää seuraavaa harjoituskertaa. Palautuneena onnistunut kevennys palauttaa aiemmat tavoitteet. Pakollista kalenteriviikkoa ei määrätä, ja joskus lepo on parempi vaihtoehto. Kipua ei käsitellä tavallisena väsymyksenä: lopeta kipua aiheuttava liike ja selvitä oire tarvittaessa ammattilaisen kanssa.</p><p>Lämmittele, lepää raskaissa moninivelliikkeissä yleensä 2–3 minuuttia tai pidempään ja muissa liikkeissä tarpeen mukaan. Uni, riittävä ravinto ja jatkuvuus tukevat kehitystä. Sovellus ei mittaa lihaskasvua tai tunne terveydentilaasi eikä voi taata tuloksia.</p><p>Tutkimuspohja:</p><ul class="sources"><li><a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">ACSM 2026</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/" target="_blank" rel="noopener noreferrer">Voima- ja hypertrofiaharjoittelun meta-analyysi 2023</a></li><li><a href="https://doi.org/10.47206/ijsc.v1i1.81" target="_blank" rel="noopener noreferrer">IUSCA 2021</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10511399/" target="_blank" rel="noopener noreferrer">Kevennyksen asiantuntijakonsensus</a></li></ul></div></details>`;
+  return `<details class="coaching-guide card"><summary>Miten tavoitteita tarkistetaan?</summary><div class="small-copy"><p>Yhtä parasta toistoaluetta ei ole. ACSM:n vuoden 2026 katsauksessa raskaammat kuormat tukivat maksimivoimaa ja suurempi viikkovolyymi lihaskasvua. Harjoita suuria lihasryhmiä säännöllisesti, yleensä vähintään kahdesti viikossa. Noin 10 sarjaa lihasryhmää kohti viikossa on hyödyllinen lihaskasvun suunnittelun vertailukohta, ei kaikille pakollinen vähimmäismäärä. Sovellus laskee toistoalueen, kuorman noston tai kevennyksen, sarjamäärän ja lepoajan automaattisesti liikkeen ja toteutuneen suorituksen perusteella.</p><p>Liikkeen tyyppi ja nykyinen tavoite ohjaavat automaattista aluetta: esimerkiksi 3–6 toistoa voimapainotteiseen työhön, 6–12 yhdistettyyn voima-/massaharjoitteluun, 10–20 eristäviin liikkeisiin tai 15–30 pitkille sarjoille. Painoaskel (0,25–5 kg) skaalataan automaattisesti liikkeen ja kuorman mukaan siten, ettei yksittäinen korotus ylitä 10 % kuormasta.</p><p>Ylimääräiset toistot ja lisäsarjat huomioidaan tieteellisesti seuraavassa harjoituksessa: jos teet tavoitetta enemmän toistoja tai lisäsarjoja hyvällä varalla, seuraava toisto- tai sarjatavoite nousee suoraan osoitetun suorituskyvyn mukaan (enintään 5 työsarjaa liikettä kohti roskavolyymin estämiseksi). Jos ylität toistoalueen ylärajan lisätoistoilla tai lisäsarjalla, kuormaa nostetaan heti seuraavaan harjoitukseen ja toistot sovitetaan uuteen painoon.</p><p>Heikko palautuminen, jyrkkä toistojen putoaminen tai kaksi selvää alisuoriutumista keventää seuraavaa harjoituskertaa automaattisesti. Palautuneena onnistunut kevennys palauttaa aiemmat tavoitteet. Kipua ei käsitellä tavallisena väsymyksenä: lopeta kipua aiheuttava liike ja selvitä oire tarvittaessa ammattilaisen kanssa.</p><p>Lepoajastin valitsee lepoajan automaattisesti liikkeen ja sarjan kuormittavuuden mukaan: raskaissa moninivelliikkeissä 2–3 minuuttia (120–180 s), eristävissä liikkeissä 75–120 s ja keskivartalo- tai liikkuvuusliikkeissä 45–60 s. Uni, riittävä ravinto ja jatkuvuus tukevat kehitystä.</p><p>Tutkimuspohja:</p><ul class="sources"><li><a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">ACSM 2026</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/" target="_blank" rel="noopener noreferrer">Voima- ja hypertrofiaharjoittelun meta-analyysi 2023</a></li><li><a href="https://doi.org/10.47206/ijsc.v1i1.81" target="_blank" rel="noopener noreferrer">IUSCA 2021</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10511399/" target="_blank" rel="noopener noreferrer">Kevennyksen asiantuntijakonsensus</a></li></ul></div></details>`;
 }
 
 function homeView() {
@@ -304,16 +305,22 @@ function homeView() {
     <div class="stats"><div><strong>${thisWeek}</strong><span>tällä viikolla</span></div><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
     <div class="home-grid"><section>${sectionHead('Harjoitukset', 'OMAT OHJELMASI')}<ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${backupCard()}${coachingGuide()}</section>
     <div class="home-aside"><section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${history ? `<ul class="list history-list">${history}</ul>` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
-    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Käynnistyy tehdyn sarjan jälkeen</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><label class="field">Lepoaika sekunteina<input type="number" inputmode="numeric" min="10" max="600" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label><p class="muted small-copy">10–600 sekuntia. Lepää tarvittaessa pidempään.</p><div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details><section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><p class="muted small-copy">Moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p><div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details><section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+}
+
+function stepper({ kind, cls, ei, si, e, value, unit, group, down, up, canDown, canUp }) {
+  const button = (delta, label, enabled, glyph) => `<button class="step-btn" data-action="adjust${kind}" data-e="${ei}" data-s="${si}" data-delta="${delta}" data-key="${kind}-${delta < 0 ? 'minus' : 'plus'}-${ei}-${si}" aria-label="${label}: ${esc(e.name)}, sarja ${si + 1}" ${enabled ? '' : 'disabled'}>${icon(glyph)}</button>`;
+  return `<div class="stepper ${cls}" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: ${group}">${button(-1, down, canDown, 'minus')}<span class="step-value"><b>${esc(value)}</b>${unit ? `<small>${unit}</small>` : ''}</span>${button(1, up, canUp, 'plus')}</div>`;
 }
 
 function setEntry(e, ei, si, nextSi) {
   const set = e.sets[si];
   const target = core.setTargetLabel(set.reps ?? e.reps, e.weight);
   const count = core.setRepCount(e, set);
-  const logged = count !== null && set.actualReps !== undefined;
-  const value = logged ? core.setTargetLabel(count, set.actualWeight ?? e.weight) : target;
-  const adjustment = count === null ? '' : `<div class="rep-adjust" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: muuta toteutuneita toistoja"><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="-1" data-key="reps-minus-${ei}-${si}" aria-label="Vähennä toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 0 ? 'disabled' : ''}>−</button><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="1" data-key="reps-plus-${ei}-${si}" aria-label="Lisää toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 100 ? 'disabled' : ''}>+</button></div>`;
+  const logged = (count !== null && set.actualReps !== undefined) || !!set.actualWeight;
+  const value = logged ? core.setTargetLabel(count !== null && set.actualReps !== undefined ? count : set.reps ?? e.reps, set.actualWeight || e.weight) : target;
+  const weight = core.setWeightValue(e, set);
+  const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < 100 })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: 'Vähennä painoa 1 kg', up: 'Lisää painoa 1 kg', canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
   return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${logged ? ` Tavoite: ${esc(target)}` : ''} ${set.done ? 'Tehty' : 'Kirjaa'}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${logged ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} Tehty` : 'Kirjaa'}</span></button>${adjustment}</div>`;
 }
 
@@ -330,8 +337,7 @@ function patchLoggedSet(ei, si) {
 }
 
 function exerciseLog(e, ei) {
-  const rows = e.sets.map((set, si) => `<div class="log-row"><span>Sarja ${si + 1}</span><label class="field">Toteutuneet toistot<input type="number" inputmode="numeric" min="0" max="100" step="1" value="${esc(set.actualReps ?? '')}" data-log="actualReps" data-e="${ei}" data-s="${si}" data-key="actual-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: toteutuneet toistot" placeholder="Ei kirjattu"></label><label class="field">Toteutunut paino (kg)<input type="text" inputmode="decimal" maxlength="20" value="${esc(set.actualWeight ?? '')}" data-log="actualWeight" data-e="${ei}" data-s="${si}" data-key="load-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: toteutunut paino" placeholder="${esc(e.weight || 'Ei lisäpainoa')}"></label></div>`).join('');
-  return `<details class="exercise-log" data-log-panel="${esc(e.id)}" ${openLogs.has(e.id) ? 'open' : ''}><summary>Kirjaa tulokset ja kuormittavuus</summary><p class="muted small-copy">Kuittaa sarjat yllä ja kirjaa todelliset toistot tähän. Tyhjä paino tarkoittaa tavoitepainoa, tyhjistä toistoista ei päätellä tulosta.</p>${rows}<label class="field">RIR – vaikeimman sarjan jälkeen varastoon jääneet toistot<input type="number" inputmode="numeric" min="0" max="5" step="1" value="${esc(e.rir ?? '')}" data-log="rir" data-e="${ei}" data-key="rir-${ei}" placeholder="0–5 (5 = vähintään 5)" aria-label="${esc(e.name)}: RIR"></label><label class="check"><span>Tunsin kipua<small>Älä jatka kipua aiheuttavaa liikettä. Kuormaa ei nosteta.</small></span><input type="checkbox" data-log="pain" data-e="${ei}" data-key="pain-${ei}" aria-label="${esc(e.name)}: kipua" ${e.pain ? 'checked' : ''}></label></details>`;
+  return `<details class="exercise-log" data-log-panel="${esc(e.id)}" ${openLogs.has(e.id) ? 'open' : ''}><summary>Kuormittavuus (valinnainen)</summary><p class="muted small-copy">Toistot ja painot kirjataan sarjojen − / + -painikkeilla. Tässä voit halutessasi ilmoittaa RIR-arvon (0–5) tai kivusta.</p><label class="field">RIR – vaikeimman sarjan jälkeen varastoon jääneet toistot<input type="number" inputmode="numeric" min="0" max="5" step="1" value="${esc(e.rir ?? '')}" data-log="rir" data-e="${ei}" data-key="rir-${ei}" placeholder="0–5 (5 = vähintään 5)" aria-label="${esc(e.name)}: RIR"></label><label class="check"><span>Tunsin kipua<small>Älä jatka kipua aiheuttavaa liikettä. Kuormaa ei nosteta.</small></span><input type="checkbox" data-log="pain" data-e="${ei}" data-key="pain-${ei}" aria-label="${esc(e.name)}: kipua" ${e.pain ? 'checked' : ''}></label></details>`;
 }
 
 function recoveryControls(s) {
@@ -347,15 +353,17 @@ function workoutView() {
     const sets = e.sets.map((set, si) => setEntry(e, ei, si, nextSi)).join('');
     const individual = e.sets.some((set) => set.reps);
     const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
-    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''}</p></div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseLog(e, ei)}</li>`;
+    const restLabel = core.formatDuration(recommendedRestSeconds(e, nextSi >= 0 ? nextSi : 0) * 1000);
+    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p></div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseLog(e, ei)}</li>`;
   }).join('');
-  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryControls(s)}<ul class="list exercise-list">${exercises}</ul><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>`;
+  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}${cheer && cheer.sessionId === s.id && p.done < p.total ? `<p class="cheer">${esc(cheer.text)}</p>` : ''}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryControls(s)}<ul class="list exercise-list">${exercises}</ul><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>`;
 }
 
 function progressionEditor(e, i) {
   const config = progressionConfig(e);
   const savedRange = e.progression?.minReps !== undefined && e.progression?.maxReps !== undefined;
-  return `<details class="progression-editor"><summary>Kehitysalue ja painoaskel</summary><p class="muted small-copy">${savedRange ? 'Tallennettu kehitysalue säilytetään.' : esc(progressionRange(e).reason)} Ehdotus: ${config.minReps}–${config.maxReps} toistoa. Yleistä 8–15-oletusta ei käytetä. Paino tarkoittaa samaa kg-kuormaa kuin tavoitepainossa, esimerkiksi yhden käsipainon painoa.</p><button class="btn secondary" data-action="autorange" data-i="${i}" data-key="autorange-${esc(e.id)}">Laske kehitysalue uudelleen</button><div class="grid3"><label class="field">Alaraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.minReps ?? config.minReps)}" data-progression="minReps" data-i="${i}" data-key="minReps-${esc(e.id)}"></label><label class="field">Yläraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.maxReps ?? config.maxReps)}" data-progression="maxReps" data-i="${i}" data-key="maxReps-${esc(e.id)}"></label><label class="field">Pienin painoaskel (kg)<input type="number" min="0.01" max="100" step="0.01" inputmode="decimal" value="${esc(e.progression?.weightStep ?? config.weightStep)}" data-progression="weightStep" data-i="${i}" data-key="weightStep-${esc(e.id)}"></label></div><label class="check"><span>Paino on ulkoinen kg-kuorma<small>Poista valinta avustetuille liikkeille tai muille kuormayksiköille: paino muuttuu silloin vain käsin.</small></span><input type="checkbox" data-progression="autoLoad" data-i="${i}" data-key="autoLoad-${esc(e.id)}" ${config.autoLoad ? 'checked' : ''}></label></details>`;
+  const restSecs = recommendedRestSeconds(e);
+  return `<details class="progression-editor"><summary>Automaattinen kehitys: ${config.minReps}–${config.maxReps} toistoa · askel ${config.weightStep} kg · lepo ${restSecs} s</summary><p class="muted small-copy">${savedRange ? 'Tallennettu kehitysalue säilytetään.' : esc(progressionRange(e).reason)} Sovellus laskee toistot, kuorman noston tai kevennyksen, lisäsarjojen vaikutuksen ja lepoajan (${restSecs} s) automaattisesti ilman käsin säätämistä.</p><button class="btn secondary" data-action="autorange" data-i="${i}" data-key="autorange-${esc(e.id)}">Laske kehitysalue uudelleen</button><div class="grid3"><label class="field">Alaraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.minReps ?? config.minReps)}" data-progression="minReps" data-i="${i}" data-key="minReps-${esc(e.id)}"></label><label class="field">Yläraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.maxReps ?? config.maxReps)}" data-progression="maxReps" data-i="${i}" data-key="maxReps-${esc(e.id)}"></label><label class="field">Pienin painoaskel (kg)<input type="number" min="0.01" max="100" step="0.01" inputmode="decimal" value="${esc(e.progression?.weightStep ?? config.weightStep)}" data-progression="weightStep" data-i="${i}" data-key="weightStep-${esc(e.id)}"></label></div><label class="check"><span>Paino on ulkoinen kg-kuorma<small>Poista valinta avustetuille liikkeille tai muille kuormayksiköille: paino muuttuu silloin vain käsin.</small></span><input type="checkbox" data-progression="autoLoad" data-i="${i}" data-key="autoLoad-${esc(e.id)}" ${config.autoLoad ? 'checked' : ''}></label></details>`;
 }
 
 function setTargetFields(e, i) {
@@ -448,7 +456,7 @@ function render() {
 }
 
 // Center within usable space, not behind the sticky header or floating timer.
-// Oversized exercises show the next set instead of centering an unreadable card.
+// Oversized exercises show the next set and its steppers instead of centering an unreadable card.
 function showCurrentExercise({ focus = false, instant = false } = {}) {
   if (view !== 'workout' || !state.session || !storageOk || document.hidden) return;
   const index = core.currentExercise(state.session);
@@ -460,7 +468,7 @@ function showCurrentExercise({ focus = false, instant = false } = {}) {
   const rest = document.getElementById('rest');
   const bottom = Math.min(viewportBottom, rest && !rest.hidden ? rest.getBoundingClientRect().top : viewportBottom) - 12;
   const height = Math.max(0, bottom - top);
-  const target = card && card.getBoundingClientRect().height <= height ? card : nextSet || document.querySelector('[data-action="finish"]');
+  const target = card && card.getBoundingClientRect().height <= height ? card : nextSet?.closest('.set-entry') || nextSet || document.querySelector('[data-action="finish"]');
   if (!target || height < 48) return;
   const rect = target.getBoundingClientRect();
   if (focus) (nextSet || target).focus({ preventScroll: true });
@@ -482,6 +490,9 @@ for (const event of ['pointerdown', 'touchstart', 'wheel', 'keydown']) {
 }
 
 let lastRestBeep = 0;
+// Transient, never persisted.
+let cheer = null;
+let lastCheer = '';
 function tick() {
   const elapsed = document.getElementById('elapsed');
   if (elapsed && state.session) elapsed.textContent = core.formatDuration(Date.now() - state.session.startedAt);
@@ -546,11 +557,9 @@ async function changeRevision(id, undo = false) {
 function logInput(t) {
   const field = t.dataset.log;
   const value = t.type === 'checkbox' ? t.checked : t.value.trim();
-  const numeric = field === 'actualReps' || field === 'rir';
-  const valid = !t.validity.badInput && (!numeric || value === '' || (/^\d+$/.test(value) && Number(value) <= (field === 'rir' ? 5 : 100))) &&
-    (field !== 'actualWeight' || value === '' || parseWeight(value) !== null);
+  const valid = !t.validity.badInput && (field !== 'rir' || value === '' || (/^\d+$/.test(value) && Number(value) <= 5));
   if (!valid) {
-    logError = field === 'actualWeight' ? 'Anna paino kilogrammoina (esim. 22,5) tai jätä kenttä tyhjäksi käyttääksesi tavoitepainoa.' : 'Anna kokonaisluku: toistot 0–100 tai RIR 0–5. Tyhjä tarkoittaa tuntematonta.';
+    logError = 'Anna kokonaisluku RIR 0–5. Tyhjä tarkoittaa tuntematonta.';
     announce(logError); render(); return;
   }
   const options = sessionOptions(), ei = +t.dataset.e, si = +t.dataset.s;
@@ -603,7 +612,12 @@ const actions = {
     const button = document.querySelector(`[data-key="autorange-${CSS.escape(exercise.id)}"]`);
     button.closest('.progression-editor').open = true;
     button.focus({ preventScroll: true });
-    announce(`Liikkeen ehdotus on ${range.minReps}–${range.maxReps} toistoa. Muutos tallentuu ohjelman tallennuksessa.`);
+    const message = `Toistoalue valittu automaattisesti: ${range.minReps}–${range.maxReps} toistoa. Paina "Tallenna harjoitus" tallentaaksesi muutoksen.`;
+    const note = document.createElement('p');
+    note.className = 'notice small-copy';
+    note.textContent = message;
+    button.after(note);
+    announce(message);
   },
   async revise(t) { await changeRevision(t.dataset.id); },
   async undorevision(t) { await changeRevision(t.dataset.id, true); },
@@ -645,14 +659,18 @@ const actions = {
       if (!ex?.sets[si]) return false;
       const current = core.currentExercise(next.session);
       const done = core.toggleSet(next.session, ei, si);
+      const restSeconds = recommendedRestSeconds(ex, si);
+      cheer = null;
       if (done) {
         navigator.vibrate?.(15);
         const p = core.progress(next.session);
-        next.restEnd = next.settings.autoRest && p.done < p.total ? Date.now() + next.settings.restSeconds * 1000 : null;
+        const text = pickCheer(p.done, p.total, lastCheer);
+        if (text) { cheer = { sessionId: next.session.id, text }; lastCheer = text; }
+        next.restEnd = next.settings.autoRest && p.done < p.total ? Date.now() + restSeconds * 1000 : null;
         const following = core.currentExercise(next.session);
         if (ei === current && following > current) advance = { sessionId: next.session.id, index: following };
       }
-      announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${next.settings.restSeconds} sekuntia.` : ''}`);
+      announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${restSeconds} sekuntia.` : ''}${cheer ? ` ${cheer.text}` : ''}`);
     }, sessionOptions());
     if (ok && advance && storageOk && interaction === scrollInteraction) scheduleExerciseScroll(advance.sessionId, advance.index);
   },
@@ -663,6 +681,15 @@ const actions = {
       if (!result.ok) { logError = result.error; announce(logError); render(); return false; }
       logError = '';
       announce(`${next.session.exercises[ei].name}, sarja ${si + 1}: ${result.reps} toteutunutta toistoa. Tavoite säilyy ennallaan.`);
+    }, sessionOptions());
+  },
+  async adjustweight(t) {
+    await mutate((next) => {
+      const ei = +t.dataset.e, si = +t.dataset.s;
+      const result = core.adjustSetWeight(next.session, ei, si, +t.dataset.delta);
+      if (!result.ok) { logError = result.error; announce(logError); render(); return false; }
+      logError = '';
+      announce(`${next.session.exercises[ei].name}, sarja ${si + 1}: ${String(result.weight).replace('.', ',')} kg. Tavoite säilyy ennallaan.`);
     }, sessionOptions());
   },
   async addset(t) { await mutate((next) => core.addSet(next.session, +t.dataset.e), sessionOptions()); },
@@ -873,7 +900,7 @@ document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.dataset.log && t.type !== 'checkbox') {
     // Keep valid edits durable before blur; unfinished input is validated on change.
-    if (t.validity.valid && (t.dataset.log !== 'actualWeight' || !t.value.trim() || parseWeight(t.value) !== null)) logInput(t);
+    if (t.validity.valid) logInput(t);
     return;
   }
   if (t.id === 'exercise-search') { picker.query = t.value; picker.limit = 40; updateLibraryResults(); return; }
