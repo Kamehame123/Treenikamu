@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101313" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f6f2" media="(prefers-color-scheme: light)">
+<meta name="description" content="Suomenkielinen treenipäiväkirja ja laaja liikekirjasto. Suunnittele harjoitus, kirjaa sarjat ja jatka siitä mihin jäit. Toimii ilman verkkoyhteyttä tai käyttäjätiliä.">
+<meta name="color-scheme" content="dark light">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Treeni">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="styles.css">
+<title>Treenipäiväkirja</title>
+</head>
+<body>
+<a class="sr skip-link" href="#app">Siirry pääsisältöön</a>
+<main id="app"></main>
+<input type="file" id="import-file" accept=".json,application/json" hidden aria-hidden="true" tabindex="-1">
+<div id="live" class="sr" aria-live="polite" role="status"></div>
+<noscript>Sovelluksen käyttö edellyttää JavaScriptiä.</noscript>
+<script type="module" src="app.js"></script>
+</body>
+</html>
