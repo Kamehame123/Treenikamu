@@ -142,10 +142,19 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   the recorded actual count, bounded to 0-100. The set shows the actual count and
   its original target; adjustments never change the plan, mark the set done, or
   start a rest timer. Timed and nonnumeric targets have no rep-adjustment buttons.
-- A second **- / + stepper** on each set adjusts the weight in 1 kg steps (decimals
-  such as 22,5 are kept). It starts from the planned weight (0 when none is
-  planned) and stores an override only while it differs from the plan. Weights
-  that are not plain kilograms (for example `2 x 10 kg`) cannot be stepped.
+- A second **- / + stepper** on each set adjusts the weight by the exercise's weight
+  step: the step saved in the routine, otherwise the automatic step for the planned
+  weight (for example 2 kg at 22,5 kg, 2,5 kg at 100 kg). The step is fixed by the
+  plan, so it stays the same while tapping. Decimals such as 22,5 are kept. It
+  starts from the planned weight (0 when none is planned) and stores an override
+  only while it differs from the plan. Weights that are not plain kilograms (for
+  example `2 x 10 kg`) cannot be stepped.
+- Tapping the number between the - and + buttons types an exact value instead
+  (reps 0-100, weight 0-10 000 kg, decimal comma or point). Enter or leaving the
+  field saves it, Escape cancels, an empty weight returns to the planned weight,
+  and invalid input is reported without changing the record.
+- Each movement shows the sets of its latest earlier workout ("Viimeksi ...").
+  Sets without a logged rep count show the target, never an invented number.
 - Mark sets done as before; tapping a set button or adjusting reps with the `-` / `+`
   buttons and `+ Sarja` is sufficient for automatic progression without opening the
   optional results panel. When RIR is not manually entered, effort is inferred
@@ -277,6 +286,9 @@ non-kilogram values simply show disabled weight buttons). They survive
 reload, workout completion, and backup/restore without any additional migration.
 Untouched sets still have unknown actual reps; planned targets are never silently
 copied into performance history merely by marking a set done.
+A session exercise may carry one more optional field, `weightStep`, copied from a
+routine's saved progression step when a workout starts. Sessions and history
+without it use the automatic step; nothing is migrated or rewritten.
 
 Normalization happens in memory, without replacing saved browser bytes on load.
 It is deterministic for valid saved records and safe to retry. Successful writes

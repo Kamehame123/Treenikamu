@@ -329,7 +329,8 @@ function homeView() {
 
 function stepper({ kind, cls, ei, si, e, value, unit, group, down, up, canDown, canUp }) {
   const button = (delta, label, enabled, glyph) => `<button class="step-btn" data-action="adjust${kind}" data-e="${ei}" data-s="${si}" data-delta="${delta}" data-key="${kind}-${delta < 0 ? 'minus' : 'plus'}-${ei}-${si}" aria-label="${label}: ${esc(e.name)}, sarja ${si + 1}" ${enabled ? '' : 'disabled'}>${icon(glyph)}</button>`;
-  return `<div class="stepper ${cls}" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: ${group}">${button(-1, down, canDown, 'minus')}<span class="step-value"><b>${esc(value)}</b>${unit ? `<small>${unit}</small>` : ''}</span>${button(1, up, canUp, 'plus')}</div>`;
+  const label = `${esc(value)}${unit ? ` ${unit}` : ''}, kirjoita ${group}: ${esc(e.name)}, sarja ${si + 1}`;
+  return `<div class="stepper ${cls}" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: ${group}">${button(-1, down, canDown, 'minus')}<button class="step-value" data-action="edit${kind}" data-e="${ei}" data-s="${si}" data-key="${kind}-value-${ei}-${si}" aria-label="${label}"><b>${esc(value)}</b>${unit ? ` <small>${unit}</small>` : ''}</button>${button(1, up, canUp, 'plus')}</div>`;
 }
 
 function setEntry(e, ei, si, nextSi) {
@@ -339,7 +340,8 @@ function setEntry(e, ei, si, nextSi) {
   const logged = (count !== null && set.actualReps !== undefined) || !!set.actualWeight;
   const value = logged ? core.setTargetLabel(count !== null && set.actualReps !== undefined ? count : set.reps ?? e.reps, set.actualWeight || e.weight) : target;
   const weight = core.setWeightValue(e, set);
-  const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < 100 })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: 'Vähennä painoa 1 kg', up: 'Lisää painoa 1 kg', canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
+  const step = String(core.weightStepFor(e)).replace('.', ',');
+  const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < 100 })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: `Vähennä painoa ${step} kg`, up: `Lisää painoa ${step} kg`, canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
   return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${logged ? ` Tavoite: ${esc(target)}` : ''} ${set.done ? 'Tehty' : 'Kirjaa'}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${logged ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} Tehty` : 'Kirjaa'}</span></button>${adjustment}</div>`;
 }
 
@@ -367,6 +369,27 @@ function recoveryControls(s) {
   return `${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<label class="check recovery-check"><span>Palautuminen on heikkoa<small>Voi keventää seuraavaa treeniä. Harkitse myös lepoa.</small></span><input type="checkbox" data-log="fatigued" data-key="fatigued" ${s.fatigued ? 'checked' : ''}></label>`;
 }
 
+// The newest finished sets of the same movement, memoized per history snapshot.
+const lastTimeCache = new WeakMap();
+function lastTime(e) {
+  let byName = lastTimeCache.get(state.history);
+  if (!byName) lastTimeCache.set(state.history, byName = new Map());
+  const key = normalizeSearch(e.name);
+  if (!byName.has(key)) {
+    let best = null;
+    for (const h of state.history) {
+      const match = h.exercises?.find((x) => normalizeSearch(x.name) === key && x.sets.some((set) => set.done));
+      if (match && (!best || h.endedAt > best.at)) best = { at: h.endedAt, exercise: match };
+    }
+    byName.set(key, best && `Viimeksi ${new Date(best.at).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' })}: ${best.exercise.sets.filter((set) => set.done).slice(0, 8).map((set) => {
+      const reps = set.actualReps ?? core.setRepCount(best.exercise, set) ?? set.reps ?? best.exercise.reps;
+      const weight = set.actualWeight || best.exercise.weight;
+      return `${reps}${weight ? ` × ${/^[\d.,]+$/.test(weight) ? `${weight} kg` : weight}` : ''}`;
+    }).join(' / ')}`);
+  }
+  return byName.get(key);
+}
+
 function workoutView() {
   const s = state.session, p = core.progress(s), cur = core.currentExercise(s);
   const exercises = s.exercises.map((e, ei) => {
@@ -377,7 +400,7 @@ function workoutView() {
     const individual = e.sets.some((set) => set.reps);
     const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
     const restLabel = core.formatDuration(recommendedRestSeconds(e, nextSi >= 0 ? nextSi : 0) * 1000);
-    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p></div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseLog(e, ei)}</li>`;
+    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseLog(e, ei)}</li>`;
   }).join('');
   return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}${cheer && cheer.sessionId === s.id && p.done < p.total ? `<p class="cheer">${esc(cheer.text)}</p>` : ''}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryControls(s)}<ul class="list exercise-list">${exercises}</ul><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>`;
 }
@@ -602,6 +625,42 @@ function logInput(t) {
   });
 }
 
+// Typing a value replaces the stepper's readout in place; Enter or leaving the field saves it.
+function openStepInput(button, kind) {
+  const numeric = kind === 'reps' || !!button.querySelector('small');
+  const input = document.createElement('input');
+  input.type = 'text'; input.className = 'step-input';
+  input.inputMode = kind === 'weight' ? 'decimal' : 'numeric';
+  input.maxLength = 12;
+  input.value = numeric ? button.querySelector('b').textContent : '';
+  input.defaultValue = input.value;
+  Object.assign(input.dataset, { stepInput: kind, e: button.dataset.e, s: button.dataset.s, key: button.dataset.key });
+  input.setAttribute('aria-label', button.getAttribute('aria-label'));
+  button.replaceWith(input);
+  input.focus(); input.select();
+}
+
+function commitStepInput(input, cancel = false) {
+  if (input.dataset.committed) return;
+  input.dataset.committed = '1';
+  const kind = input.dataset.stepInput, ei = +input.dataset.e, si = +input.dataset.s, value = input.value;
+  if (cancel || value.trim() === input.defaultValue.trim()) { patchLoggedSet(ei, si); return; }
+  const options = sessionOptions();
+  enqueueAction(() => mutate((next) => {
+    const result = kind === 'weight' ? core.setSetWeight(next.session, ei, si, value) : core.setSetReps(next.session, ei, si, value);
+    if (!result.ok) { logError = result.error; announce(logError); render(); return false; }
+    logError = '';
+    const name = next.session.exercises[ei].name;
+    announce(kind === 'weight' ? `${name}, sarja ${si + 1}: ${String(result.weight).replace('.', ',')} kg. Tavoite s\u00e4ilyy ennallaan.` : `${name}, sarja ${si + 1}: ${result.reps} toteutunutta toistoa. Tavoite s\u00e4ilyy ennallaan.`);
+  }, { ...options, patch: () => patchLoggedSet(ei, si) }));
+}
+document.addEventListener('keydown', (e) => {
+  if (!e.target.dataset?.stepInput) return;
+  if (e.key === 'Enter') { e.preventDefault(); commitStepInput(e.target); }
+  else if (e.key === 'Escape') { e.preventDefault(); commitStepInput(e.target, true); }
+});
+document.addEventListener('focusout', (e) => { if (e.target.dataset?.stepInput) commitStepInput(e.target); });
+
 function downloadBackup(text) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = document.createElement('a');
   a.href = url; a.download = core.backupFileName(); a.click();
@@ -742,6 +801,8 @@ const actions = {
       announce(`${next.session.exercises[ei].name}, sarja ${si + 1}: ${String(result.weight).replace('.', ',')} kg. Tavoite säilyy ennallaan.`);
     }, sessionOptions());
   },
+  editreps(t) { openStepInput(t, 'reps'); },
+  editweight(t) { openStepInput(t, 'weight'); },
   async addset(t) { await mutate((next) => core.addSet(next.session, +t.dataset.e), sessionOptions()); },
   async rmset(t) {
     readLatest();
@@ -768,7 +829,8 @@ const actions = {
     if (state.session) {
       const shown = core.progress(state.session);
       if (shown.done < shown.total) {
-        if (!await askConfirm(`${shown.total - shown.done} sarjaa on tekemättä. Lopetetaanko silti?`, 'Lopeta')) return;
+        const none = shown.done === 0;
+        if (!await askConfirm(none ? 'Yhtään sarjaa ei ole kirjattu, joten harjoitusta ei tallenneta historiaan. Lopetetaanko ilman tallennusta?' : `${shown.total - shown.done} sarjaa on tekemättä. Lopetetaanko silti?`, none ? 'Lopeta tallentamatta' : 'Lopeta')) return;
         confirmed = true;
       }
     }

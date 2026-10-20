@@ -123,7 +123,7 @@ try {
           const before = await saved(page);
           assert.equal(before.session.exercises[0].sets[0].actualReps, '9');
           assert.equal(before.session.exercises[0].sets[1].actualReps, '11');
-          assert.equal(before.session.exercises[0].sets[0].actualWeight, '99');
+          assert.equal(before.session.exercises[0].sets[0].actualWeight, '97,5');
           assert.equal(before.session.exercises[0].rir, '0');
           await page.reload();
           assert.deepEqual((await saved(page)).session, before.session);

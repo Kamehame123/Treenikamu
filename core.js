@@ -147,6 +147,7 @@ export function sanitizeSession(s) {
       reps: cleanText(e?.reps, 20) || '10',
       weight: cleanText(e?.weight, 20),
       ...(sanitizeTracking(e?.tracking) ? { tracking: sanitizeTracking(e.tracking) } : {}),
+      ...(Number(e?.weightStep) >= 0.01 && Number(e.weightStep) <= 100 ? { weightStep: Number(e.weightStep) } : {}),
       ...(cleanText(e?.rir, 20) ? { rir: cleanText(e.rir, 20) } : {}),
       ...(e?.pain === true ? { pain: true } : {}),
       ...(e?.deload === true ? { deload: true } : {}),
@@ -388,6 +389,7 @@ export function startSession(routine, now = Date.now()) {
       reps: e.reps,
       weight: e.weight,
       ...(e.tracking ? { tracking: structuredClone(e.tracking) } : {}),
+      ...(e.progression?.weightStep !== undefined ? { weightStep: progressionConfig(e).weightStep } : {}),
       ...(e.recoveryBase ? { deload: true } : {}),
       sets: Array.from({ length: e.sets }, (_, i) => ({
         done: false,
@@ -432,19 +434,54 @@ export function setWeightValue(exercise, set) {
   return text === '' ? 0 : parseWeight(text);
 }
 
-// Moves the logged weight by delta kg; landing on the planned weight clears the override.
-export function adjustSetWeight(session, ei, si, delta) {
+// Step of the +/- weight buttons: the routine's saved step, else one derived from the planned weight.
+// It never depends on the logged weight, so the button size stays the same while tapping.
+export function weightStepFor(exercise) {
+  const saved = Number(exercise?.weightStep);
+  return saved >= 0.01 && saved <= 100 ? saved : automaticWeightStep(exercise);
+}
+
+function writeSetWeight(exercise, set, weight) {
+  if (weight === (String(exercise.weight ?? '').trim() === '' ? 0 : parseWeight(exercise.weight))) delete set.actualWeight;
+  else set.actualWeight = String(weight).replace('.', ',');
+}
+
+// Moves the logged weight one step up or down (direction -1 or 1); landing on the planned weight clears the override.
+export function adjustSetWeight(session, ei, si, direction) {
   const exercise = session?.exercises[ei], set = exercise?.sets[si];
   if (!set) return { ok: false, error: 'Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.' };
   const current = setWeightValue(exercise, set);
-  if (current === null || !Number.isFinite(delta) || delta === 0) {
+  if (current === null || (direction !== -1 && direction !== 1)) {
     return { ok: false, error: 'Pikamuutos vaatii painon kilogrammoina (esim. 22,5). Tarkista paino.' };
   }
-  const weight = Math.round((current + delta + Number.EPSILON) * 100) / 100;
+  const raw = Math.round((current + direction * weightStepFor(exercise) + Number.EPSILON) * 100) / 100;
+  const weight = direction < 0 && current > 0 ? Math.max(0, raw) : raw;
   if (weight < 0 || weight > 10000) return { ok: false, error: 'Painon on oltava välillä 0–10 000 kg.' };
-  if (weight === (String(exercise.weight ?? '').trim() === '' ? 0 : parseWeight(exercise.weight))) delete set.actualWeight;
-  else set.actualWeight = String(weight).replace('.', ',');
+  writeSetWeight(exercise, set, weight);
   return { ok: true, weight };
+}
+
+// Typed weight (e.g. 97,5 or 105 kg) for one set; an empty field returns to the planned weight.
+export function setSetWeight(session, ei, si, text) {
+  const exercise = session?.exercises[ei], set = exercise?.sets[si];
+  if (!set) return { ok: false, error: 'Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.' };
+  const raw = String(text ?? '').trim();
+  if (raw === '') { delete set.actualWeight; return { ok: true, weight: setWeightValue(exercise, set) }; }
+  const parsed = /^\d+(?:[.,]\d+)?$/.test(raw) ? parseWeight(raw) : null;
+  if (parsed === null) return { ok: false, error: 'Anna paino kilogrammoina väliltä 0–10 000, esim. 22,5.' };
+  const weight = Math.round((parsed + Number.EPSILON) * 100) / 100;
+  writeSetWeight(exercise, set, weight);
+  return { ok: true, weight };
+}
+
+// Typed rep count (0–100) for one set.
+export function setSetReps(session, ei, si, text) {
+  const exercise = session?.exercises[ei], set = exercise?.sets[si];
+  if (!set) return { ok: false, error: 'Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.' };
+  const raw = String(text ?? '').trim();
+  if (!/^\d+$/.test(raw) || Number(raw) > 100) return { ok: false, error: 'Anna toistot kokonaislukuna väliltä 0–100.' };
+  set.actualReps = String(Number(raw));
+  return { ok: true, reps: Number(raw) };
 }
 
 export function addSet(session, ei) {

@@ -80,18 +80,70 @@ test('quick rep bounds and invalid actions report errors without changing record
   }
 });
 
-test('quick weight adjustments step by 1 kg, keep decimals and clear the override at the planned weight', () => {
+test('quick weight adjustments use the exercise step, keep decimals and clear the override at the planned weight', () => {
   const r = routine();
   r.exercises[0].weight = '22,5 kg';
   const s = c.startSession(r), exercise = s.exercises[0], set = exercise.sets[0];
+  const step = c.weightStepFor(exercise);
+  assert.equal(step, 2);
   assert.equal(c.setWeightValue(exercise, set), 22.5);
-  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 23.5 });
-  assert.equal(set.actualWeight, '23,5');
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 24.5 });
+  assert.equal(set.actualWeight, '24,5');
+  assert.equal(c.weightStepFor(exercise), step, 'the step is fixed by the plan, not by the logged weight');
   assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 22.5 });
   assert.equal('actualWeight' in set, false);
-  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 21.5 });
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 20.5 });
   assert.equal(exercise.weight, '22,5 kg');
   assert.equal(r.exercises[0].weight, '22,5 kg');
+});
+
+test('a saved routine weight step wins over the automatic one and reaches the session', () => {
+  const r = routine();
+  r.exercises[0].weight = '100 kg';
+  r.exercises[0].progression = { weightStep: 1.25 };
+  const s = c.startSession(r);
+  assert.equal(s.exercises[0].weightStep, 1.25);
+  assert.equal('weightStep' in s.exercises[1], false);
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 101.25 });
+  assert.equal(c.sanitizeSession(s).exercises[0].weightStep, 1.25);
+  s.exercises[0].weightStep = 'bad';
+  assert.equal('weightStep' in c.sanitizeSession(s).exercises[0], false);
+  assert.equal(c.weightStepFor(s.exercises[0]), 2.5);
+});
+
+test('typed weights accept decimal commas and units, and report bad input without changing records', () => {
+  const r = routine();
+  r.exercises[0].weight = '100 kg';
+  const s = c.startSession(r), set = s.exercises[0].sets[0];
+  assert.deepEqual(c.setSetWeight(s, 0, 0, '97,5'), { ok: true, weight: 97.5 });
+  assert.equal(set.actualWeight, '97,5');
+  assert.deepEqual(c.setSetWeight(s, 0, 0, '100'), { ok: true, weight: 100 });
+  assert.equal('actualWeight' in set, false);
+  assert.deepEqual(c.setSetWeight(s, 0, 0, '12.25'), { ok: true, weight: 12.25 });
+  assert.deepEqual(c.setSetWeight(s, 0, 0, ''), { ok: true, weight: 100 });
+  assert.equal('actualWeight' in set, false);
+  for (const bad of ['105 lbs', 'abc', '-5', '10001', '1e3', '2 x 10']) {
+    const before = structuredClone(s);
+    assert.equal(c.setSetWeight(s, 0, 0, bad).ok, false, bad);
+    assert.deepEqual(s, before);
+  }
+  assert.equal(c.setSetWeight(s, 9, 0, '5').ok, false);
+  assert.equal(c.setSetWeight(null, 0, 0, '5').ok, false);
+});
+
+test('typed reps accept 0–100 and leave the target and other sets alone', () => {
+  const s = c.startSession(routine()), sets = s.exercises[0].sets;
+  assert.deepEqual(c.setSetReps(s, 0, 0, '7'), { ok: true, reps: 7 });
+  assert.deepEqual(c.setSetReps(s, 0, 1, ' 012 '), { ok: true, reps: 12 });
+  assert.deepEqual(c.setSetReps(s, 0, 2, '0'), { ok: true, reps: 0 });
+  assert.deepEqual(sets.map((x) => x.actualReps), ['7', '12', '0']);
+  assert.equal(s.exercises[0].reps, '5');
+  for (const bad of ['', '101', '-1', '1,5', 'x']) {
+    const before = structuredClone(s);
+    assert.equal(c.setSetReps(s, 0, 0, bad).ok, false, bad);
+    assert.deepEqual(s, before);
+  }
+  assert.equal(c.setSetReps(s, 0, 9, '5').ok, false);
 });
 
 test('quick weight handles empty plans, bounds and non-numeric weights without changing records', () => {
@@ -99,9 +151,13 @@ test('quick weight handles empty plans, bounds and non-numeric weights without c
   exercise.weight = '';
   assert.equal(c.setWeightValue(exercise, set), 0);
   assert.equal(c.adjustSetWeight(s, 0, 0, -1).ok, false);
-  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 1 });
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 2.5 });
   assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 0 });
-  assert.equal('actualWeight' in set, false);
+  exercise.weight = '0,2';
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 0 });
+  assert.equal(set.actualWeight, '0');
+  exercise.weight = '';
+  delete set.actualWeight;
   for (const weight of ['2 x 10 kg', 'oma paino']) {
     exercise.weight = weight;
     const before = structuredClone(s);

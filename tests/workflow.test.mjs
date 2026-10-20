@@ -299,23 +299,89 @@ try {
           assert.equal((await saved(p)).session.exercises[0].sets[0].done, false);
         });
 
-        await run('weight controls step by 1 kg, keep focus, and return to the plan without leaving an override', async (p) => {
+        await run('weight controls use the exercise step, keep focus, and return to the plan without leaving an override', async (p) => {
           await seedWorkout(p, { setReps: ['8', '8', '8'], weight: '22,5 kg', autoRest: false });
           const plus = p.locator('[data-key="weight-plus-0-0"]');
+          assert.match(await plus.getAttribute('aria-label'), /^Lisää painoa 2 kg: /);
           await plus.focus(); await p.keyboard.press('Space');
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
           assert.equal(await plus.evaluate((e) => e === document.activeElement), true);
-          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '23,5');
-          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '8 x 23,5kg');
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '24,5');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '8 x 24,5kg');
           assert.equal(await p.locator('[data-key="s0-0"] .set-planned').innerText(), 'Tavoite: 8 x 22,5kg');
-          assert.equal(await p.locator('#exercise-0 .set-entry').first().locator('.weight-adjust b').innerText(), '23,5');
+          assert.equal(await p.locator('#exercise-0 .set-entry').first().locator('.weight-adjust b').innerText(), '24,5');
           assert.equal(await p.locator('[data-key="weight-plus-0-1"]').evaluate((e) => e.closest('.set-entry').querySelector('.weight-adjust b').textContent), '22,5');
           await tap(p.locator('[data-key="weight-minus-0-0"]'));
           assert.equal('actualWeight' in (await saved(p)).session.exercises[0].sets[0], false);
           await tap(p.locator('[data-key="weight-minus-0-0"]'));
-          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '21,5');
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '20,5');
           assert.equal((await saved(p)).session.exercises[0].weight, '22,5 kg');
           assert.equal((await saved(p)).session.exercises[0].sets[0].done, false);
+        });
+
+        await run('tapping a stepper value types an exact weight or rep count without changing the plan', async (p) => {
+          const state = await seedWorkout(p, { setReps: ['8', '8', '8'], weight: '100 kg', autoRest: false });
+          const weight = p.locator('[data-key="weight-value-0-0"]');
+          await weight.click();
+          const input = p.locator('input.step-input');
+          assert.equal(await input.evaluate((e) => e === document.activeElement), true);
+          await input.fill('97,5');
+          await p.keyboard.press('Enter');
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
+          assert.equal((await saved(p)).session.exercises[0].sets[0].actualWeight, '97,5');
+          assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '8 x 97,5kg');
+          assert.equal(await p.locator('[data-key="weight-value-0-0"]').evaluate((e) => e === document.activeElement), true);
+          await p.locator('[data-key="reps-value-0-1"]').click();
+          await p.locator('input.step-input').fill('12');
+          await p.locator('h1').click();
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
+          assert.equal((await saved(p)).session.exercises[0].sets[1].actualReps, '12');
+          await p.locator('[data-key="reps-value-0-2"]').click();
+          await p.locator('input.step-input').fill('150');
+          await p.keyboard.press('Enter');
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
+          assert.ok(await p.getByRole('alert').first().isVisible());
+          assert.equal('actualReps' in (await saved(p)).session.exercises[0].sets[2], false);
+          await p.locator('[data-key="weight-value-0-1"]').click();
+          await p.locator('input.step-input').fill('555');
+          await p.keyboard.press('Escape');
+          assert.equal(await p.locator('input.step-input').count(), 0);
+          assert.equal('actualWeight' in (await saved(p)).session.exercises[0].sets[1], false);
+          assert.deepEqual((await saved(p)).routines, state.routines);
+          assert.equal((await saved(p)).session.exercises[0].sets[0].done, false);
+        });
+
+        await run('finishing with no logged set says nothing is saved, and keeping the workout changes nothing', async (p) => {
+          const state = await seedWorkout(p, { autoRest: false });
+          await p.getByRole('button', { name: 'Lopeta kesken', exact: true }).click();
+          const dialog = p.getByRole('alertdialog');
+          assert.match(await dialog.innerText(), /Yht\u00e4\u00e4n sarjaa ei ole kirjattu.*ei tallenneta historiaan/);
+          await dialog.getByRole('button').nth(0).click();
+          await dialog.waitFor({ state: 'detached' });
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          assert.deepEqual(await saved(p), state);
+          await tapConfirm(button(p, 'Lopeta kesken'));
+          const after = await saved(p);
+          assert.equal(after.session, null);
+          assert.deepEqual(after.history, []);
+        });
+
+        await run('the previous result of each movement is shown, and unknown values stay unknown', async (p) => {
+          const state = core.defaultState();
+          const session = core.startSession(state.routines[0]);
+          session.exercises[0].weight = '80 kg';
+          session.exercises[0].sets[0].done = true;
+          session.exercises[0].sets[0].actualReps = '6';
+          session.exercises[0].sets[1].done = true;
+          session.exercises[0].sets[1].actualWeight = '82,5';
+          state.history = [{ ...core.summarize(session, 5000), startedAt: 1000 }];
+          state.session = core.startSession(state.routines[0]);
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          await p.locator('.ex.current').waitFor();
+          assert.match(await p.locator('#exercise-0 .last-time').innerText(), /^Viimeksi .*: 6 × 80 kg \/ 5 × 82,5 kg$/);
+          assert.equal(await p.locator('#exercise-1 .last-time').count(), 0);
         });
 
         await run('failed rep writes keep the original record and expose recoverable pending reps', async (p) => {

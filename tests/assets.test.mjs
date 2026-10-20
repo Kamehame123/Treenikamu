@@ -48,6 +48,22 @@ test('page ships its own Content-Security-Policy and the service worker caches e
   for (const icon of manifest.icons) assert.ok(worker.includes(`'./${icon.src}'`), icon.src);
 });
 
+test('every module the app imports, directly or not, is precached by the service worker', async () => {
+  const worker = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const seen = new Set(), queue = ['app.js'];
+  while (queue.length) {
+    const file = queue.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+    for (const [, spec] of source.matchAll(/(?:from|import)\s*\(?\s*['"]\.\/([^'"]+\.js)['"]/g)) queue.push(spec);
+  }
+  assert.ok(seen.size > 1);
+  for (const file of seen) assert.ok(worker.includes(`'./${file}'`), `${file} missing from sw.js ASSETS`);
+  for (const [, file] of html.matchAll(/(?:src|href)="([^"#:]+\.(?:js|css))"/g)) assert.ok(worker.includes(`'./${file}'`), `${file} missing from sw.js ASSETS`);
+});
+
 test('iOS home-screen launch retains app-capable metadata and safe-area support', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /<meta name="apple-mobile-web-app-capable" content="yes">/);
