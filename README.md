@@ -43,11 +43,24 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   the recorded actual count, bounded to 0-100. The set shows the actual count and
   its original target; adjustments never change the plan, mark the set done, or
   start a rest timer. Timed and nonnumeric targets have no rep-adjustment buttons.
-- Mark sets done as before; expand the exercise's results panel to directly enter
-  or clear actual reps and enter the hardest set's RIR (repetitions in reserve,
-  0-5; 5 means at least 5). Quick adjustments and this panel use the same records.
-  An empty actual weight means the planned weight was used. Empty reps or RIR mean
-  unknown, not success. Detailed completed workouts are visible in history.
+- A second **- / + stepper** on each set adjusts the weight in 1 kg steps (decimals
+  such as 22,5 are kept). It starts from the planned weight (0 when none is
+  planned) and stores an override only while it differs from the plan. Weights
+  that are not plain kilograms (for example `2 x 10 kg`) cannot be stepped.
+- Mark sets done as before; tapping a set button or adjusting reps with the `-` / `+`
+  buttons and `+ Sarja` is sufficient for automatic progression without opening the
+  optional results panel. When RIR is not manually entered, effort is inferred
+  from completed set performance relative to target. Expand the exercise's optional
+  panel to enter exact RIR (0-5; 5 means
+  at least 5) or pain. Detailed completed workouts are visible in history.
+- Rest intervals (`recommendedRestSeconds`) are calculated automatically for each
+  exercise and set rather than requiring a manual global seconds setting:
+  180 s for heavy multi-joint work (<= 6 reps), 120-150 s for moderate compound
+  sets (lower-body and full-body movements receive 150 s, upper-body 120 s),
+  75-90 s for single-joint isolation exercises, 60 s for core and conditioning,
+  and 45 s for mobility. High effort (RIR <= 1), extra repetitions beyond target,
+  or 4th+ working sets automatically extend the rest interval by 30 s (up to
+  180 s for compounds and 120 s for isolation).
 - There is **no universal 8-15 range**. For the combined mass/strength goal,
   absent saved limits, choose a pragmatic band from the existing prescription:
   3-6 for already low-rep strength work; 6-12 for moderate mixed work; 10-20
@@ -58,33 +71,39 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 - Freeze the chosen band on the first actual revision so adding reps cannot move
   its ceiling, and lowering reps with a load increase cannot switch to another band.
   Saved min/max limits remain authoritative, including older 8-15 settings:
-  their origin cannot safely be inferred. The editor's "Laske kehitysalue uudelleen"
+  their origin cannot safely be inferred. The editor's "Valitse toistoalue automaattisesti"
   explicitly opts a movement back into selection from its current prescription.
   Available weight steps and load semantics are retained. Manual limits support
   1-30; automatic selection does not prescribe near-maximal singles or doubles.
-- With all prescribed sets completed at their targets and RIR >= 2, add at most
-  one rep per set, without increasing load or set count.
-- At the range ceiling, require two consecutive, comparable successful workouts
-  with RIR >= 2 before adding one configured equipment step. The increase cannot
-  exceed 10%. Reduce reps according to the size of that step instead of always
-  dropping to the band's lower bound (for example, 15 at 100 kg becomes an initial
-  target of 13 at 102.5 kg). The pacing rule subtracts
-  `ceil((30 + reps) * step / newWeight)`, at least one rep. This is an explicitly
-  approximate software heuristic, not a validated personal strength prediction.
-  A step whose cautious target falls below the selected band is held for a smaller
-  equipment step. Actual new-load reps/RIR determine subsequent decisions; never
-  force predicted reps, and do not increase load and reps simultaneously.
-- Each movement has its own equipment step (default 2.5 kg). Use the same load
-  convention as the workout, e.g. one dumbbell's load rather than the pair's sum.
-  Numeric kg loads are supported. Bodyweight, compound notation, other units,
-  assisted/band movements, or disabled external-load progression never receive
-  guessed load changes. Set the external-kg checkbox off for other load semantics.
-- Incomplete work, missing logs, altered prescriptions or actual loads, and stale
-  data do not justify increases. Comparisons require matching routine/exercise
-  identities and prescriptions. The latest record must be <= 14 days old, and
-  load confirmation requires consecutive non-overlapping sessions <= 21 days apart.
-- Explicit poor recovery, or two comparable sessions achieving less than 90% of
-  total target reps at RIR <= 1, can trigger a recovery prescription: approximately
+- Extra repetitions and extra completed sets are accounted for scientifically:
+  - Completing planned sets at target with RIR >= 2 adds 1 rep per set.
+  - Performing **extra repetitions** above the target advances the next workout
+    directly to the demonstrated sustainable 2-RIR repetition capacity (`r + 1`
+    at RIR >= 2, or `r - (2 - rir)` when pushing extra reps at RIR 0-1) instead
+    of only adding +1 to the old target.
+  - Performing **extra completed sets** (`+ Sarja`) at or above the target with
+    RIR >= 2 increases the next session's working set count (capped at 5 working
+    sets per exercise to prevent single-session junk volume) along with the
+    repetition progression.
+  - Surpassing the repetition ceiling via extra repetitions or completing extra
+    working sets at the ceiling with RIR >= 2 confirms strength reserve in a
+    single session and triggers an immediate load increase without waiting for a
+    second ceiling session.
+- At the range ceiling without extra reps or extra sets, require two consecutive,
+  comparable successful workouts with RIR >= 2 before adding a load step. The
+  increase cannot exceed 10%. Reduce reps according to the size of that step and
+  the demonstrated repetitions (`ceil((30 + reps) * step / newWeight)`, at least
+  one rep).
+- Load increments (`automaticWeightStep`) scale automatically with exercise
+  biomechanics and working weight (0.25-2.5 kg, or up to 2 steps when a large
+  repetition/set surplus is demonstrated while remaining <= 10% of load) so lighter
+  isolation movements and narrower strength ranges progress automatically without
+  manual step configuration. Numeric kg loads are supported. Bodyweight, compound
+  notation, other units, assisted/band movements, or disabled external-load
+  progression never receive guessed load changes.
+- Explicit poor recovery, acute severe failure (< 70% of target reps at RIR 0),
+  or two comparable sessions achieving less than 90% of total target reps at
+  RIR <= 1 triggers an automatic recovery deload: approximately
   half the sets (rounded up), lower-bound reps, and around 10% less load when the
   available equipment permits a reduction of no more than 20%. Aim for RIR 3-4.
   This is a lighter **next session**, not an automatically scheduled calendar week.
@@ -152,7 +171,10 @@ History keeps up to 10,000 completed workouts (the oldest are trimmed beyond tha
 Browser storage (`localStorage`, usually about 5 MB) is the practical limit; if a
 write fails the app shows the storage warning and offers an export. Backup files up
 to 50 MB can be imported.
-Quick rep adjustments reuse the existing optional `actualReps` field. They survive
+Quick rep and weight adjustments reuse the existing optional `actualReps` and
+`actualWeight` fields (the per-set text inputs were replaced by steppers; sessions
+saved with free-text values such as `97,5` or `105 lbs` keep them unchanged, and
+non-kilogram values simply show disabled weight buttons). They survive
 reload, workout completion, and backup/restore without any additional migration.
 Untouched sets still have unknown actual reps; planned targets are never silently
 copied into performance history merely by marking a set done.

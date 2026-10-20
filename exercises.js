@@ -356,10 +356,22 @@ Ranteiden liikkuvuus|wrist mobility`],
 ];
 
 const timed = /lankku|seinäistunta|ontto pito|v-istunta|kanto|kävely|köysiaallot|pito$/i;
+const power = /rinnalleveto|tempaus|työntö|clean|snatch|jerk/i;
+const isolation = /vipunosto|hauiskääntö|ojentaja|ristikkäistalja|pec deck|butterfly|pohje|calf|tibialis|curl|fly|pushdown|kickback|lateral raise|front raise|rear delt|reiden ?ojenn|polven ?ojenn|reiden ?kouk|leg extension|leg curl|loitonnus|lähennys|abduction|adduction|olankohotus|shrug|rannekääntö|wrist|kasvoveto|face pull|levitys|pull apart|suorin käsin|straight arm|sammakkopumppaus|frog pump|donkey kick|palopostiliike|fire hydrant|simpukkaliike|clamshell/i;
+const compound = /dippi|dip|kapea penkkipunnerrus|close grip|leuanveto|pull up|chin up/i;
+function defaultExerciseReps(category, name, aliases) {
+  if (category === 'Kestävyys') return '5 min';
+  if (category === 'Liikkuvuus' || timed.test(name)) return '30 s';
+  const text = `${name} ${aliases}`;
+  if (power.test(text)) return '5';
+  if (!compound.test(text) && (['Hauis', 'Ojentajat', 'Pohkeet'].includes(category) || isolation.test(text))) return '12';
+  if (category === 'Keskivartalo') return '12';
+  return '8';
+}
 export const EXERCISES = Object.freeze(groups.flatMap(([category, equipment, rows]) => rows.split('\n').map((row) => {
   const [name, aliases = ''] = row.split('|');
   return Object.freeze({ id: `lib-${normalizeSearch(name).replace(/ /g, '-')}`, name, category, equipment, aliases,
-    reps: category === 'Kestävyys' ? '5 min' : category === 'Liikkuvuus' || timed.test(name) ? '30 s' : '10' });
+    reps: defaultExerciseReps(category, name, aliases) });
 })));
 
 export function findExercises(query = '', { category = '', equipment = '', customOnly = false, custom = [] } = {}) {

@@ -234,16 +234,15 @@ test('bodyweight, assistance, disabled auto-load, and ambiguous units are never 
   for (const weight of ['-1', 'NaN', '1e3', '2x10', '10 lbs', 'Infinity']) assert.equal(p.parseWeight(weight), null);
 });
 
-test('missing logs, effort, partial sets, invalid input and changed actual loads block progression', () => {
+test('partial sets and invalid log values block progression while inferred completion and heavier loads work', () => {
   for (const alter of [
-    (e) => { delete e.rir; },
     (e) => { e.rir = '6'; },
     (e) => { e.rir = '-1'; },
-    (e) => { delete e.sets[1].actualReps; },
+    (e) => { e.sets[1].actualReps = ''; },
     (e) => { e.sets[1].actualReps = '9.5'; },
     (e) => { e.sets[1].actualReps = '101'; },
     (e) => { e.sets[1].done = false; },
-    (e) => { e.sets[1].actualWeight = '105 kg'; },
+    (e) => { e.sets[1].actualWeight = '105 lbs'; },
   ]) {
     const state = fixture();
     const log = record(state);
@@ -253,10 +252,79 @@ test('missing logs, effort, partial sets, invalid input and changed actual loads
     assert.deepEqual(exercise(state), before);
     assert.equal(decision(state).kind, 'hold');
   }
+  const inferred = fixture();
+  const log = record(inferred);
+  delete log.exercises[0].rir;
+  delete log.exercises[0].sets[1].actualReps;
+  revise(inferred);
+  assert.equal(decision(inferred).kind, 'reps');
+  assert.equal(exercise(inferred).reps, '11');
   const equivalent = fixture();
   record(equivalent, 0, { weight: '100,0' });
   revise(equivalent);
   assert.equal(decision(equivalent).kind, 'reps');
+});
+
+test('extra repetitions and extra sets are accounted for scientifically in the next training', () => {
+  // Extra reps within the range jump directly to the proven sustainable capacity.
+  const extraReps = fixture('8');
+  record(extraReps, 0, { reps: ['11', '11', '11'], rir: '2' });
+  revise(extraReps);
+  assert.equal(decision(extraReps).kind, 'reps');
+  assert.equal(exercise(extraReps).reps, '12');
+  assert.equal(exercise(extraReps).sets, 3);
+
+  // Extra reps pushed to RIR 1 still advance when sustainable 2-RIR capacity exceeds the target.
+  const apret = fixture('8');
+  record(apret, 0, { reps: ['11', '11', '11'], rir: '1' });
+  revise(apret);
+  assert.equal(decision(apret).kind, 'reps');
+  assert.equal(exercise(apret).reps, '10');
+
+  // Extra reps exceeding the range ceiling trigger an immediate single-session load increase.
+  const ceilingSurplus = fixture('12', { progression: { minReps: 6, maxReps: 12, weightStep: 2.5 } });
+  record(ceilingSurplus, 0, { reps: ['14', '14', '14'], rir: '2' });
+  revise(ceilingSurplus);
+  assert.equal(decision(ceilingSurplus).kind, 'load');
+  assert.equal(exercise(ceilingSurplus).weight, '102.5 kg');
+  assert.equal(exercise(ceilingSurplus).reps, '11');
+
+  // Extra completed sets within the range increase working sets (capped at 5 to avoid junk volume) and reps.
+  const extraSets = fixture('10');
+  const summary = record(extraSets, 0, { reps: ['11', '11', '11'], rir: '2' });
+  summary.exercises[0].sets.push({ done: true, actualReps: '11' });
+  revise(extraSets);
+  assert.equal(decision(extraSets).kind, 'reps');
+  assert.equal(exercise(extraSets).sets, 4);
+  assert.equal(exercise(extraSets).reps, '12');
+
+  // Extra completed sets at the range ceiling immediately confirm load progression.
+  const extraSetAtCeiling = fixture('15');
+  const ceilingLog = record(extraSetAtCeiling, 0, { reps: ['15', '15', '15'], rir: '2' });
+  ceilingLog.exercises[0].sets.push({ done: true, actualReps: '15' });
+  revise(extraSetAtCeiling);
+  assert.equal(decision(extraSetAtCeiling).kind, 'load');
+  assert.equal(exercise(extraSetAtCeiling).weight, '102.5 kg');
+  assert.equal(exercise(extraSetAtCeiling).sets, 3);
+});
+
+test('automatic weight steps and rest intervals adapt to exercise biomechanics, load and effort', () => {
+  const lightIsolation = automaticFixture('12', { name: 'Vipunosto sivulle', weight: '8 kg' });
+  assert.equal(p.automaticWeightStep(exercise(lightIsolation)), 0.5);
+  assert.equal(p.recommendedRestSeconds(exercise(lightIsolation)), 90);
+  const heavySquat = automaticFixture('5', { name: 'Takakyykky', weight: '120 kg' });
+  assert.equal(p.automaticWeightStep(exercise(heavySquat)), 2.5);
+  assert.equal(p.recommendedRestSeconds(exercise(heavySquat)), 180);
+  const corePlank = automaticFixture('45 s', { name: 'Lankku', weight: '' });
+  assert.equal(p.recommendedRestSeconds(exercise(corePlank)), 60);
+  const mobility = automaticFixture('30 s', { name: 'Lonkan koukistajan venytys', weight: '' });
+  assert.equal(p.recommendedRestSeconds(exercise(mobility)), 45);
+  // Light isolation at ceiling progresses automatically with a 0.5 kg step without user config.
+  const iso = automaticFixture('20', { name: 'Vipunosto sivulle', weight: '8 kg' });
+  record(iso, 7); record(iso);
+  revise(iso);
+  assert.equal(decision(iso).kind, 'load');
+  assert.equal(exercise(iso).weight, '8.5 kg');
 });
 
 test('pain always blocks changes, even when fatigued or otherwise ready for more', () => {
@@ -327,8 +395,8 @@ test('an already minimal prescription is truly unchanged when no deload reductio
   assert.equal(p.canUndoRevision(state.routines[0]), false);
 });
 
-test('stale, changed, interrupted, painful and fatigued prior sessions cannot confirm load increases', () => {
-  for (const options of [{ days: 22 }, { partial: true }, { pain: true }, { fatigued: true }, { rir: '' }]) {
+test('stale, changed, interrupted, painful, fatigued and low-RIR prior sessions cannot confirm load increases', () => {
+  for (const options of [{ days: 22 }, { partial: true }, { pain: true }, { fatigued: true }, { rir: '1' }]) {
     const state = fixture('15');
     record(state, options.days ?? 7, options);
     record(state); revise(state);

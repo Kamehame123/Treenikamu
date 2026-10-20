@@ -13,7 +13,8 @@
 //   BACKUP_VERSION if the envelope itself changes; then keep reading the older envelopes.
 // - Files from a newer app version are refused, never guessed at.
 import { CATEGORIES, EQUIPMENT, normalizeSearch } from './exercises.js';
-import { progressionConfig, targetReps } from './progression.js';
+import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight } from './progression.js';
+export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
 export const SCHEMA = 1;
@@ -403,6 +404,27 @@ export function adjustSetReps(session, ei, si, delta) {
   if (reps < 0 || reps > 100) return { ok: false, error: 'Toteutuneiden toistojen on oltava välillä 0–100.' };
   set.actualReps = String(reps);
   return { ok: true, reps };
+}
+
+// Weight a set is logged at, in kg; an empty plan means 0 and null means not numeric.
+export function setWeightValue(exercise, set) {
+  const text = String(set?.actualWeight || exercise?.weight || '').trim();
+  return text === '' ? 0 : parseWeight(text);
+}
+
+// Moves the logged weight by delta kg; landing on the planned weight clears the override.
+export function adjustSetWeight(session, ei, si, delta) {
+  const exercise = session?.exercises[ei], set = exercise?.sets[si];
+  if (!set) return { ok: false, error: 'Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.' };
+  const current = setWeightValue(exercise, set);
+  if (current === null || !Number.isFinite(delta) || delta === 0) {
+    return { ok: false, error: 'Pikamuutos vaatii painon kilogrammoina (esim. 22,5). Tarkista paino.' };
+  }
+  const weight = Math.round((current + delta + Number.EPSILON) * 100) / 100;
+  if (weight < 0 || weight > 10000) return { ok: false, error: 'Painon on oltava välillä 0–10 000 kg.' };
+  if (weight === (String(exercise.weight ?? '').trim() === '' ? 0 : parseWeight(exercise.weight))) delete set.actualWeight;
+  else set.actualWeight = String(weight).replace('.', ',');
+  return { ok: true, weight };
 }
 
 export function addSet(session, ei) {

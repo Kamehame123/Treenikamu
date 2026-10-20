@@ -31,8 +31,8 @@ async function seed(page, state) {
   await page.reload();
   await page.locator('h1').waitFor();
 }
-async function log(page, field, value, si = 0) {
-  const input = page.locator(`[data-log="${field}"]${field.startsWith('actual') ? `[data-s="${si}"]` : ''}`);
+async function log(page, field, value) {
+  const input = page.locator(`[data-log="${field}"]`);
   await input.fill(value);
   await idle(page);
 }
@@ -97,7 +97,8 @@ try {
           await page.locator('.progression-editor summary').click();
           assert.equal(await page.locator('[data-progression="minReps"]').inputValue(), '8');
           assert.equal(await page.locator('[data-progression="maxReps"]').inputValue(), '15');
-          await tap(button(page, 'Laske kehitysalue uudelleen'));
+          await tap(button(page, 'Valitse toistoalue automaattisesti'));
+          assert.match(await page.locator('.progression-editor .notice').innerText(), /Toistoalue valittu automaattisesti: 6–12 toistoa/);
           assert.equal(await page.locator('[data-progression="minReps"]').inputValue(), '6');
           assert.equal(await page.locator('[data-progression="maxReps"]').inputValue(), '12');
           await tap(button(page, 'Tallenna harjoitus'));
@@ -110,17 +111,19 @@ try {
           assert.equal(await page.locator('[data-progression="autoLoad"]').isChecked(), false);
         });
 
-        await run('actual reps, decimal loads, RIR zero, fatigue and pain persist before blur and reload', async (page) => {
+        await run('stepper reps and loads, RIR zero, fatigue and pain persist across reload', async (page) => {
           await seed(page, fixture());
+          await tap(page.locator('[data-key="reps-minus-0-0"]'));
+          await tap(page.locator('[data-key="reps-plus-0-1"]'));
+          await tap(page.locator('[data-key="weight-minus-0-0"]'));
           await page.locator('.exercise-log summary').click();
-          await log(page, 'actualReps', '9', 0);
-          await log(page, 'actualReps', '10', 1);
-          await log(page, 'actualWeight', '97,5', 0);
           await log(page, 'rir', '0');
           await page.locator('[data-log="fatigued"]').check(); await idle(page);
           await page.locator('[data-log="pain"]').check(); await idle(page);
           const before = await saved(page);
-          assert.equal(before.session.exercises[0].sets[0].actualWeight, '97,5');
+          assert.equal(before.session.exercises[0].sets[0].actualReps, '9');
+          assert.equal(before.session.exercises[0].sets[1].actualReps, '11');
+          assert.equal(before.session.exercises[0].sets[0].actualWeight, '99');
           assert.equal(before.session.exercises[0].rir, '0');
           await page.reload();
           assert.deepEqual((await saved(page)).session, before.session);
@@ -129,10 +132,8 @@ try {
           assert.equal(await page.locator('[data-log="pain"]').isChecked(), true);
           await log(page, 'rir', '');
           assert.equal('rir' in (await saved(page)).session.exercises[0], false);
-          await page.locator('[data-log="actualWeight"][data-s="0"]').fill('20 lbs');
-          await page.locator('[data-log="actualWeight"][data-s="0"]').blur();
-          assert.match(await page.getByRole('alert').innerText(), /kilogrammoina/);
-          assert.equal((await saved(page)).session.exercises[0].sets[0].actualWeight, '97,5');
+          await tap(page.locator('[data-key="weight-plus-0-0"]'));
+          assert.equal('actualWeight' in (await saved(page)).session.exercises[0].sets[0], false);
         });
 
         await run('manual revision is opt-in, reports exact changes, and undo survives reload without altering history', async (page) => {
@@ -179,14 +180,29 @@ try {
           assert.match(await page.locator('.history-log').innerText(), /10 toistoa @ 100 kg/);
         });
 
-        await run('checking sets alone cannot manufacture performance or increase targets', async (page) => {
+        await run('checking sets, extra reps and extra sets automatically progress targets and calculate rest', async (page) => {
           const state = fixture({ autoProgress: true });
-          state.session.exercises[0].sets.forEach((set) => { set.done = true; });
+          state.settings.autoRest = true;
           await seed(page, state);
+          assert.match(await page.locator('#exercise-0 .target').innerText(), /Lepo 2:30/);
+          await tap(page.locator('[data-key="reps-plus-0-0"]'));
+          await tap(page.locator('[data-key="reps-plus-0-0"]'));
+          await tap(page.locator('[data-key="reps-plus-0-1"]'));
+          await tap(page.locator('[data-key="reps-plus-0-1"]'));
+          await tap(page.locator('[data-key="reps-plus-0-2"]'));
+          await tap(page.locator('[data-key="reps-plus-0-2"]'));
+          await tap(button(page, 'Lisää sarja: Kyykky'));
+          await tap(page.locator('[data-key="reps-plus-0-3"]'));
+          await tap(page.locator('[data-key="reps-plus-0-3"]'));
+          for (let i = 0; i < 4; i++) await tap(page.locator(`[data-key="s0-${i}"]`));
           await tap(button(page, 'Tallenna harjoitus'));
+          const updated = await saved(page);
+          assert.equal(updated.routines[0].exercises[0].sets, 4);
+          assert.equal(updated.routines[0].exercises[0].reps, '13');
+          assert.match(await page.locator('.revision-report').innerText(), /ylimääräistä toistoa ja 1 lisäsarjaa/);
+          await tap(button(page, 'Peru tarkistus'));
+          assert.equal((await saved(page)).routines[0].exercises[0].sets, 3);
           assert.equal((await saved(page)).routines[0].exercises[0].reps, '10');
-          assert.match(await page.locator('.revision-report').innerText(), /toteutuneet toistot/);
-          assert.equal(await button(page, 'Peru tarkistus').count(), 0);
         });
 
         await run('two ceiling successes produce a smaller-rep next workout at the new weight', async (page) => {
@@ -262,7 +278,7 @@ try {
           // A fresh completed session allows another revision, but a failed write must not consume it.
           await tap(button(page, 'Aloita harjoitus'));
           await page.locator('.exercise-log summary').click();
-          for (let i = 0; i < 3; i++) { await log(page, 'actualReps', '10', i); await tap(page.locator(`[data-key="s0-${i}"]`)); }
+          for (let i = 0; i < 3; i++) await tap(page.locator(`[data-key="s0-${i}"]`));
           await log(page, 'rir', '2');
           await tap(button(page, 'Takaisin harjoituksiin'));
           await page.getByRole('switch', { name: 'Tarkista automaattisesti: Kasvu' }).uncheck(); await idle(page);
