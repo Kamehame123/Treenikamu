@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
 
 const { server, url } = await startServer();
 const button = (page, name) => page.getByRole('button', { name, exact: true });
@@ -261,8 +261,7 @@ try {
           await p.reload();
           assert.equal(await p.locator('[data-key="s0-0"] .set-value').innerText(), '3 x 25kg');
           assert.equal(await p.locator('#exercise-0 .set-entry').first().locator('.rep-adjust b').innerText(), '3');
-          p.once('dialog', (dialog) => dialog.accept());
-          await tap(button(p, 'Lopeta kesken'));
+          await tapConfirm(button(p, 'Lopeta kesken'));
           after = await saved(p);
           assert.equal(after.history[0].exercises[0].sets[0].actualReps, '3');
           assert.equal(after.history[0].exercises[0].sets[1].actualReps, '9');

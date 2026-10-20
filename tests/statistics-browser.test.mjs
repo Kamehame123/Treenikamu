@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as core from '../core.js';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
 import { configuredState, workout, baselineHistory, statisticsRoutine, DAY } from './statistics-fixtures.mjs';
 
 const { server, url } = await startServer();
@@ -135,8 +135,7 @@ try {
           await page.reload();
           current = await saved(page);
           assert.equal(current.session.exercises[0].sets[0].kind, 'warmup');
-          page.once('dialog', (dialog) => dialog.accept());
-          await tap(button(page, 'Lopeta kesken'));
+          await tapConfirm(button(page, 'Lopeta kesken'));
           current = await saved(page);
           assert.equal(current.session, null);
           assert.equal(current.history[0].exercises[0].tracking.loadType, 'per-hand');

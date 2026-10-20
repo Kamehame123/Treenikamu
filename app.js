@@ -30,6 +30,22 @@ function announce(text) {
   clearTimeout(announceId); $live.textContent = '';
   announceId = setTimeout(() => { $live.textContent = text; }, 40);
 }
+// Native confirm() titles the dialog with the page origin (the GitHub Pages host), so ask in-app instead.
+function askConfirm(message, accept = 'Vahvista') {
+  return new Promise((resolve) => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'confirm';
+    dialog.setAttribute('role', 'alertdialog');
+    dialog.setAttribute('aria-labelledby', 'confirm-title');
+    dialog.setAttribute('aria-describedby', 'confirm-text');
+    dialog.innerHTML = `<h2 id="confirm-title">Treenipäiväkirja</h2><p id="confirm-text">${esc(message)}</p><div class="confirm-actions"><button class="btn" value="cancel" autofocus>Peruuta</button><button class="btn primary" value="ok">${esc(accept)}</button></div>`;
+    dialog.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) dialog.close(b.value); });
+    dialog.addEventListener('close', () => { dialog.remove(); resolve(dialog.returnValue === 'ok'); });
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+}
+const CHANGED_ELSEWHERE = 'Tilanne muuttui toisessa välilehdessä. Näkymä on päivitetty. Yritä uudelleen.';
 let storage = null;
 let storageOk = true;
 let durableRaw = null;
@@ -620,7 +636,7 @@ const actions = {
   },
   async saveindex() {
     const keys = [...document.querySelectorAll('input[name="benchmark"]:checked')].map((t) => t.value);
-    if (state.statistics && !confirm('Aloitetaanko uusi indeksivertailu nykyisistä tuloksista? Vanha indeksin lähtötaso korvataan. Harjoitushistoria säilyy.')) return;
+    if (state.statistics && !await askConfirm('Aloitetaanko uusi indeksivertailu nykyisistä tuloksista? Vanha indeksin lähtötaso korvataan. Harjoitushistoria säilyy.', 'Aloita uusi')) return;
     let message = '';
     const ok = await mutate((next) => {
       const result = configureIndex(buildStatistics(next.history), keys);
@@ -660,11 +676,11 @@ const actions = {
     readLatest();
     let confirmed = false;
     if (state.session) {
-      if (!confirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.')) return;
+      if (!await askConfirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.', 'Korvaa')) return;
       confirmed = true;
     }
     await mutate((next) => {
-      if (next.session && !confirmed && !confirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.')) return false;
+      if (next.session && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
       const session = core.startSession(byId(t.dataset.id, next));
       if (!session) { announce('Lisää ensin vähintään yksi liike.'); return false; }
       next.session = session; next.restEnd = null;
@@ -672,8 +688,8 @@ const actions = {
     if (state.session) { view = 'workout'; render(); }
   },
   resume() { view = 'workout'; render(); showCurrentExercise({ focus: true }); },
-  home() {
-    if (draft && JSON.stringify({ name: draft.name, exercises: draft.exercises }) !== draft.initial && !confirm('Hylätäänkö harjoituksen tallentamattomat muutokset?')) return;
+  async home() {
+    if (draft && JSON.stringify({ name: draft.name, exercises: draft.exercises }) !== draft.initial && !await askConfirm('Hylätäänkö harjoituksen tallentamattomat muutokset?', 'Hylkää')) return;
     clearDraft(); view = 'home'; render();
   },
   async retry() {
@@ -681,8 +697,8 @@ const actions = {
     await mutate(() => {}, { critical: true });
     if (storageOk) announce('Edistyminen tallennettu.');
   },
-  reloadsaved() {
-    if (!confirm('Korvataanko tämän välilehden tallentamattomat muutokset tallennetulla versiolla? Vie muutokset ensin talteen, jos haluat säilyttää molemmat.')) return;
+  async reloadsaved() {
+    if (!await askConfirm('Korvataanko tämän välilehden tallentamattomat muutokset tallennetulla versiolla? Vie muutokset ensin talteen, jos haluat säilyttää molemmat.', 'Lataa tallennettu')) return;
     dirty = false; saveConflict = false; storageOk = true; readLatest(); render();
   },
   async set(t) {
@@ -732,13 +748,13 @@ const actions = {
     const shown = state.session?.exercises[+t.dataset.e];
     let confirmed = false;
     if (shown?.sets.length > 1 && shown.sets.at(-1).done) {
-      if (!confirm('Poistetaanko tehty sarja? Myös sen suoritusmerkintä poistuu.')) return;
+      if (!await askConfirm('Poistetaanko tehty sarja? Myös sen suoritusmerkintä poistuu.', 'Poista')) return;
       confirmed = true;
     }
     await mutate((next) => {
       const ex = next.session?.exercises[+t.dataset.e];
       if (!ex || ex.sets.length < 2) return false;
-      if (ex.sets.at(-1).done && !confirmed && !confirm('Poistetaanko tehty sarja? Myös sen suoritusmerkintä poistuu.')) return false;
+      if (ex.sets.at(-1).done && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
       core.removeSet(next.session, +t.dataset.e);
       const p = core.progress(next.session); if (p.done === p.total) next.restEnd = null;
     }, sessionOptions());
@@ -752,14 +768,14 @@ const actions = {
     if (state.session) {
       const shown = core.progress(state.session);
       if (shown.done < shown.total) {
-        if (!confirm(`${shown.total - shown.done} sarjaa on tekemättä. Lopetetaanko silti?`)) return;
+        if (!await askConfirm(`${shown.total - shown.done} sarjaa on tekemättä. Lopetetaanko silti?`, 'Lopeta')) return;
         confirmed = true;
       }
     }
     const ok = await mutate((next) => {
       if (!next.session) return false;
       const p = core.progress(next.session);
-      if (p.done < p.total && !confirmed && !confirm(`${p.total - p.done} sarjaa on tekemättä. Lopetetaanko silti?`)) return false;
+      if (p.done < p.total && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
       routineId = next.session.routineId;
       if (p.done) next.history.unshift(core.summarize(next.session));
       next.history = next.history.slice(0, core.MAX_HISTORY); next.session = null; next.restEnd = null;
@@ -771,7 +787,7 @@ const actions = {
     }
   },
   async discard() {
-    if (!confirm('Hylätäänkö harjoitus? Suoritusmerkinnät menetetään.')) return;
+    if (!await askConfirm('Hylätäänkö harjoitus? Suoritusmerkinnät menetetään.', 'Hylkää')) return;
     if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { view = 'home'; render(); }
   },
   new() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
@@ -829,7 +845,7 @@ const actions = {
     if (ok) { clearDraft(); view = 'home'; render(); announce('Harjoitus tallennettu.'); }
   },
   async delroutine() {
-    if (!confirm('Poistetaanko harjoitusohjelma? Keskeneräinen harjoitus ei muutu.')) return;
+    if (!await askConfirm('Poistetaanko harjoitusohjelma? Keskeneräinen harjoitus ei muutu.', 'Poista')) return;
     const ok = await mutate((next) => {
       if (next.routines.length < 2) { editorError('Säilytä vähintään yksi harjoitus. Luo ensin uusi ohjelma.'); return false; }
       if (JSON.stringify(byId(draft.id, next)) !== draft.base) { editorError('Harjoitus muuttui toisessa välilehdessä. Peruuta ja avaa se uudelleen ennen poistamista.'); return false; }
@@ -848,7 +864,7 @@ const actions = {
   },
   async resetunreadable() {
     if (!unreadable || !storage) return;
-    if (!confirm('Aloitetaanko tyhjästä? Vioittuneet tiedot siirretään talteen selaimen tallennustilaan, mutta sovellus ei enää näytä niitä. Vie ne ensin tiedostoksi, jos haluat säilyttää ne.')) return;
+    if (!await askConfirm('Aloitetaanko tyhjästä? Vioittuneet tiedot siirretään talteen selaimen tallennustilaan, mutta sovellus ei enää näytä niitä. Vie ne ensin tiedostoksi, jos haluat säilyttää ne.', 'Aloita tyhjästä')) return;
     const run = async () => {
       const raw = storage.getItem(core.STORAGE_KEY);
       if (core.storageProblem(raw) !== 'unreadable') { checkProblem(raw); storageOk = !locked(); readLatest(); render(); return; }
@@ -896,7 +912,7 @@ $file.addEventListener('change', async () => {
   const question = mode === 'replace'
     ? `Korvataanko ohjelmat, historia, omat liikkeet ja asetukset varmuuskopiolla${when}: ${counts}? Vie nykyiset tiedot ensin varmuuskopioksi, jos haluat säilyttää ne.`
     : `Yhdistetäänkö varmuuskopio${when} nykyisiin tietoihin: ${counts}?`;
-  if (!confirm(question)) return importDone('Tuonti peruttu. Mitään ei muutettu.');
+  if (!await askConfirm(question, mode === 'replace' ? 'Korvaa' : 'Yhdistä')) return importDone('Tuonti peruttu. Mitään ei muutettu.');
   let result = null;
   const ok = await mutate((next) => {
     const merged = mode === 'replace' ? core.replaceState(next, parsed.state) : core.mergeState(next, parsed.state);

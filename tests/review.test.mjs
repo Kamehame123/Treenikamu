@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { chromium, webkit, devices, startServer, root, tap } from './support.mjs';
+import { chromium, webkit, devices, startServer, root, tap, tapConfirm } from './support.mjs';
 import { join } from 'node:path';
 
 const { server, url } = await startServer();
@@ -94,8 +94,7 @@ try {
           const download = p.waitForEvent('download');
           await tap(p.getByRole('button', { name: 'Vie alkuperäiset tiedot' }));
           assert.equal(await readFile(await (await download).path(), 'utf8'), broken);
-          p.once('dialog', (dialog) => dialog.accept());
-          await tap(p.getByRole('button', { name: 'Aloita tyhjästä' }));
+          await tapConfirm(p.getByRole('button', { name: 'Aloita tyhjästä' }));
           await p.getByRole('heading', { name: 'Treenipäiväkirja', exact: true }).waitFor();
           assert.equal(await alert.count(), 0);
           const rescued = await p.evaluate((raw) => Object.keys(localStorage).filter((k) => k.startsWith('gym-tracker-v1-unreadable-') && localStorage.getItem(k) === raw), broken);
@@ -181,8 +180,7 @@ try {
           await p.goto(url); await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
           await tap(p.locator('[data-key="s0-0"]'));
           await p.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('quota'); }; });
-          p.on('dialog', (d) => d.accept());
-          await tap(p.getByRole('button', { name: 'Lopeta kesken', exact: true }));
+          await tapConfirm(p.getByRole('button', { name: 'Lopeta kesken', exact: true }));
           assert.equal(await p.locator('.set').count(), 15);
           assert.ok(await p.getByRole('alert').count());
         });
@@ -212,10 +210,11 @@ try {
         await check('removing completed set requires explicit confirmation', async (p) => {
           await p.goto(url); await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
           await tap(p.locator('[data-key="s0-2"]'));
-          let asked = false;
-          p.on('dialog', async (d) => { asked = true; await d.dismiss(); });
-          await tap(p.locator('[data-action="rmset"]').first());
-          assert.equal(asked, true);
+          await p.locator('[data-action="rmset"]').first().click();
+          assert.equal(await p.getByRole('alertdialog').getByRole('heading').innerText(), 'Treenipäiväkirja');
+          await p.getByRole('alertdialog').getByRole('button', { name: 'Peruuta' }).click();
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          assert.equal(await p.getByRole('alertdialog').count(), 0);
           assert.equal(await p.locator('.ex').first().locator('.set').count(), 3);
         });
         await check('timed exercise label is a duration, never seconds reps', async (p) => {

@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
 
 const shots = join(tmpdir(), 'tracker-shots'); mkdirSync(shots, { recursive: true });
 const { server, url } = await startServer();
@@ -47,7 +47,6 @@ async function suite(name, type, device) {
     // this audit context; the separate offline/functional context below enforces it.
     const context = await browser.newContext({ ...devices[device], colorScheme: 'dark', bypassCSP: true });
     const page = await context.newPage(); page.setDefaultTimeout(10000);
-    page.on('dialog', (d) => d.accept());
     const errors = [], policyErrors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (msg) => { if (/Content Security Policy|Refused to|violates.*directive/.test(msg.text())) policyErrors.push(msg.text()); });
@@ -66,11 +65,12 @@ async function suite(name, type, device) {
     eq(backup.format, 'gym-tracker-backup', 'export envelope'); eq(backup.formatVersion, 1, 'export envelope version');
     eq(backup.data.v, 1, 'export schema'); eq(backup.data.routines.length, 1, 'export contains plans');
 
-    const importFile = async (key, payload) => {
+    const importFile = async (key, payload, asks = true) => {
       const before = await page.locator('#import-status').textContent().catch(() => null);
       const chooser = page.waitForEvent('filechooser');
       await page.locator(`[data-key="${key}"]`).click();
       await (await chooser).setFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload)) });
+      if (asks) await page.getByRole('alertdialog').getByRole('button').nth(1).click();
       await page.waitForFunction((prev) => { const s = document.getElementById('import-status'); return s && s.textContent !== prev; }, before);
     };
     const extra = JSON.parse(JSON.stringify(backup));
@@ -84,9 +84,9 @@ async function suite(name, type, device) {
     eq([after.routines.length, after.history.length], [2, 1], 'importing the same file again changes nothing');
     await importFile('import', { v: 1, routines: [{ id: 'old-1', name: 'Legacy plan', exercises: [{ name: 'Press' }] }], history: [] });
     eq((await saved()).routines.length, 3, 'legacy pre-envelope export imports');
-    await importFile('import', 'not a backup');
+    await importFile('import', 'not a backup', false);
     eq((await saved()).routines.length, 3, 'invalid file leaves data unchanged');
-    await importFile('import', { format: 'gym-tracker-backup', formatVersion: 1, data: { v: 999, routines: [] } });
+    await importFile('import', { format: 'gym-tracker-backup', formatVersion: 1, data: { v: 999, routines: [] } }, false);
     eq((await saved()).routines.length, 3, 'newer-version file leaves data unchanged');
     await importFile('restore', backup);
     after = await saved();
@@ -124,10 +124,15 @@ async function suite(name, type, device) {
     for (let i = 0; i < 17; i++) await tap(page.locator('[data-action="addset"]').first());
     eq(await page.locator('.ex').first().locator('.set').count(), 20, 'max set count');
     check(await page.locator('[data-action="addset"]').first().isDisabled(), 'max disables add');
-    for (let i = 0; i < 19; i++) await tap(page.locator('[data-action="rmset"]').first());
+    for (let i = 0; i < 19; i++) {
+      // Removing a completed set asks first; undone sets are removed directly.
+      const lastDone = await page.locator('.ex').first().locator('.set').last().getAttribute('aria-pressed') === 'true';
+      const remove = page.locator('[data-action="rmset"]').first();
+      if (lastDone) await tapConfirm(remove); else await tap(remove);
+    }
     eq(await page.locator('.ex').first().locator('.set').count(), 1, 'min set count');
     check(await page.locator('[data-action="rmset"]').first().isDisabled(), 'min disables removal');
-    await tap(button('Lopeta kesken')); eq(await page.locator('.hist').count(), 1, 'finish early history');
+    await tapConfirm(button('Lopeta kesken')); eq(await page.locator('.hist').count(), 1, 'finish early history');
     await page.reload(); eq(await page.locator('.hist').count(), 1, 'history durable after reload');
 
     await tap(button('Aloita harjoitus'));
@@ -168,8 +173,8 @@ async function suite(name, type, device) {
     await tap(button('Takaisin harjoituksiin')); await tap(button('Muokkaa: Koko keho A'));
     await page.locator('[data-f="sets"]').first().fill('5'); await tap(button('Tallenna harjoitus'));
     await tap(button('Jatka harjoitusta')); eq(await sets().count(), 15, 'template edit leaves active snapshot alone');
-    await tap(button('Hylkää harjoitus')); eq(await page.locator('.hist').count(), 2, 'discard adds no history');
-    await tap(page.getByRole('button', { name: /Muokkaa: <img/ })); await tap(button('Poista harjoitus'));
+    await tapConfirm(button('Hylkää harjoitus')); eq(await page.locator('.hist').count(), 2, 'discard adds no history');
+    await tap(page.getByRole('button', { name: /Muokkaa: <img/ })); await tapConfirm(button('Poista harjoitus'));
     eq(await page.locator('.routine').count(), 1, 'delete template');
 
     for (const bad of ['{nope', '{"routines":5,"session":{"exercises":"x"},"history":[1,null]}']) {

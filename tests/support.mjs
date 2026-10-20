@@ -26,6 +26,17 @@ export async function tap(locator) {
   await locator.page().waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
 }
 
+// The in-app confirmation holds aria-busy until answered, so click, answer, then wait for idle.
+export async function tapConfirm(locator, accept = true) {
+  const page = locator.page();
+  await expandRoutines(page);
+  await locator.click();
+  const dialog = page.getByRole('alertdialog');
+  await dialog.getByRole('button').nth(accept ? 1 : 0).click();
+  await dialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+}
+
 export async function startServer() {
   const port = 24000 + Math.floor(Math.random() * 20000);
   const server = spawn(process.execPath, ['tools/serve.mjs', String(port)], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
