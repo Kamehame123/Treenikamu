@@ -241,6 +241,7 @@ try {
           await p.locator('[data-custom="name"]').fill('Oma testiliike');
           await tap(button(p, 'Tallenna ja lisää harjoitukseen'));
           assert.match(await p.locator('.library-done').innerText(), /1 lisätty/);
+          assert.equal(await p.evaluate(() => !!document.activeElement.closest('.exercise-choice, .library-done')), true);
           assert.equal((await saved(p)).customExercises.length, 1);
           await p.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('quota'); }; });
           await p.locator('#exercise-search').fill('lankku');
@@ -249,6 +250,24 @@ try {
           await tap(button(p, 'Valmis · takaisin harjoitukseen'));
           assert.equal(await p.locator('[data-f="name"]').count(), 2);
         });
+
+        await run('multi-add, filter reset and draft recovery work fully offline', async (p) => {
+          await p.goto(url);
+          await p.evaluate(() => navigator.serviceWorker.ready);
+          await p.reload();
+          await p.context().setOffline(true);
+          await openLibrary(p);
+          await tap(button(p, 'Lisää useita peräkkäin'));
+          await p.locator('#exercise-search').fill('lankku');
+          await tap(p.locator('[data-id="lib-lankku"]'));
+          await tap(button(p, 'Tyhjennä haku ja suodattimet'));
+          await p.locator('#exercise-search').fill('bench press');
+          await tap(p.locator('[data-id="lib-penkkipunnerrus"]'));
+          await p.reload();
+          assert.equal(await p.locator('[data-f="name"]').count(), 2);
+          await tap(button(p, 'Tallenna harjoitus'));
+          assert.equal((await saved(p)).routines.at(-1).exercises.length, 2);
+        }, { serviceWorkers: 'allow' });
 
         await run('new controls meet accessibility, touch-size and overflow checks', async (p) => {
           await openLibrary(p);

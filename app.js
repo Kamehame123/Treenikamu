@@ -7,6 +7,8 @@ history.scrollRestoration = 'manual';
 const $app = document.getElementById('app');
 const $live = document.getElementById('live');
 const DRAFT_KEY = 'gym-tracker-draft-v1';
+const BACKUP_KEY = 'gym-tracker-last-backup';
+const BACKUP_REMIND_DAYS = 7;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const blankEx = () => ({ id: core.uid(), name: '', sets: 3, reps: '10', weight: '' });
@@ -118,6 +120,19 @@ async function mutate(change, { critical = false, sessionId = null } = {}) {
 }
 
 const warn = () => storageOk ? '' : `<div class="banner" role="alert">${icon('shield')}<div><strong>${newerSchema ? 'Päivitä sovellus' : 'Tallennus vaatii huomiota'}</strong><p>${esc(newerSchema ? 'Tiedot on tallennettu uudemmalla sovelluksella. Tämä versio ei muuta niitä. Sulje sovelluksen välilehdet, yhdistä verkkoon ja avaa uudelleen. Voit viedä alkuperäiset tiedot talteen.' : saveMessage || 'Tallennus ei ole käytettävissä. Muutokset katoavat, jos suljet välilehden.')}</p><div class="recovery-actions">${newerSchema ? '' : '<button class="btn small" data-action="retry" data-key="retry">Yritä tallentaa uudelleen</button>'}<button class="btn small" data-action="export" data-key="export-pending">${newerSchema ? 'Vie alkuperäiset tiedot' : 'Vie tallentamattomat muutokset'}</button>${saveConflict ? '<button class="btn small" data-action="reloadsaved" data-key="reloadsaved">Lataa tallennettu versio</button>' : ''}</div></div></div>`;
+function lastBackupAt() {
+  try { const t = Number(localStorage.getItem(BACKUP_KEY)); return Number.isFinite(t) && t > 0 ? t : 0; } catch { return 0; }
+}
+function backupCard() {
+  const last = lastBackupAt();
+  const days = last ? Math.max(0, Math.floor((Date.now() - last) / 86400000)) : null;
+  const due = state.history.length > 0 && (days === null || days >= BACKUP_REMIND_DAYS);
+  const status = days === null ? 'Et ole vielä tehnyt varmuuskopiota.'
+    : `Viimeisin varmuuskopio: ${new Date(last).toLocaleDateString('fi-FI')} (${days === 0 ? 'tänään' : days === 1 ? 'eilen' : `${days} päivää sitten`}).`;
+  const advice = due ? 'Tee varmuuskopio nyt. Tietosi ovat vain tällä laitteella ja katoavat, jos selaintiedot tyhjennetään tai sovellus poistetaan.'
+    : `Tietosi ovat vain tällä laitteella. Tee varmuuskopio vähintään kerran viikossa ja tallenna tiedosto pilveen tai lähetä se itsellesi sähköpostilla.`;
+  return `<section class="backup card${due ? ' due' : ''}" aria-labelledby="backup-title"><div class="row">${icon('shield')}<div class="grow"><span class="eyebrow${due ? ' accent' : ''}">${due ? 'MUISTUTUS' : 'TIETOJEN TURVA'}</span><h2 id="backup-title">Varmuuskopio</h2></div></div><p class="backup-status" id="backup-status">${status}</p><p class="muted small-copy">${advice}</p><button class="btn ${due ? 'primary' : 'secondary'} big" data-action="export" data-key="export">Vie varmuuskopio</button></section>`;
+}
 const sectionHead = (title, label = '') => `<div class="section-head"><h2>${title}</h2>${label ? `<span class="eyebrow">${label}</span>` : ''}</div>`;
 const progressBar = (p) => `<progress class="progress" max="${Math.max(1, p.total)}" value="${p.done}" aria-label="Harjoituksen edistyminen">${p.pct}%</progress>`;
 
@@ -141,9 +156,10 @@ function homeView() {
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${resume}<section class="home-hero"><div><p class="eyebrow accent">OMA TREENISI · SARJA KERRALLAAN</p><h1 class="hero-title" tabindex="-1">Treenipäiväkirja</h1><p class="hero-copy">Suunnittele ohjelma ja kirjaa sarjat yhdellä napautuksella.</p></div><div class="hero-art" aria-hidden="true"><div class="art-weight">${icon('weight')}</div></div></section>
     <div class="stats"><div><strong>${thisWeek}</strong><span>tällä viikolla</span></div><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
+    ${backupCard()}
     <div class="home-grid"><section>${sectionHead('Harjoitukset', 'OMAT OHJELMASI')}<ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p></section>
     <div class="home-aside"><section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${history ? `<ul class="list history-list">${history}</ul>` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
-    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Käynnistyy tehdyn sarjan jälkeen</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><label class="field">Lepoaika sekunteina<input type="number" inputmode="numeric" min="10" max="600" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label><p class="muted small-copy">10–600 sekuntia. Lepää tarvittaessa pidempään.</p><div class="settings-actions"><button class="btn secondary" data-action="export" data-key="export">Vie varmuuskopio</button><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Käynnistyy tehdyn sarjan jälkeen</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><label class="field">Lepoaika sekunteina<input type="number" inputmode="numeric" min="10" max="600" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label><p class="muted small-copy">10–600 sekuntia. Lepää tarvittaessa pidempään.</p><div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
 }
 
 function workoutView() {
@@ -210,7 +226,11 @@ function chooseExercise(exercise) {
   if (picker.keepOpen) { picker.target = null; customOpen = false; }
   else view = 'edit';
   rememberDraft(); render();
-  if (!picker.keepOpen) document.querySelector(`[data-key="name-${CSS.escape(row.id)}"]`)?.focus();
+  if (picker.keepOpen) {
+    // Creating a custom exercise closes its form; keep keyboard focus in the flow.
+    const target = document.querySelector(`[data-key="choice-${CSS.escape(exercise.id)}"]`) || document.querySelector('[data-key="library-done"]');
+    target?.focus({ preventScroll: true });
+  } else document.querySelector(`[data-key="name-${CSS.escape(row.id)}"]`)?.focus();
   announce(`${exercise.name} lisätty harjoitukseen.`);
 }
 
@@ -451,6 +471,8 @@ const actions = {
     const url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = core.backupFileName(); a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+    try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch { /* Reminder date is optional. */ }
+    if (view === 'home') render();
     announce('Varmuuskopio ladattu. Säilytä se turvallisessa paikassa.');
   },
   import() { importMode = 'merge'; $file.click(); },

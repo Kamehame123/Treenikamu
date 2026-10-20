@@ -92,6 +92,12 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .add-workout { margin-top: 10px; border-style: dashed; background: transparent; }
 .coaching-note, .install-hint { font-size: 11px; line-height: 1.6; color: var(--muted); margin-top: 14px; }
 .install-hint { padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.backup { margin-block: 16px; padding: 16px; }
+.backup .row { gap: 10px; align-items: center; }
+.backup h2 { margin: 2px 0 0; font-size: 18px; }
+.backup p { margin: 10px 0 0; font-size: 13px; }
+.backup .btn { margin-top: 14px; width: 100%; }
+.backup.due { border: 2px solid var(--accent); background: var(--accent-soft); }
 .resume { margin-bottom: 16px; border: 2px solid var(--accent); background: var(--accent-soft); padding: 16px; }
 .resume h2 { margin: 6px 0 4px; font-size: 21px; }
 .resume p { font-size: 13px; }
