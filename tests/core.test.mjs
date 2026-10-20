@@ -21,6 +21,85 @@ test('toggle is reversible; invalid indexes are safe', () => {
   assert.equal(c.toggleSet(null, 0, 0), false);
 });
 
+test('quick rep adjustments change only actual reps, including on completed sets', () => {
+  const r = routine();
+  r.exercises[0].setReps = ['5', '8', '12'];
+  const s = c.startSession(r);
+  const original = structuredClone(r);
+  assert.equal(c.setRepCount(s.exercises[0], s.exercises[0].sets[1]), 8);
+  assert.deepEqual(c.adjustSetReps(s, 0, 1, -1), { ok: true, reps: 7 });
+  assert.deepEqual(c.adjustSetReps(s, 0, 1, -1), { ok: true, reps: 6 });
+  c.toggleSet(s, 0, 1);
+  assert.deepEqual(c.adjustSetReps(s, 0, 1, 1), { ok: true, reps: 7 });
+  assert.deepEqual(s.exercises[0].sets[1], { done: true, reps: '8', actualReps: '7' });
+  assert.deepEqual(s.exercises[0].sets[0], { done: false, reps: '5' });
+  assert.equal(s.exercises[0].reps, '5');
+  assert.deepEqual(r, original);
+  assert.equal(c.progress(s).done, 1);
+});
+
+test('quick reps use range ceilings and manual logs but never reinterpret timed targets', () => {
+  const s = c.startSession(routine());
+  const exercise = s.exercises[0], set = exercise.sets[0];
+  for (const target of ['8-12', '8–12']) {
+    set.reps = target;
+    delete set.actualReps;
+    assert.deepEqual(c.adjustSetReps(s, 0, 0, -1), { ok: true, reps: 11 });
+  }
+  set.actualReps = '4';
+  assert.deepEqual(c.adjustSetReps(s, 0, 0, 1), { ok: true, reps: 5 });
+  for (const target of ['45 s', '2 min', 'AMRAP', '0', '101', '12-8']) {
+    set.reps = target;
+    assert.equal(c.setRepCount(exercise, set), null);
+    const before = structuredClone(s);
+    assert.equal(c.adjustSetReps(s, 0, 0, -1).ok, false);
+    assert.deepEqual(s, before);
+  }
+});
+
+test('quick rep bounds and invalid actions report errors without changing records', () => {
+  const s = c.startSession(routine()), exercise = s.exercises[0], set = exercise.sets[0];
+  for (const [actual, delta] of [['0', -1], ['100', 1], ['-1', 1], ['1.5', 1], ['', 1], ['bad', -1]]) {
+    set.actualReps = actual;
+    const before = structuredClone(s);
+    const result = c.adjustSetReps(s, 0, 0, delta);
+    assert.equal(result.ok, false);
+    assert.ok(result.error.length);
+    assert.deepEqual(s, before);
+  }
+  set.actualReps = '0';
+  assert.deepEqual(c.adjustSetReps(s, 0, 0, 1), { ok: true, reps: 1 });
+  set.actualReps = '100';
+  assert.deepEqual(c.adjustSetReps(s, 0, 0, -1), { ok: true, reps: 99 });
+  for (const [session, ei, si, delta] of [[null, 0, 0, 1], [s, 99, 0, 1], [s, 0, 99, 1], [s, 0, 0, 0], [s, 0, 0, 2]]) {
+    const before = structuredClone(s);
+    const result = c.adjustSetReps(session, ei, si, delta);
+    assert.equal(result.ok, false);
+    assert.ok(result.error.length);
+    assert.deepEqual(s, before);
+  }
+});
+
+test('adjusted actual reps survive reload, history and backup restore without changing targets', () => {
+  const state = c.defaultState();
+  state.session = c.startSession(state.routines[0]);
+  c.adjustSetReps(state.session, 0, 0, -1);
+  c.toggleSet(state.session, 0, 0);
+  const store = mem();
+  assert.equal(c.saveState(store, state), true);
+  const recovered = c.loadState(store);
+  assert.deepEqual(recovered, state);
+  recovered.history.unshift(c.summarize(recovered.session));
+  recovered.session = null;
+  const parsed = c.parseBackup(JSON.stringify(c.buildBackup(recovered)));
+  assert.equal(parsed.ok, true);
+  const restored = c.replaceState(c.defaultState(), parsed.state).state;
+  assert.equal(restored.history[0].exercises[0].sets[0].actualReps, '4');
+  assert.equal(restored.history[0].exercises[0].sets[0].done, true);
+  assert.equal(restored.history[0].exercises[0].sets[1].actualReps, undefined);
+  assert.deepEqual(restored.routines, state.routines);
+});
+
 test('currentExercise advances and returns -1 when finished', () => {
   const s = c.startSession(routine());
   assert.equal(c.currentExercise(s), 0);
@@ -37,6 +116,118 @@ test('add/remove set respect bounds', () => {
   assert.equal(s.exercises[1].sets.length, 20);
   for (let i = 0; i < 50; i++) c.removeSet(s, 1);
   assert.equal(s.exercises[1].sets.length, 1);
+});
+
+test('set buttons format weights, unweighted reps, ranges and durations', () => {
+  for (const weight of ['25', '25kg', '25 kg', ' 25 kg ']) {
+    assert.equal(c.setTargetLabel('5', weight), '5 x 25kg');
+  }
+  assert.equal(c.setTargetLabel('5', '25,5 kg'), '5 x 25,5kg');
+  assert.equal(c.setTargetLabel('5', '25.5'), '5 x 25.5kg');
+  assert.equal(c.setTargetLabel('5', '0'), '5 x 0kg');
+  assert.equal(c.setTargetLabel('5'), '5 toistoa');
+  assert.equal(c.setTargetLabel('8–12', '  '), '8–12 toistoa');
+  assert.equal(c.setTargetLabel('30 s'), '30 s');
+  assert.equal(c.setTargetLabel('2 min', '10 kg'), '2 min x 10kg');
+  assert.equal(c.setTargetLabel('8', '2 x 10 kg'), '8 x 2 x 10kg');
+});
+
+test('per-set routine targets are bounded, cleaned and filled from the shared target', () => {
+  const r = routine();
+  r.exercises[0].setReps = [' 6 ', '', '30 s', 'unused'];
+  const cleaned = c.sanitizeRoutine(r);
+  assert.deepEqual(cleaned.exercises[0].setReps, ['6', '5', '30 s']);
+  assert.equal(cleaned.exercises[1].setReps, null);
+  assert.deepEqual(r.exercises[0].setReps, [' 6 ', '', '30 s', 'unused']);
+  const huge = c.sanitizeRoutine({ exercises: [{ name: 'A', sets: 10000, setReps: Array(100).fill('8') }] });
+  assert.equal(huge.exercises[0].setReps.length, c.MAX_SETS);
+});
+
+test('per-set session targets remain independent through toggles, add, remove and recovery', () => {
+  const r = routine();
+  r.exercises[0].setReps = ['5', '8', '12'];
+  r.exercises[0].weight = '25 kg';
+  const s = c.startSession(r);
+  c.toggleSet(s, 0, 1);
+  c.addSet(s, 0);
+  assert.deepEqual(s.exercises[0].sets, [
+    { done: false, reps: '5' }, { done: true, reps: '8' },
+    { done: false, reps: '12' }, { done: false, reps: '12' },
+  ]);
+  c.addSet(s, 1);
+  assert.deepEqual(s.exercises[1].sets.at(-1), { done: false });
+  c.removeSet(s, 0);
+  assert.deepEqual(c.sanitizeSession(s), s);
+  assert.deepEqual(r.exercises[0].setReps, ['5', '8', '12']);
+  assert.equal(s.exercises[0].weight, '25 kg');
+});
+
+test('validation reports missing per-set targets rather than silently replacing them', () => {
+  const r = routine();
+  r.exercises[0].setReps = ['5', ' ', '12'];
+  assert.match(c.validateRoutine(r).join(' '), /Liike 1, sarja 2/);
+  r.exercises[0].setReps = ['5'];
+  assert.equal(c.validateRoutine(r).length, 2);
+  r.exercises[0].setReps = ['5', '8', '12'];
+  assert.deepEqual(c.validateRoutine(r), []);
+  r.exercises[0].setReps = null;
+  assert.deepEqual(c.validateRoutine(r), []);
+});
+
+test('legacy data upgrades additively without rewriting storage or losing records', () => {
+  const legacy = sample();
+  for (const r of legacy.routines) for (const e of r.exercises) delete e.setReps;
+  legacy.customExercises = [{ id: 'own-1', name: 'Own', category: 'Selkä', equipment: 'Talja', reps: '8' }];
+  legacy.session = c.startSession(legacy.routines[0], 1000);
+  c.toggleSet(legacy.session, 0, 0);
+  legacy.restEnd = 5000;
+  const raw = JSON.stringify(legacy);
+  const store = mem([[c.STORAGE_KEY, raw]]);
+  const restored = c.loadState(store);
+  assert.equal(store.getItem(c.STORAGE_KEY), raw);
+  assert.deepEqual(restored.history, legacy.history);
+  assert.deepEqual(restored.customExercises, legacy.customExercises);
+  assert.deepEqual(restored.session, legacy.session);
+  assert.equal(restored.restEnd, legacy.restEnd);
+  assert.equal(restored.routines[0].exercises[0].setReps, null);
+  assert.deepEqual(c.loadState(store), restored);
+  assert.equal(c.saveState(store, restored), true);
+  assert.deepEqual(c.loadState(store), restored);
+});
+
+test('per-set targets round-trip through storage, backups, merge and replace', () => {
+  const state = sample();
+  state.routines[0].exercises[0].setReps = ['5', '8', '12'];
+  state.session = c.startSession(state.routines[0], 1000);
+  c.toggleSet(state.session, 0, 1);
+  const store = mem();
+  assert.equal(c.saveState(store, state), true);
+  assert.deepEqual(c.loadState(store), state);
+  const parsed = c.parseBackup(JSON.stringify(c.buildBackup(state)));
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.state, state);
+  for (const apply of [c.mergeState, c.replaceState]) {
+    const restored = apply({ ...c.defaultState(), routines: [] }, parsed.state).state;
+    assert.deepEqual(restored.routines, state.routines);
+    assert.deepEqual(restored.session, state.session);
+    assert.deepEqual(restored.history, state.history);
+  }
+});
+
+test('a failed save leaves existing per-set training data recoverable for retry', () => {
+  const state = sample();
+  state.routines[0].exercises[0].setReps = ['5', '8', '12'];
+  state.session = c.startSession(state.routines[0]);
+  c.toggleSet(state.session, 0, 0);
+  const original = JSON.stringify(state);
+  const store = mem([[c.STORAGE_KEY, original]]);
+  const failing = { getItem: store.getItem, setItem() { throw new Error('quota'); } };
+  const next = c.loadState(failing);
+  c.toggleSet(next.session, 0, 1);
+  assert.equal(c.saveState(failing, next), false);
+  assert.equal(store.getItem(c.STORAGE_KEY), original);
+  assert.equal(c.saveState(store, next), true);
+  assert.deepEqual(c.loadState(store), next);
 });
 
 test('empty routine cannot start', () => {

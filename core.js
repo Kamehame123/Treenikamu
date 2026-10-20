@@ -3,6 +3,8 @@
 // DATA COMPATIBILITY RULES (read before changing the saved shape)
 // - Additive change (new optional field/setting): add it to normalizeState with a default.
 //   Old data and old backups lack it and simply receive the default. No version bump.
+// - Per-set targets are additive: routine.setReps defaults to null (shared reps), and
+//   session sets may have their own reps. Existing records and storage keys are unchanged.
 // - Breaking change (rename, move, change meaning/type): bump SCHEMA by 1 and add
 //   MIGRATIONS[oldVersion] = (data) => newData. Migrations are pure, run in order from the
 //   data's own version, and are NEVER edited or removed once released. Old backups of any
@@ -11,6 +13,7 @@
 //   BACKUP_VERSION if the envelope itself changes; then keep reading the older envelopes.
 // - Files from a newer app version are refused, never guessed at.
 import { CATEGORIES, EQUIPMENT, normalizeSearch } from './exercises.js';
+import { progressionConfig, targetReps } from './progression.js';
 
 export const STORAGE_KEY = 'gym-tracker-v1';
 export const SCHEMA = 1;
@@ -45,7 +48,7 @@ const uniqueIds = (items) => {
 };
 
 export function defaultState() {
-  const ex = (name, sets, reps, weight = '') => ({ id: uid(), name, sets, reps, weight });
+  const ex = (name, sets, reps, weight = '') => ({ id: uid(), name, sets, reps, weight, setReps: null });
   return {
     v: SCHEMA,
     routines: [
@@ -59,6 +62,7 @@ export function defaultState() {
           ex('Pystypunnerrus tangolla', 3, '8'),
           ex('Lankku', 3, '45 s'),
         ],
+        autoProgress: false,
       },
     ],
     session: null,
@@ -70,18 +74,60 @@ export function defaultState() {
 }
 
 // Defensive normalisation: corrupt or older data must never crash the app.
-export function sanitizeRoutine(r) {
-  const exercises = (Array.isArray(r?.exercises) ? r.exercises : [])
+function sanitizeTargets(e) {
+  const sets = clampInt(e?.sets, 1, MAX_SETS, 3);
+  const reps = cleanText(e?.reps, 20) || '10';
+  return {
+    sets, reps,
+    weight: cleanText(e?.weight, 20),
+    setReps: Array.isArray(e?.setReps) ? Array.from({ length: sets }, (_, i) => cleanText(e.setReps[i], 20) || reps) : null,
+  };
+}
+
+function sanitizeProgression(e) {
+  const config = progressionConfig(e);
+  if (e.progression.minReps === undefined) delete config.minReps;
+  if (e.progression.maxReps === undefined) delete config.maxReps;
+  return config;
+}
+
+function sanitizeExercises(raw) {
+  const exercises = (Array.isArray(raw) ? raw : [])
     .slice(0, 60)
-    .map((e) => ({
-      id: cleanText(e?.id, 80) || uid(),
-      name: cleanText(e?.name),
-      sets: clampInt(e?.sets, 1, MAX_SETS, 3),
-      reps: cleanText(e?.reps, 20) || '10',
-      weight: cleanText(e?.weight, 20),
-    }))
+    .map((e) => {
+      return {
+        id: cleanText(e?.id, 80) || uid(),
+        name: cleanText(e?.name),
+        ...sanitizeTargets(e),
+        ...(e?.progression ? { progression: sanitizeProgression(e) } : {}),
+        ...(e?.recoveryBase ? { recoveryBase: sanitizeTargets(e.recoveryBase) } : {}),
+      };
+    })
     .filter((e) => e.name);
-  return { id: cleanText(r?.id, 80) || uid(), name: cleanText(r?.name) || 'Harjoitus', exercises: uniqueIds(exercises) };
+  return uniqueIds(exercises);
+}
+
+export function sanitizeRoutine(r) {
+  const revision = r?.revision;
+  return {
+    id: cleanText(r?.id, 80) || uid(), name: cleanText(r?.name) || 'Harjoitus',
+    exercises: sanitizeExercises(r?.exercises),
+    autoProgress: r?.autoProgress === true,
+    ...(revision && Array.isArray(revision.before) && Array.isArray(revision.after) ? {
+      revision: {
+        sourceId: cleanText(revision.sourceId, 80),
+        createdAt: timestamp(revision.createdAt, 0),
+        before: sanitizeExercises(revision.before),
+        after: sanitizeExercises(revision.after),
+        undone: revision.undone === true,
+        changes: (Array.isArray(revision.changes) ? revision.changes : []).slice(0, 60).map((change) => ({
+          exerciseId: cleanText(change?.exerciseId, 80), name: cleanText(change?.name),
+          kind: cleanText(change?.kind, 20), before: cleanText(change?.before, 500),
+          after: cleanText(change?.after, 500), reason: cleanText(change?.reason, 1000),
+        })),
+      },
+    } : {}),
+  };
 }
 
 export function sanitizeSession(s) {
@@ -91,12 +137,20 @@ export function sanitizeSession(s) {
     routineId: cleanText(s.routineId, 80),
     name: cleanText(s.name) || 'Harjoitus',
     startedAt: timestamp(s.startedAt, Date.now()),
+    ...(s.fatigued === true ? { fatigued: true } : {}),
     exercises: uniqueIds(s.exercises.slice(0, 60).map((e) => ({
       id: cleanText(e?.id, 80) || uid(),
       name: cleanText(e?.name) || 'Liike',
       reps: cleanText(e?.reps, 20) || '10',
       weight: cleanText(e?.weight, 20),
-      sets: (Array.isArray(e?.sets) && e.sets.length ? e.sets : [{}]).slice(0, MAX_SETS).map((x) => ({ done: x?.done === true })),
+      ...(cleanText(e?.rir, 20) ? { rir: cleanText(e.rir, 20) } : {}),
+      ...(e?.pain === true ? { pain: true } : {}),
+      sets: (Array.isArray(e?.sets) && e.sets.length ? e.sets : [{}]).slice(0, MAX_SETS).map((x) => ({
+        done: x?.done === true,
+        ...(cleanText(x?.reps, 20) ? { reps: cleanText(x.reps, 20) } : {}),
+        ...(cleanText(x?.actualReps, 20) ? { actualReps: cleanText(x.actualReps, 20) } : {}),
+        ...(cleanText(x?.actualWeight, 20) ? { actualWeight: cleanText(x.actualWeight, 20) } : {}),
+      })),
     }))),
   };
 }
@@ -150,6 +204,9 @@ function normalizeState(raw) {
         endedAt: timestamp(h.endedAt, 0),
         setsDone: clampInt(h.setsDone, 0, 9999, 0),
         setsTotal: clampInt(h.setsTotal, 0, 9999, 0),
+        ...(typeof h.routineId === 'string' ? { routineId: cleanText(h.routineId, 80) } : {}),
+        ...(h.fatigued === true ? { fatigued: true } : {}),
+        ...(Array.isArray(h.exercises) && h.exercises.length ? { exercises: sanitizeSession({ ...h, exercises: h.exercises }).exercises } : {}),
       })),
     settings: {
       restSeconds: clampInt(raw.settings?.restSeconds, 10, 600, 90),
@@ -216,15 +273,21 @@ export function mergeState(local, incoming) {
   const next = structuredClone(local);
   const result = { routines: 0, history: 0, skipped: 0, session: false };
   const byId = new Map(next.routines.map((r) => [r.id, r]));
+  const routineLinks = new Map();
   for (const r of incoming.routines) {
     const existing = byId.get(r.id);
     if (existing && sameJson(existing, r)) continue;
+    const importedName = cleanText(`${r.name} (tuotu)`);
+    const priorCopy = existing && next.routines.find((candidate) => candidate.name === importedName && sameJson({ ...candidate, id: r.id, name: r.name }, r));
+    if (priorCopy) { routineLinks.set(r.id, priorCopy.id); continue; }
     if (next.routines.length >= MAX_ROUTINES) { result.skipped++; continue; }
-    const copy = existing ? { ...r, id: uid(), name: cleanText(`${r.name} (tuotu)`) } : r;
+    const copy = existing ? { ...r, id: uid(), name: importedName } : r;
+    routineLinks.set(r.id, copy.id);
     next.routines.push(copy); byId.set(copy.id, copy); result.routines++;
   }
   const seen = new Set(next.history.map((h) => h.id));
-  const added = incoming.history.filter((h) => !seen.has(h.id));
+  const added = incoming.history.filter((h) => !seen.has(h.id)).map((h) =>
+    routineLinks.has(h.routineId) ? { ...h, routineId: routineLinks.get(h.routineId) } : h);
   next.history = [...next.history, ...added].sort((a, b) => b.endedAt - a.endedAt).slice(0, MAX_HISTORY);
   const kept = new Set(next.history.map((h) => h.id));
   result.history = added.filter((h) => kept.has(h.id)).length;
@@ -238,7 +301,11 @@ export function mergeState(local, incoming) {
     const have = new Set((next[key] ?? []).map((x) => x?.id));
     next[key] = [...(next[key] ?? []), ...incoming[key].filter((x) => !have.has(x?.id))];
   }
-  if (!next.session && incoming.session) { next.session = incoming.session; next.restEnd = null; result.session = true; }
+  if (!next.session && incoming.session) {
+    next.session = structuredClone(incoming.session);
+    if (routineLinks.has(next.session.routineId)) next.session.routineId = routineLinks.get(next.session.routineId);
+    next.restEnd = null; result.session = true;
+  }
   return { state: next, result };
 }
 
@@ -291,7 +358,10 @@ export function startSession(routine, now = Date.now()) {
       name: e.name,
       reps: e.reps,
       weight: e.weight,
-      sets: Array.from({ length: e.sets }, () => ({ done: false })),
+      sets: Array.from({ length: e.sets }, (_, i) => ({
+        done: false,
+        ...(e.setReps ? { reps: e.setReps[i] } : {}),
+      })),
     })),
   };
 }
@@ -303,9 +373,33 @@ export function toggleSet(session, ei, si) {
   return set.done;
 }
 
+export function setRepCount(exercise, set) {
+  const target = targetReps(set?.reps ?? exercise?.reps);
+  if (!target) return null;
+  if (set?.actualReps === undefined) return target.high;
+  const value = String(set.actualReps);
+  return /^\d+$/.test(value) && Number(value) <= 100 ? Number(value) : null;
+}
+
+export function adjustSetReps(session, ei, si, delta) {
+  const exercise = session?.exercises[ei], set = exercise?.sets[si];
+  if (!set) return { ok: false, error: 'Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.' };
+  const count = setRepCount(exercise, set);
+  if (count === null || (delta !== -1 && delta !== 1)) {
+    return { ok: false, error: 'Pikamuutos vaatii numeerisen toistotavoitteen ja kelvolliset toteutuneet toistot. Tarkista tulokset.' };
+  }
+  const reps = count + delta;
+  if (reps < 0 || reps > 100) return { ok: false, error: 'Toteutuneiden toistojen on oltava välillä 0–100.' };
+  set.actualReps = String(reps);
+  return { ok: true, reps };
+}
+
 export function addSet(session, ei) {
   const e = session?.exercises[ei];
-  if (e && e.sets.length < MAX_SETS) e.sets.push({ done: false });
+  if (e && e.sets.length < MAX_SETS) {
+    const reps = e.sets.at(-1)?.reps;
+    e.sets.push({ done: false, ...(reps ? { reps } : {}) });
+  }
 }
 
 // Removes the last set; only allowed if more than one remains.
@@ -330,7 +424,13 @@ export const currentExercise = (session) => session.exercises.findIndex((e) => !
 
 export function summarize(session, now = Date.now()) {
   const { done, total } = progress(session);
-  return { id: session.id, name: session.name, startedAt: session.startedAt, endedAt: now, setsDone: done, setsTotal: total };
+  const snapshot = sanitizeSession(session);
+  return {
+    id: session.id, name: session.name, startedAt: session.startedAt, endedAt: now,
+    setsDone: done, setsTotal: total, routineId: session.routineId,
+    exercises: snapshot.exercises,
+    ...(snapshot.fatigued ? { fatigued: true } : {}),
+  };
 }
 
 export function formatDuration(ms) {
@@ -349,8 +449,28 @@ export function validateRoutine(r) {
     if (!cleanText(e?.name)) errors.push(`Liike ${i + 1}: lisää nimi.`);
     if (!Number.isInteger(Number(e?.sets)) || Number(e?.sets) < 1 || Number(e?.sets) > MAX_SETS) errors.push(`Liike ${i + 1}: sarjojen määrän on oltava kokonaisluku 1–${MAX_SETS}.`);
     if (!cleanText(e?.reps, 20)) errors.push(`Liike ${i + 1}: lisää toistotavoite tai kesto.`);
+    if (e?.progression) {
+      const config = progressionConfig(e);
+      const minReps = e.progression.minReps ?? config.minReps;
+      const maxReps = e.progression.maxReps ?? config.maxReps;
+      const weightStep = e.progression.weightStep ?? config.weightStep;
+      if (!Number.isInteger(Number(minReps)) || !Number.isInteger(Number(maxReps)) || Number(minReps) < 1 || Number(maxReps) > 30 || Number(minReps) > Number(maxReps)) errors.push(`Liike ${i + 1}: kehitysalueen on oltava 1–30 toistoa, alaraja enintään yläraja.`);
+      if (!Number.isFinite(Number(weightStep)) || Number(weightStep) < 0.01 || Number(weightStep) > 100) errors.push(`Liike ${i + 1}: painoaskeleen on oltava 0,01–100 kg.`);
+    }
+    if (Array.isArray(e?.setReps)) {
+      for (let si = 0; si < clampInt(e.sets, 1, MAX_SETS, 3); si++) {
+        if (!cleanText(e.setReps[si], 20)) errors.push(`Liike ${i + 1}, sarja ${si + 1}: lisää toistotavoite tai kesto.`);
+      }
+    }
   }
   return errors;
 }
 
 export const targetLabel = (target) => /\b(?:s|sec|secs|seconds?|sek\w*|min\w*)\b/i.test(target) ? String(target) : `${target} toistoa`;
+
+export function setTargetLabel(target, weight = '') {
+  const value = cleanText(weight, 20);
+  if (!value) return targetLabel(target);
+  const label = /^\d+(?:[.,]\d+)?$/.test(value) ? `${value}kg` : value.replace(/\s+kg\b/gi, 'kg');
+  return `${target} x ${label}`;
+}

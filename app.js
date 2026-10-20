@@ -1,4 +1,5 @@
 import * as core from './core.js';
+import { progressionConfig, progressionRange, prescription, parseWeight, reviseRoutine, undoRevision, canUndoRevision } from './progression.js';
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
 
@@ -11,7 +12,7 @@ const BACKUP_KEY = 'gym-tracker-last-backup';
 const BACKUP_REMIND_DAYS = 7;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const blankEx = () => ({ id: core.uid(), name: '', sets: 3, reps: '10', weight: '' });
+const blankEx = () => ({ id: core.uid(), name: '', sets: 3, reps: '10', weight: '', setReps: null });
 const paths = {
   arrow: 'M5 12h14m-6-6 6 6-6 6', back: 'm14 6-6 6 6 6',
   plus: 'M12 5v14M5 12h14', check: 'm5 12 4 4L19 6',
@@ -63,6 +64,9 @@ let wakeLock = null;
 let wakePending = false;
 let pendingActions = 0;
 let actionQueue = Promise.resolve();
+const revisionMessages = new Map();
+const openLogs = new Set();
+let logError = '';
 const byId = (id, source = state) => source.routines.find((r) => r.id === id);
 
 function rememberDraft() {
@@ -142,6 +146,22 @@ function brand() {
 }
 function connectionText() { return !navigator.onLine ? 'Ei verkkoyhteyttä' : offlineReady ? 'Toimii myös ilman verkkoa' : 'Tällä laitteella'; }
 
+function progressionControls(r) {
+  const active = state.session?.routineId === r.id;
+  const revision = r.revision;
+  const report = revision ? `<div class="revision-report"><strong>${revision.undone ? 'Tarkistus peruttu – edelliset tavoitteet käytössä' : 'Viimeisin tarkistus'}</strong><ul>${revision.changes.map((change) => `<li><strong>${esc(change.name)}</strong><p>${esc(change.before)}${change.kind !== 'hold' ? ` → ${esc(change.after)}` : ' · ennallaan'}</p><p class="muted">${esc(change.reason)}</p></li>`).join('')}</ul>${canUndoRevision(r) ? `<button class="btn secondary" data-action="undorevision" data-id="${esc(r.id)}" data-key="undo-${esc(r.id)}" ${active ? 'disabled' : ''}>Peru tarkistus</button>` : ''}</div>` : '';
+  return `<div class="progression-controls"><label class="check"><span>Tarkista seuraava treeni automaattisesti<small>Vain tämän ohjelman tallennuksen jälkeen. Muutokset voi perua.</small></span><input type="checkbox" role="switch" data-action="autoprogress" data-id="${esc(r.id)}" data-key="auto-${esc(r.id)}" aria-label="Tarkista automaattisesti: ${esc(r.name)}" ${r.autoProgress ? 'checked' : ''}></label><button class="btn secondary" data-action="revise" data-id="${esc(r.id)}" data-key="revise-${esc(r.id)}" ${active ? 'disabled' : ''}>Tarkista seuraava treeni</button>${active ? '<p class="muted small-copy">Keskeneräistä harjoitusta ei muuteta. Tarkista tavoitteet tallennuksen jälkeen.</p>' : ''}${revisionMessages.has(r.id) ? `<p class="small-copy" role="status">${esc(revisionMessages.get(r.id))}</p>` : ''}${report}</div>`;
+}
+
+function historyDetails(h) {
+  if (!h.exercises?.length) return '';
+  return `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary><ul>${h.exercises.map((e) => `<li><strong>${esc(e.name)}</strong>: ${e.sets.map((set) => set.done ? `${esc(set.actualReps ?? '?')} toistoa${set.actualWeight || e.weight ? ` @ ${esc(set.actualWeight || e.weight)}` : ''}` : 'tekemättä').join(' / ')} · RIR ${esc(e.rir ?? '?')}${e.pain ? ' · kipua' : ''}</li>`).join('')}</ul>${h.fatigued ? '<p>Palautuminen oli heikkoa.</p>' : ''}</details>`;
+}
+
+function coachingGuide() {
+  return `<details class="coaching-guide card"><summary>Miten tavoitteita tarkistetaan?</summary><div class="small-copy"><p>Yhtä parasta toistoaluetta ei ole. ACSM:n vuoden 2026 katsauksessa raskaammat kuormat tukivat maksimivoimaa ja suurempi viikkovolyymi lihaskasvua. Harjoita suuria lihasryhmiä säännöllisesti, yleensä vähintään kahdesti viikossa. Noin 10 sarjaa lihasryhmää kohti viikossa on hyödyllinen lihaskasvun suunnittelun vertailukohta, ei kaikille pakollinen vähimmäismäärä. Sovellus ei lisää sarjoja sokkona, koska se ei tunne koko viikkokuormitustasi.</p><p>Liikkeen nykyinen suunnitelma ja tunnistettava eristävä liike ohjaavat ehdotusta: esimerkiksi 3–6 toistoa jo voimapainotteiseen työhön, 6–12 yhdistettyyn voima-/massaharjoitteluun, 10–20 lihasmassapainotukseen tai 15–30 jo pitkille sarjoille. Nämä ovat käytännön valmennusvalintoja, eivät tutkimuksissa todistettuja liikekohtaisia optimeja. Tallennettu oma alue säilyy. Ensimmäisessä muutoksessa alue tallennetaan, jotta tavoiteraja ei karkaa aina toistoja lisättäessä. Muokkauksessa voit valita alueen itse tai laskea sen uudelleen.</p><p>Kirjaa toteutuneet toistot ja vaikeimman sarjan RIR: montako hyvää toistoa olisi vielä onnistunut (0–5; 5 = vähintään 5). Tyhjä paino tarkoittaa tavoitepainoa. Pelkkä sarjan kuittaus ei riitä nostoon. Kaikkien tavoitteiden onnistuminen vähintään RIR 2:lla sallii enintään yhden lisätoiston sarjaa kohti. Alueen ylärajan pitää onnistua kahdessa vertailukelpoisessa treenissä ennen yhtä painoaskelta (enintään 10 %); uudella painolla toistot vähenevät. Älä pakota tavoitetta tekniikan kustannuksella. Tarkat RIR- ja toistorajat ovat varovaisia ohjelmistosääntöjä, eivät yksilöllisesti validoitu malli.</p><p>Heikko palautuminen tai kaksi selvää alisuoriutumista voi keventää seuraavaa harjoituskertaa. Palautuneena onnistunut kevennys palauttaa aiemmat tavoitteet. Pakollista kalenteriviikkoa ei määrätä, ja joskus lepo on parempi vaihtoehto. Kipua ei käsitellä tavallisena väsymyksenä: lopeta kipua aiheuttava liike ja selvitä oire tarvittaessa ammattilaisen kanssa.</p><p>Lämmittele, lepää raskaissa moninivelliikkeissä yleensä 2–3 minuuttia tai pidempään ja muissa liikkeissä tarpeen mukaan. Uni, riittävä ravinto ja jatkuvuus tukevat kehitystä. Sovellus ei mittaa lihaskasvua tai tunne terveydentilaasi eikä voi taata tuloksia.</p><p>Tutkimuspohja: <a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">ACSM 2026</a>, <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/" target="_blank" rel="noopener noreferrer">voima- ja hypertrofiaharjoittelun meta-analyysi 2023</a>, <a href="https://doi.org/10.47206/ijsc.v1i1.81" target="_blank" rel="noopener noreferrer">IUSCA 2021</a>, <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10511399/" target="_blank" rel="noopener noreferrer">kevennyksen asiantuntijakonsensus</a>.</p></div></details>`;
+}
+
 function homeView() {
   const s = state.session;
   const totalSets = state.history.reduce((n, h) => n + h.setsDone, 0);
@@ -149,18 +169,27 @@ function homeView() {
   const thisWeek = state.history.filter((h) => h.endedAt >= +weekStart).length;
   const resume = s ? `<section class="resume card"><div class="row"><span class="eyebrow accent"><span class="pulse" aria-hidden="true"></span> HARJOITUS KESKEN</span><span class="badge now">${core.progress(s).pct}%</span></div><h2>${esc(s.name)}</h2><p class="muted">${core.progress(s).done}/${core.progress(s).total} sarjaa tehty · Jatka siitä, mihin jäit.</p>${progressBar(core.progress(s))}<button class="btn primary big" data-action="resume" data-key="resume">Jatka harjoitusta ${icon('arrow')}</button></section>` : '';
   const routines = state.routines.map((r, i) => {
-    const pills = r.exercises.slice(0, 4).map((e) => `<span class="pill">${esc(e.name)} <b>${e.sets}×${esc(e.reps)}</b></span>`).join(' ') + (r.exercises.length > 4 ? ` <span class="pill pill-muted">+${r.exercises.length - 4} muuta</span>` : '');
-    return `<li class="card routine"><div class="row routine-head"><span class="routine-icon">${icon('weight')}</span><div class="grow"><span class="eyebrow">OHJELMA ${String(i + 1).padStart(2, '0')}</span><h3>${esc(r.name)}</h3><p class="routine-meta">${r.exercises.length} liikettä <span>·</span> ${r.exercises.reduce((n, e) => n + e.sets, 0)} sarjaa</p></div><button class="btn ghost icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div><div class="routine-pills">${pills}</div><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button></li>`;
+    const pills = r.exercises.slice(0, 4).map((e) => `<span class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></span>`).join(' ') + (r.exercises.length > 4 ? ` <span class="pill pill-muted">+${r.exercises.length - 4} muuta</span>` : '');
+    return `<li class="card routine"><div class="row routine-head"><span class="routine-icon">${icon('weight')}</span><div class="grow"><span class="eyebrow">OHJELMA ${String(i + 1).padStart(2, '0')}</span><h3>${esc(r.name)}</h3><p class="routine-meta">${r.exercises.length} liikettä <span>·</span> ${r.exercises.reduce((n, e) => n + e.sets, 0)} sarjaa</p></div><button class="btn ghost icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div><div class="routine-pills">${pills}</div><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button>${progressionControls(r)}</li>`;
   }).join('');
-  const history = state.history.slice(0, 10).map((h) => `<li class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h3>${esc(h.name)}</h3><span class="muted">${new Date(h.endedAt).toLocaleDateString('fi-FI', { month: 'short', day: 'numeric' })} · ${core.formatDuration(h.endedAt - h.startedAt)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></li>`).join('');
+  const history = state.history.slice(0, 10).map((h) => `<li><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h3>${esc(h.name)}</h3><span class="muted">${new Date(h.endedAt).toLocaleDateString('fi-FI', { month: 'short', day: 'numeric' })} · ${core.formatDuration(h.endedAt - h.startedAt)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${historyDetails(h)}</li>`).join('');
   const ios = (/iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) && !navigator.standalone;
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${resume}<section class="home-hero"><div><p class="eyebrow accent">OMA TREENISI · SARJA KERRALLAAN</p><h1 class="hero-title" tabindex="-1">Treenipäiväkirja</h1><p class="hero-copy">Suunnittele ohjelma ja kirjaa sarjat yhdellä napautuksella.</p></div><div class="hero-art" aria-hidden="true"><div class="art-weight">${icon('weight')}</div></div></section>
     <div class="stats"><div><strong>${thisWeek}</strong><span>tällä viikolla</span></div><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
-    ${backupCard()}
+    ${backupCard()}${coachingGuide()}
     <div class="home-grid"><section>${sectionHead('Harjoitukset', 'OMAT OHJELMASI')}<ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p></section>
     <div class="home-aside"><section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${history ? `<ul class="list history-list">${history}</ul>` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2><span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Käynnistyy tehdyn sarjan jälkeen</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label><label class="field">Lepoaika sekunteina<input type="number" inputmode="numeric" min="10" max="600" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label><p class="muted small-copy">10–600 sekuntia. Lepää tarvittaessa pidempään.</p><div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}</div></details><section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+}
+
+function exerciseLog(e, ei) {
+  const rows = e.sets.map((set, si) => `<div class="log-row"><span>Sarja ${si + 1}</span><label class="field">Toteutuneet toistot<input type="number" inputmode="numeric" min="0" max="100" step="1" value="${esc(set.actualReps ?? '')}" data-log="actualReps" data-e="${ei}" data-s="${si}" data-key="actual-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: toteutuneet toistot" placeholder="Ei kirjattu"></label><label class="field">Toteutunut paino (kg)<input type="text" inputmode="decimal" maxlength="20" value="${esc(set.actualWeight ?? '')}" data-log="actualWeight" data-e="${ei}" data-s="${si}" data-key="load-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: toteutunut paino" placeholder="${esc(e.weight || 'Ei lisäpainoa')}"></label></div>`).join('');
+  return `<details class="exercise-log" data-log-panel="${esc(e.id)}" ${openLogs.has(e.id) ? 'open' : ''}><summary>Kirjaa tulokset ja kuormittavuus</summary><p class="muted small-copy">Kuittaa sarjat yllä ja kirjaa todelliset toistot tähän. Tyhjä paino tarkoittaa tavoitepainoa, tyhjistä toistoista ei päätellä tulosta.</p>${rows}<label class="field">RIR – vaikeimman sarjan jälkeen varastoon jääneet toistot<input type="number" inputmode="numeric" min="0" max="5" step="1" value="${esc(e.rir ?? '')}" data-log="rir" data-e="${ei}" data-key="rir-${ei}" placeholder="0–5 (5 = vähintään 5)" aria-label="${esc(e.name)}: RIR"></label><label class="check"><span>Tunsin kipua<small>Älä jatka kipua aiheuttavaa liikettä. Kuormaa ei nosteta.</small></span><input type="checkbox" data-log="pain" data-e="${ei}" data-key="pain-${ei}" aria-label="${esc(e.name)}: kipua" ${e.pain ? 'checked' : ''}></label></details>`;
+}
+
+function recoveryControls(s) {
+  return `${logError ? `<p class="banner" role="alert">${esc(logError)}</p>` : ''}<label class="check recovery-check"><span>Palautuminen on heikkoa<small>Voi keventää seuraavaa treeniä. Harkitse myös lepoa.</small></span><input type="checkbox" data-log="fatigued" data-key="fatigued" ${s.fatigued ? 'checked' : ''}></label>`;
 }
 
 function workoutView() {
@@ -169,14 +198,37 @@ function workoutView() {
     const done = core.exerciseDone(e);
     const completed = e.sets.filter((set) => set.done).length;
     const nextSi = ei === cur ? e.sets.findIndex((set) => !set.done) : -1;
-    const sets = e.sets.map((set, si) => `<button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${set.done ? 'Tehty' : `${esc(e.reps)} Kirjaa`}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}, ${esc(core.targetLabel(e.reps))}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${set.done ? icon('check') : esc(e.reps)}</span> <span class="set-foot">${set.done ? 'Tehty' : 'Kirjaa'}</span></button>`).join('');
-    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>×</span> ${esc(core.targetLabel(e.reps))}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''}</p></div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div></li>`;
+    const sets = e.sets.map((set, si) => {
+      const target = core.setTargetLabel(set.reps ?? e.reps, e.weight);
+      const count = core.setRepCount(e, set);
+      const logged = count !== null && set.actualReps !== undefined;
+      const value = logged ? core.setTargetLabel(count, set.actualWeight ?? e.weight) : target;
+      const adjustment = count === null ? '' : `<div class="rep-adjust" role="group" aria-label="${esc(e.name)}, sarja ${si + 1}: muuta toteutuneita toistoja"><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="-1" data-key="reps-minus-${ei}-${si}" aria-label="Vähennä toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 0 ? 'disabled' : ''}>−</button><button class="btn" data-action="adjustreps" data-e="${ei}" data-s="${si}" data-delta="1" data-key="reps-plus-${ei}-${si}" aria-label="Lisää toisto: ${esc(e.name)}, sarja ${si + 1}" ${count === 100 ? 'disabled' : ''}>+</button></div>`;
+      return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${logged ? ` Tavoite: ${esc(target)}` : ''} ${set.done ? 'Tehty' : 'Kirjaa'}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${logged ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} Tehty` : 'Kirjaa'}</span></button>${adjustment}</div>`;
+    }).join('');
+    const individual = e.sets.some((set) => set.reps);
+    const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
+    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''}</p></div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div><div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseLog(e, ei)}</li>`;
   }).join('');
-  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'}</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section><ul class="list exercise-list">${exercises}</ul><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>`;
+  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryControls(s)}<ul class="list exercise-list">${exercises}</ul><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>`;
+}
+
+function progressionEditor(e, i) {
+  const config = progressionConfig(e);
+  const savedRange = e.progression?.minReps !== undefined && e.progression?.maxReps !== undefined;
+  return `<details class="progression-editor"><summary>Kehitysalue ja painoaskel</summary><p class="muted small-copy">${savedRange ? 'Tallennettu kehitysalue säilytetään.' : esc(progressionRange(e).reason)} Ehdotus: ${config.minReps}–${config.maxReps} toistoa. Yleistä 8–15-oletusta ei käytetä. Paino tarkoittaa samaa kg-kuormaa kuin tavoitepainossa, esimerkiksi yhden käsipainon painoa.</p><button class="btn secondary" data-action="autorange" data-i="${i}" data-key="autorange-${esc(e.id)}">Laske kehitysalue uudelleen</button><div class="grid3"><label class="field">Alaraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.minReps ?? config.minReps)}" data-progression="minReps" data-i="${i}" data-key="minReps-${esc(e.id)}"></label><label class="field">Yläraja (toistoa)<input type="number" min="1" max="30" step="1" inputmode="numeric" value="${esc(e.progression?.maxReps ?? config.maxReps)}" data-progression="maxReps" data-i="${i}" data-key="maxReps-${esc(e.id)}"></label><label class="field">Pienin painoaskel (kg)<input type="number" min="0.01" max="100" step="0.01" inputmode="decimal" value="${esc(e.progression?.weightStep ?? config.weightStep)}" data-progression="weightStep" data-i="${i}" data-key="weightStep-${esc(e.id)}"></label></div><label class="check"><span>Paino on ulkoinen kg-kuorma<small>Poista valinta avustetuille liikkeille tai muille kuormayksiköille: paino muuttuu silloin vain käsin.</small></span><input type="checkbox" data-progression="autoLoad" data-i="${i}" data-key="autoLoad-${esc(e.id)}" ${config.autoLoad ? 'checked' : ''}></label></details>`;
+}
+
+function setTargetFields(e, i) {
+  return Array.from({ length: core.clampInt(e.sets, 1, core.MAX_SETS, 3) }, (_, si) => `<label class="field">Sarja ${si + 1}: toistot / aika<input type="text" maxlength="20" value="${esc(e.setReps[si] ?? e.reps)}" data-f="setReps" data-i="${i}" data-s="${si}" data-key="setReps-${esc(e.id)}-${si}" placeholder="8–12 / 30 s"></label>`).join('');
 }
 
 function editView() {
-  const rows = draft.exercises.map((e, i) => `<li class="card edit"><div class="row editor-row"><span class="eyebrow exercise-tag">LIIKE ${String(i + 1).padStart(2, '0')}</span><div class="mini"><button class="btn ghost icon-button" data-action="up" data-i="${i}" data-key="up-${esc(e.id)}" ${i === 0 ? 'disabled' : ''} aria-label="Siirrä ylös">↑</button><button class="btn ghost icon-button" data-action="down" data-i="${i}" data-key="down-${esc(e.id)}" ${i === draft.exercises.length - 1 ? 'disabled' : ''} aria-label="Siirrä alas">↓</button><button class="btn ghost danger-text" data-action="rmex" data-i="${i}" data-key="remove-${esc(e.id)}" aria-label="Poista liike ${i + 1}">Poista</button></div></div><div class="name-picker-row"><label class="field grow">Liikkeen nimi<input type="text" maxlength="60" value="${esc(e.name)}" data-f="name" data-i="${i}" data-key="name-${esc(e.id)}" autocomplete="off" placeholder="Esim. maljakyykky"></label><button class="btn secondary pick-exercise" data-action="pickex" data-id="${esc(e.id)}" data-key="pick-${esc(e.id)}">Valitse kirjastosta</button></div><div class="grid3"><label class="field">Sarjat<input type="number" inputmode="numeric" min="1" max="20" step="1" value="${esc(e.sets)}" data-f="sets" data-i="${i}" data-key="sets-${esc(e.id)}"></label><label class="field">Toistot / aika<input type="text" maxlength="20" value="${esc(e.reps)}" data-f="reps" data-i="${i}" data-key="reps-${esc(e.id)}" placeholder="8–12 / 30 s"></label><label class="field">Paino <span class="optional">valinnainen</span><input type="text" maxlength="20" value="${esc(e.weight)}" data-f="weight" data-i="${i}" data-key="weight-${esc(e.id)}" placeholder="20 kg"></label></div></li>`).join('');
+  const rows = draft.exercises.map((e, i) => {
+    const individual = Array.isArray(e.setReps);
+    const targets = individual ? setTargetFields(e, i) : '';
+    return `<li class="card edit"><div class="row editor-row"><span class="eyebrow exercise-tag">LIIKE ${String(i + 1).padStart(2, '0')}</span><div class="mini"><button class="btn ghost icon-button" data-action="up" data-i="${i}" data-key="up-${esc(e.id)}" ${i === 0 ? 'disabled' : ''} aria-label="Siirrä ylös">↑</button><button class="btn ghost icon-button" data-action="down" data-i="${i}" data-key="down-${esc(e.id)}" ${i === draft.exercises.length - 1 ? 'disabled' : ''} aria-label="Siirrä alas">↓</button><button class="btn ghost danger-text" data-action="rmex" data-i="${i}" data-key="remove-${esc(e.id)}" aria-label="Poista liike ${i + 1}">Poista</button></div></div><div class="name-picker-row"><label class="field grow">Liikkeen nimi<input type="text" maxlength="60" value="${esc(e.name)}" data-f="name" data-i="${i}" data-key="name-${esc(e.id)}" autocomplete="off" placeholder="Esim. maljakyykky"></label><button class="btn secondary pick-exercise" data-action="pickex" data-id="${esc(e.id)}" data-key="pick-${esc(e.id)}">Valitse kirjastosta</button></div><div class="grid3"><label class="field">Sarjat<input type="number" inputmode="numeric" min="1" max="20" step="1" value="${esc(e.sets)}" data-f="sets" data-i="${i}" data-key="sets-${esc(e.id)}"></label><label class="field">${individual ? 'Oletustoistot / aika' : 'Toistot / aika'}<input type="text" maxlength="20" value="${esc(e.reps)}" data-f="reps" data-i="${i}" data-key="reps-${esc(e.id)}" placeholder="8–12 / 30 s"></label><label class="field">Paino <span class="optional">valinnainen</span><input type="text" maxlength="20" value="${esc(e.weight)}" data-f="weight" data-i="${i}" data-key="weight-${esc(e.id)}" placeholder="20 kg"></label></div><label class="check per-set-toggle"><span>Määritä toistot sarjakohtaisesti<small>${individual ? 'Uudet sarjat käyttävät oletustoistoja. Poista valinta käyttääksesi samaa tavoitetta kaikissa sarjoissa.' : 'Aseta jokaiselle sarjalle oma toistotavoite tai kesto.'}</small></span><input type="checkbox" data-f="individualReps" data-i="${i}" data-key="individualReps-${esc(e.id)}" ${individual ? 'checked' : ''}></label>${individual ? `<div class="set-targets">${targets}</div>` : ''}${progressionEditor(e, i)}</li>`;
+  }).join('');
   return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="cancel">${icon('back')} Peruuta</button><span class="eyebrow" id="draft-status" role="status">${draftOk ? 'LUONNOS SÄILYY TÄSSÄ VÄLILEHDESSÄ' : 'LUONNOS EI TALLENTUNUT — pidä välilehti auki'}</span></header>${warn()}<div class="editor-top"><p class="eyebrow accent">SUUNNITTELE HARJOITUKSESI</p><h1 tabindex="-1">${draft.isNew ? 'Uusi harjoitus' : 'Muokkaa harjoitusta'}</h1><p class="editor-copy">Valitse ${EXERCISES.length} liikkeestä tai lisää omasi. Aseta tavoitteet oman tasosi mukaan.</p></div><label class="field name-field">Harjoituksen nimi<input type="text" maxlength="60" value="${esc(draft.name)}" data-f="rname" data-key="rname" autocomplete="off" placeholder="Esim. ylävartalo A"></label><ul class="list editor-list">${rows}</ul><button class="btn secondary add-ex-btn" data-action="addex" data-key="addex" ${draft.exercises.length >= 60 ? 'disabled' : ''}>${icon('plus')} Lisää liike</button><p id="err" class="banner" role="alert" tabindex="-1" ${editError ? '' : 'hidden'}>${esc(editError)}</p><div class="editor-save"><button class="btn primary big" data-action="save" data-key="save">Tallenna harjoitus ${icon('check')}</button></div>${draft.isNew ? '' : '<button class="btn danger" data-action="delroutine" data-key="delroutine">Poista harjoitus</button>'}`;
 }
 
@@ -340,7 +392,54 @@ function swap(i, direction) {
 }
 function sessionOptions() { return { sessionId: state.session?.id }; }
 
+async function changeRevision(id, undo = false) {
+  let result;
+  const ok = await mutate((next) => {
+    result = undo ? undoRevision(next, id) : reviseRoutine(next, id);
+    return result.ok;
+  }, { critical: true });
+  const message = ok || !result?.ok ? result?.message : 'Tarkistusta ei voitu tallentaa. Edelliset tavoitteet säilyvät; yritä uudelleen.';
+  revisionMessages.set(id, message || 'Tarkistus ei onnistunut. Tarkista tallennuksen tila.');
+  render(); announce(revisionMessages.get(id));
+}
+
+function logInput(t) {
+  const field = t.dataset.log;
+  const value = t.type === 'checkbox' ? t.checked : t.value.trim();
+  const numeric = field === 'actualReps' || field === 'rir';
+  const valid = !t.validity.badInput && (!numeric || value === '' || (/^\d+$/.test(value) && Number(value) <= (field === 'rir' ? 5 : 100))) &&
+    (field !== 'actualWeight' || value === '' || parseWeight(value) !== null);
+  if (!valid) {
+    logError = field === 'actualWeight' ? 'Anna paino kilogrammoina (esim. 22,5) tai jätä kenttä tyhjäksi käyttääksesi tavoitepainoa.' : 'Anna kokonaisluku: toistot 0–100 tai RIR 0–5. Tyhjä tarkoittaa tuntematonta.';
+    announce(logError); render(); return;
+  }
+  const options = sessionOptions(), ei = +t.dataset.e, si = +t.dataset.s;
+  enqueueAction(async () => {
+    logError = '';
+    await mutate((next) => {
+      const target = field === 'fatigued' ? next.session : ['rir', 'pain'].includes(field) ? next.session?.exercises[ei] : next.session?.exercises[ei]?.sets[si];
+      if (!target) { announce('Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.'); return false; }
+      if (value === '' || value === false) delete target[field];
+      else target[field] = value;
+    }, options);
+  });
+}
+
 const actions = {
+  autorange(t) {
+    const exercise = draft.exercises[+t.dataset.i];
+    const config = progressionConfig(exercise);
+    exercise.progression = { weightStep: config.weightStep, autoLoad: config.autoLoad };
+    const range = progressionConfig(exercise);
+    rememberDraft();
+    render();
+    const button = document.querySelector(`[data-key="autorange-${CSS.escape(exercise.id)}"]`);
+    button.closest('.progression-editor').open = true;
+    button.focus({ preventScroll: true });
+    announce(`Liikkeen ehdotus on ${range.minReps}–${range.maxReps} toistoa. Muutos tallentuu ohjelman tallennuksessa.`);
+  },
+  async revise(t) { await changeRevision(t.dataset.id); },
+  async undorevision(t) { await changeRevision(t.dataset.id, true); },
   async start(t) {
     await mutate((next) => {
       if (next.session && !confirm('Korvataanko keskeneräinen harjoitus? Sen kirjaukset menetetään.')) return false;
@@ -383,6 +482,15 @@ const actions = {
     }, sessionOptions());
     if (ok && advance && storageOk && interaction === scrollInteraction) scheduleExerciseScroll(advance.sessionId, advance.index);
   },
+  async adjustreps(t) {
+    await mutate((next) => {
+      const ei = +t.dataset.e, si = +t.dataset.s;
+      const result = core.adjustSetReps(next.session, ei, si, +t.dataset.delta);
+      if (!result.ok) { logError = result.error; announce(logError); render(); return false; }
+      logError = '';
+      announce(`${next.session.exercises[ei].name}, sarja ${si + 1}: ${result.reps} toteutunutta toistoa. Tavoite säilyy ennallaan.`);
+    }, sessionOptions());
+  },
   async addset(t) { await mutate((next) => core.addSet(next.session, +t.dataset.e), sessionOptions()); },
   async rmset(t) {
     await mutate((next) => {
@@ -396,14 +504,20 @@ const actions = {
   async skiprest() { await mutate((next) => { next.restEnd = null; }, sessionOptions()); },
   async plus() { await mutate((next) => { next.restEnd = Math.max(next.restEnd || 0, Date.now()) + 30000; }, sessionOptions()); },
   async finish() {
+    let revisionResult, routineId;
     const ok = await mutate((next) => {
       if (!next.session) return false;
       const p = core.progress(next.session);
       if (p.done < p.total && !confirm(`${p.total - p.done} sarjaa on tekemättä. Lopetetaanko silti?`)) return false;
+      routineId = next.session.routineId;
       if (p.done) next.history.unshift(core.summarize(next.session));
       next.history = next.history.slice(0, 100); next.session = null; next.restEnd = null;
+      if (p.done && byId(routineId, next)?.autoProgress) revisionResult = reviseRoutine(next, routineId);
     }, { ...sessionOptions(), critical: true });
-    if (ok) { view = 'home'; render(); announce('Harjoitus tallennettu. Hienoa työtä!'); }
+    if (ok) {
+      if (revisionResult) revisionMessages.set(routineId, revisionResult.message);
+      view = 'home'; render(); announce(`Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}`);
+    }
   },
   async discard() {
     if (!confirm('Hylätäänkö harjoitus? Suoritusmerkinnät menetetään.')) return;
@@ -452,6 +566,12 @@ const actions = {
       const existing = byId(r.id, next);
       if (!draft.isNew && JSON.stringify(existing) !== draft.base) { editorError('Harjoitus muuttui toisessa välilehdessä. Luonnoksesi säilyy tässä. Peruuta ja avaa tallennettu versio tai kopioi muutokset uuteen harjoitukseen.'); return false; }
       if (draft.isNew && next.routines.length >= 100) { editorError('Voit tallentaa enintään 100 harjoitusta. Poista ensin tarpeeton ohjelma.'); return false; }
+      for (const exercise of r.exercises) {
+        const previous = existing?.exercises.find((e) => e.id === exercise.id);
+        if (previous && (previous.name !== exercise.name ||
+          JSON.stringify(prescription(previous)) !== JSON.stringify(prescription(exercise)) ||
+          JSON.stringify(progressionConfig(previous)) !== JSON.stringify(progressionConfig(exercise)))) delete exercise.recoveryBase;
+      }
       const i = next.routines.findIndex((x) => x.id === r.id);
       if (i < 0) next.routines.push(r); else next.routines[i] = r;
     }, { critical: true });
@@ -540,15 +660,61 @@ document.addEventListener('submit', (e) => {
 });
 document.addEventListener('input', (e) => {
   const t = e.target;
+  if (t.dataset.log && t.type !== 'checkbox') {
+    // Keep valid edits durable before blur; unfinished input is validated on change.
+    if (t.validity.valid && (t.dataset.log !== 'actualWeight' || !t.value.trim() || parseWeight(t.value) !== null)) logInput(t);
+    return;
+  }
   if (t.id === 'exercise-search') { picker.query = t.value; picker.limit = 40; updateLibraryResults(); return; }
   if (t.dataset.custom && draft) { customEntry()[t.dataset.custom] = t.value; rememberDraft(); return; }
+  if (t.dataset.progression && draft && t.type !== 'checkbox') {
+    const exercise = draft.exercises[+t.dataset.i];
+    const config = progressionConfig(exercise);
+    if (['minReps', 'maxReps'].includes(t.dataset.progression)) exercise.progression = config;
+    else exercise.progression ??= { weightStep: config.weightStep, autoLoad: config.autoLoad };
+    exercise.progression[t.dataset.progression] = t.value;
+    rememberDraft(); return;
+  }
   if (!t.dataset.f || !draft) return;
   if (t.dataset.f === 'rname') draft.name = t.value;
+  else if (t.dataset.f === 'setReps') draft.exercises[+t.dataset.i].setReps[+t.dataset.s] = t.value;
   else if (['name', 'sets', 'reps', 'weight'].includes(t.dataset.f)) draft.exercises[+t.dataset.i][t.dataset.f] = t.value;
+  if (t.dataset.f === 'sets') {
+    const exercise = draft.exercises[+t.dataset.i];
+    if (Array.isArray(exercise.setReps)) {
+      const count = core.clampInt(exercise.sets, 1, core.MAX_SETS, 3);
+      while (exercise.setReps.length < count) exercise.setReps.push(exercise.reps);
+      t.closest('.edit').querySelector('.set-targets').innerHTML = setTargetFields(exercise, +t.dataset.i);
+    }
+  }
   rememberDraft();
 });
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.log) { logInput(t); return; }
+  if (t.dataset.progression === 'autoLoad' && draft) {
+    const exercise = draft.exercises[+t.dataset.i];
+    const config = progressionConfig(exercise);
+    exercise.progression ??= { weightStep: config.weightStep, autoLoad: config.autoLoad };
+    exercise.progression.autoLoad = t.checked;
+    rememberDraft();
+  }
+  if (t.dataset.action === 'autoprogress') {
+    const checked = t.checked, id = t.dataset.id;
+    enqueueAction(async () => {
+      await mutate((next) => {
+        const routine = byId(id, next);
+        if (!routine) { announce('Harjoitusohjelmaa ei löytynyt.'); return false; }
+        routine.autoProgress = checked;
+      }, { critical: true });
+    });
+    return;
+  }
+  if (draft && t.dataset.f === 'individualReps') {
+    const exercise = draft.exercises[+t.dataset.i];
+    exercise.setReps = t.checked ? Array.from({ length: core.clampInt(exercise.sets, 1, core.MAX_SETS, 3) }, () => exercise.reps) : null;
+    rememberDraft(); render();
+  }
   if (t.type === 'radio' && t.checked && (t.dataset.filter || t.dataset.custom)) {
     const menu = t.closest('.choice-menu');
     menu.querySelector(`#${menu.id}-value`).textContent = t.nextElementSibling.textContent;
@@ -566,6 +732,10 @@ document.addEventListener('change', async (e) => {
   }
 });
 document.addEventListener('toggle', (e) => {
+  if (e.target.matches('.exercise-log')) {
+    if (e.target.open) openLogs.add(e.target.dataset.logPanel);
+    else openLogs.delete(e.target.dataset.logPanel);
+  }
   if (e.target.matches('.settings')) settingsOpen = e.target.open;
   if (e.target.matches('.custom-exercise')) customOpen = e.target.open;
 }, true);
