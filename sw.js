@@ -1,5 +1,5 @@
 // Bump VERSION on every release. All files are cached together so app.js and core.js can never be mixed across versions.
-const VERSION = '13';
+const VERSION = '16';
 const CACHE = `gym-tracker-v${VERSION}`;
 const ASSETS = ['./', './index.html', './app.js', './core.js', './progression.js', './exercises.js', './styles.css', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'];
 
@@ -18,6 +18,21 @@ self.addEventListener('activate', (e) => {
       .then((ks) => Promise.all(ks.filter((k) => k.startsWith('gym-tracker-v') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// Explicit acceptance can activate immediately, but never disrupt another window.
+self.addEventListener('message', (e) => {
+  if (e.data?.type !== 'APPLY_UPDATE' || !e.ports[0] || !e.source?.id) return;
+  const reply = (data) => e.ports[0].postMessage(data);
+  e.waitUntil((async () => {
+    const clients = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .filter((client) => client.url.startsWith(self.registration.scope));
+    if (clients.length !== 1 || clients[0].id !== e.source.id) {
+      reply({ ok: false, reason: 'other-windows' }); return;
+    }
+    await self.skipWaiting();
+    reply({ ok: true });
+  })().catch(() => reply({ ok: false, reason: 'activation-failed' })));
 });
 
 // Cache-first: instant and fully offline. The new version takes effect on the next launch.

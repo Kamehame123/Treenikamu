@@ -60,6 +60,13 @@ let shareMessage = '';
 let importMode = 'merge';
 let offlineReady = false;
 let updateReady = false;
+let updateRegistration = null;
+let updateDismissed = false;
+let updateBusy = false;
+let updateError = '';
+let updateCheck = null;
+let updateTimer;
+let reloadPending = false;
 let wakeLock = null;
 let wakePending = false;
 let pendingActions = 0;
@@ -95,6 +102,7 @@ function readLatest() {
 // Every write reads the latest durable state while holding an origin-wide lock.
 // Never save stale state on pagehide: every actual mutation is saved immediately.
 async function mutate(change, { critical = false, sessionId = null } = {}) {
+  if (updateBusy) { announce('Päivitys on käynnissä. Odota sovelluksen avautumista uudelleen.'); return false; }
   const work = async () => {
     try { newerSchema = core.hasNewerSchema(storage?.getItem(core.STORAGE_KEY)); } catch { /* Storage denial is handled below. */ }
     if (newerSchema) { storageOk = false; render(); return false; }
@@ -145,6 +153,104 @@ function brand() {
   return `<header class="brand-row"><a class="brand" href="#" data-action="home" data-key="brand" aria-label="Treenipäiväkirja – etusivu"><span class="brand-mark">${icon('weight')}</span><span>TREENI<span class="brand-light">PÄIVÄKIRJA</span></span></a><span class="status" id="connection">${connectionText()}</span></header>`;
 }
 function connectionText() { return !navigator.onLine ? 'Ei verkkoyhteyttä' : offlineReady ? 'Toimii myös ilman verkkoa' : 'Tällä laitteella'; }
+
+function renderUpdateNotice() {
+  let notice = document.getElementById('update-notice');
+  if (!notice) {
+    notice = document.createElement('aside');
+    notice.id = 'update-notice';
+    notice.className = 'update-notice card';
+    notice.setAttribute('aria-labelledby', 'update-title');
+    $app.after(notice);
+  }
+  notice.hidden = updateDismissed || (!updateReady && !reloadPending && !updateError && !updateBusy);
+  $app.inert = updateBusy;
+  if (notice.hidden) return;
+  const ready = updateReady || reloadPending;
+  // Failed checks must not displace the workout controls.
+  if (ready || updateBusy) {
+    if (notice.nextElementSibling !== $app) $app.before(notice);
+  } else if (notice.previousElementSibling !== $app) $app.after(notice);
+  const html = `<h2 id="update-title">${updateBusy ? 'Päivitetään sovellusta…' : ready ? 'Uusi versio saatavilla' : 'Päivityksen tarkistus ei onnistunut'}</h2><p role="status">${esc(updateError || (updateBusy ? 'Odota hetki. Sovellus avautuu uudelleen päivittyneenä.' : 'Päivitä sovellus nyt tai myöhemmin. Tallennettu harjoitus, historia ja muokkausluonnos säilyvät. Sulje muut tämän sovelluksen ikkunat ennen päivittämistä.'))}</p><div class="update-actions">${ready ? `<button class="btn primary" data-action="installupdate" data-key="installupdate" ${updateBusy ? 'disabled' : ''}>Päivitä nyt</button>` : '<button class="btn" data-action="checkupdates" data-key="checkupdates">Yritä uudelleen</button>'}<button class="btn" data-action="laterupdate" data-key="laterupdate" ${updateBusy ? 'disabled' : ''}>Myöhemmin</button></div>`;
+  if (notice.innerHTML !== html) notice.innerHTML = html;
+}
+
+function updateFailed(message) {
+  clearTimeout(updateTimer);
+  updateBusy = false; updateDismissed = false; updateError = message;
+  renderUpdateNotice(); announce(message);
+}
+
+async function checkForUpdates() {
+  if (updateBusy || updateCheck || !updateRegistration || !navigator.onLine) return;
+  if (updateRegistration.installing && !updateRegistration.active) return;
+  updateCheck = updateRegistration.update();
+  try { await updateCheck; }
+  catch { updateFailed('Uutta versiota ei voitu tarkistaa. Nykyinen sovellus ja tietosi säilyvät. Tarkista verkkoyhteys ja yritä uudelleen.'); }
+  finally { updateCheck = null; renderUpdateNotice(); }
+}
+
+async function registerUpdates() {
+  if (updateRegistration) { await checkForUpdates(); return; }
+  try {
+    const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+    updateRegistration = registration;
+    let offeredWorker = null;
+    const refresh = () => {
+      updateReady = !!registration.waiting && !!navigator.serviceWorker.controller;
+      if (updateReady && offeredWorker !== registration.waiting) {
+        offeredWorker = registration.waiting; updateDismissed = false; updateError = '';
+        announce('Uusi sovellusversio on saatavilla. Voit päivittää nyt tai myöhemmin.');
+      }
+      renderUpdateNotice();
+    };
+    const watch = (worker) => worker?.addEventListener('statechange', () => {
+      if (worker.state === 'redundant' && registration.active) updateFailed('Uuden version lataus ei valmistunut. Nykyinen versio ja tietosi säilyvät. Yritä uudelleen verkkoyhteydessä.');
+      refresh();
+    });
+    registration.addEventListener('updatefound', () => watch(registration.installing));
+    watch(registration.installing);
+    refresh();
+    navigator.serviceWorker.ready.then(() => {
+      offlineReady = true;
+      const status = document.getElementById('connection');
+      if (status) status.textContent = connectionText();
+    });
+    await checkForUpdates();
+  } catch {
+    updateFailed('Päivityspalvelua ei voitu käynnistää. Nykyisiä tietoja ei muutettu. Tarkista verkkoyhteys ja selaimen sivusto-oikeudet, ja yritä uudelleen.');
+  }
+}
+
+async function installUpdate() {
+  if (pendingActions > 1) { updateFailed('Odota keskeneräisten kirjausten tallentumista ja yritä päivittämistä uudelleen.'); return; }
+  if ((dirty || !storageOk) && !newerSchema) await mutate(() => {}, { critical: true });
+  if (dirty || saveConflict || (!storageOk && !newerSchema)) {
+    updateFailed('Päivitystä ei aloitettu: kaikkia harjoitustietoja ei ole tallennettu. Käytä tallennuksen palautustoimintoja ja yritä uudelleen.'); return;
+  }
+  if (draft) rememberDraft();
+  if (draft && !draftOk) { updateFailed('Muokkausluonnosta ei voitu tallentaa. Tallenna ohjelma tai korjaa luonnoksen tallennus ennen päivitystä.'); return; }
+  if (logError) { updateFailed('Tarkista harjoituksen virheellinen kirjaus ennen päivitystä.'); return; }
+  readLatest();
+  if (!storageOk && !newerSchema) { updateFailed('Tallennettua harjoitusta ei voitu lukea. Korjaa tallennuksen tila ennen päivitystä.'); return; }
+  if (reloadPending) { window.location.reload(); return; }
+  const worker = updateRegistration?.waiting;
+  if (!worker) { updateReady = false; updateFailed('Ladattua päivitystä ei enää löytynyt. Tarkista päivitykset uudelleen.'); return; }
+  updateError = ''; updateBusy = true; renderUpdateNotice();
+  const channel = new MessageChannel();
+  updateTimer = setTimeout(() => {
+    channel.port1.close();
+    updateFailed('Päivitys ei valmistunut ajoissa. Tietojasi ei poistettu. Sulje muut sovelluksen ikkunat ja yritä uudelleen.');
+  }, 12000);
+  channel.port1.onmessage = ({ data }) => {
+    channel.port1.close();
+    if (!data?.ok) updateFailed(data?.reason === 'other-windows'
+      ? 'Sulje muut tämän sovelluksen ikkunat ja selaimen välilehdet. Niiden harjoituksia ei keskeytetty. Yritä sitten uudelleen.'
+      : 'Päivitystä ei voitu ottaa käyttöön. Nykyiset tiedot säilyvät. Yritä uudelleen.');
+  };
+  try { worker.postMessage({ type: 'APPLY_UPDATE' }, [channel.port2]); }
+  catch { channel.port1.close(); updateFailed('Päivityspyyntö ei onnistunut. Tarkista päivitykset uudelleen; nykyiset tiedot säilyvät.'); }
+}
 
 function progressionControls(r) {
   const active = state.session?.routineId === r.id;
@@ -304,6 +410,7 @@ function render() {
   } else if (changed && renderedView) document.querySelector('h1')?.focus({ preventScroll: true });
   window.scrollTo(0, changed ? 0 : scroll);
   renderedView = view;
+  renderUpdateNotice();
   tick(); syncWakeLock();
 }
 
@@ -426,6 +533,13 @@ function logInput(t) {
 }
 
 const actions = {
+  async installupdate() { await installUpdate(); },
+  laterupdate() { updateDismissed = true; renderUpdateNotice(); announce('Päivitys siirretty myöhemmäksi.'); },
+  async checkupdates() {
+    updateError = ''; updateDismissed = false;
+    if (!navigator.onLine) updateFailed('Yhdistä verkkoon päivitysten tarkistamiseksi. Voit jatkaa nykyisen version käyttöä.');
+    else await registerUpdates();
+  },
   autorange(t) {
     const exercise = draft.exercises[+t.dataset.i];
     const config = progressionConfig(exercise);
@@ -639,6 +753,7 @@ $file.addEventListener('change', async () => {
 });
 
 function enqueueAction(work) {
+  if (updateBusy) { announce('Päivitys on käynnissä. Odota hetki.'); return; }
   cancelExerciseScroll();
   pendingActions++;
   $app.setAttribute('aria-busy', 'true');
@@ -750,19 +865,30 @@ window.addEventListener('storage', (e) => {
 });
 document.addEventListener('visibilitychange', () => {
   cancelExerciseScroll();
-  if (document.visibilityState === 'visible') { readLatest(); if (view !== 'edit') render(); }
+  if (document.visibilityState === 'visible') {
+    readLatest(); if (view !== 'edit') render();
+    updateDismissed = false; renderUpdateNotice(); void checkForUpdates();
+  }
   tick(); syncWakeLock();
 });
-window.addEventListener('pageshow', (e) => { if (e.persisted) { readLatest(); render(); } });
+window.addEventListener('pageshow', (e) => { if (e.persisted) { readLatest(); updateDismissed = false; render(); void checkForUpdates(); } });
 for (const event of ['online', 'offline']) window.addEventListener(event, () => {
   const status = document.getElementById('connection'); if (status) status.textContent = connectionText();
+  if (event === 'online') { updateDismissed = false; renderUpdateNotice(); void checkForUpdates(); }
 });
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').then((registration) => {
-    navigator.serviceWorker.ready.then(() => { offlineReady = true; const status = document.getElementById('connection'); if (status) status.textContent = connectionText(); });
-    const update = () => { updateReady = !!registration.waiting; };
-    update(); registration.addEventListener('updatefound', () => registration.installing?.addEventListener('statechange', update));
-  }).catch(() => { /* No offline promise when registration is denied. */ });
+  let previousController = navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const controlled = !!previousController;
+    previousController = navigator.serviceWorker.controller;
+    if (!controlled) return;
+    clearTimeout(updateTimer);
+    updateBusy = false; reloadPending = true;
+    if (dirty || saveConflict || (draft && !draftOk) || pendingActions > 1) {
+      updateFailed('Uusi versio on valmis, mutta tässä ikkunassa on tallentamattomia muutoksia. Tallenna ne ennen uudelleenavausta.');
+    } else window.location.reload();
+  });
+  void registerUpdates();
 }
 render();
 if (view === 'workout') showCurrentExercise({ instant: true });

@@ -66,6 +66,11 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .section-head .eyebrow { font-size: 10px; }
 .list { display: grid; list-style: none; padding: 0; margin: 0; gap: 12px; }
 .card { padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); box-shadow: var(--shadow); min-width: 0; }
+.update-notice { max-width: 1008px; margin: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); border-color: var(--accent); background: var(--accent-soft); }
+#app + .update-notice { margin-bottom: calc(144px + env(safe-area-inset-bottom)); }
+.update-notice p { margin-top: 8px; font-size: 13px; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+@media (min-width: 1040px) { .update-notice { margin-inline: auto; } }
 .routine { position: relative; }
 .progression-controls { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
 .progression-controls > p { margin-top: 10px; }

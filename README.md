@@ -141,8 +141,41 @@ checks. Revision, undo, opt-in, and finish are critical writes: a quota or stora
 failure cannot partially commit the history, delete an active session, or replace
 the routine with an unpersisted revision. The app shows a storage warning and
 provides retry/export recovery using the retained data; no prior backup is needed.
-Merge/replace imports include all new metadata. The service worker caches the
-new module with the app version and waits for existing tabs to close before
-activating, preserving the running-workout update policy. When merge creates a
-separate copy of a conflicting routine, its incoming history and active session
+Merge/replace imports include all new metadata. The service worker caches all
+application assets together and does not force an update over existing windows.
+When merge creates a separate copy of a conflicting routine, its incoming history and active session
 are linked to that copy; repeating that import reuses the same copy.
+
+## Installed-app updates
+
+Opening from the installed desktop/home-screen icon checks for a new version.
+Returning to the app (including an already-open standalone window) and reconnecting
+to the network check again. A fully downloaded update shows an accessible
+"Uusi versio saatavilla" notice on every view, with "Päivitä nyt" and "Myöhemmin".
+Finding an update does not reload the app or steal focus from an editor.
+Postponement lasts until the next launch or foreground visit.
+
+Accepting an update activates the downloaded worker and reloads the app only
+after outstanding changes and any draft can be saved. Storage failures or
+conflicts block activation and show recovery guidance; in-memory progress and
+the original saved data are retained for retry. Saved running sessions, actual
+reps, targets, history, imports, revision/undo metadata and rest timers use the
+same storage keys and resume after reload. Editor drafts use the same tab's
+session storage. No data migration, uninstall, clearing storage or prior backup
+is required for this update mechanism.
+
+Immediate activation requires closing other windows/tabs of this app, so an
+update cannot interrupt their workouts or unsaved drafts. The worker checks
+this itself before accepting the activation request. Without explicit acceptance,
+normal service-worker activation still waits until old clients close.
+
+Offline launches keep the cached version. An already-downloaded update can be
+accepted offline; otherwise reconnection checks for a download. Failed checks,
+incomplete asset downloads and activation failures show retry guidance rather
+than reporting success. Check failures appear below the app without displacing
+workout controls. The current version stays usable. Run `npm run test:updates`
+for real two-version lifecycle and data-preservation tests in Chromium and WebKit.
+
+An installation still running an older release without this prompt must first
+receive this release through the existing close-all-windows/reopen update flow.
+Do not uninstall the app or clear browser/site data to force it.
