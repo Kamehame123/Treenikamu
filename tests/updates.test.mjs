@@ -8,13 +8,14 @@ import { chromium, webkit, devices, AxeBuilder, root, tap } from './support.mjs'
 
 let release = 1;
 let failDownload = false;
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
+let numericVersions = false;
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
   const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
   if (!/^[\w.-]+$/.test(name) || (failDownload && name === 'progression.js')) { res.writeHead(503); res.end(); return; }
   try {
     let body = await readFile(join(root, name));
-    if (name === 'sw.js') body = body.toString().replace(/const VERSION = '[^']+';/, `const VERSION = 'update-test-${release}';`);
+    if (name === 'sw.js') body = body.toString().replace(/const VERSION = '[^']+';/, `const VERSION = '${numericVersions ? (release === 1 ? 34 : 38) : `update-test-${release}`}';`);
     if (name === 'app.js') body = `globalThis.testRelease = ${release};\n${body}`;
     res.writeHead(200, { 'Content-Type': types[extname(name)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(body);
@@ -45,7 +46,7 @@ try {
     try {
       await test(`${name}: installed-app updates`, async (t) => {
         const run = async (title, work) => t.test(title, { timeout: 45000 }, async () => {
-          release = 1; failDownload = false;
+          release = 1; failDownload = false; numericVersions = false;
           const context = await browser.newContext({ ...devices[device], reducedMotion: 'reduce' });
           const page = await context.newPage();
           page.setDefaultTimeout(8000);
@@ -216,6 +217,45 @@ try {
           await button(page, 'Päivitä nyt').waitFor();
           await updated(page);
           assert.deepEqual(await saved(page), before);
+        });
+
+        await run('the popup lists the changes of every version newer than the running one, in order', async (page) => {
+          numericVersions = true;
+          await ready(page); await offer(page);
+          const notes = page.locator('#update-notice .release-notes');
+          await notes.waitFor();
+          const versions = await notes.locator('.release-version').allInnerTexts();
+          assert.deepEqual(versions, ['Versio 38', 'Versio 37', 'Versio 36', 'Versio 35']);
+          assert.match(await notes.innerText(), /Päivitysikkuna kertoo nyt, mitä muutoksia/);
+          assert.doesNotMatch(await notes.innerText(), /Varmuuskopiointi siirretty Asetuksiin/);
+          assert.equal(await page.locator('#update-notice').getByRole('button', { name: 'Päivitä nyt', exact: true }).isVisible(), true);
+          await updated(page);
+          assert.equal(await page.locator('#update-notice').isVisible(), false);
+        });
+
+        await run('without comparable version numbers the popup still shows the newest change list', async (page) => {
+          await ready(page); await offer(page);
+          const notes = page.locator('#update-notice .release-notes');
+          await notes.waitFor();
+          assert.equal(await notes.locator('.release-version').count(), 1);
+        });
+
+        await run('a waiting version installed while page events were missed is offered when the app resumes', async (page) => {
+          await page.addInitScript(() => { ServiceWorker.prototype.addEventListener = () => {}; });
+          await ready(page);
+          release = 2;
+          await page.evaluate(async () => {
+            const registration = await navigator.serviceWorker.getRegistration();
+            await registration.update();
+          });
+          assert.equal(await page.evaluate(async () => {
+            const registration = await navigator.serviceWorker.getRegistration();
+            for (let i = 0; i < 80 && !registration.waiting; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+            return !!registration.waiting;
+          }), true);
+          assert.equal(await page.locator('#update-notice').isVisible(), false);
+          await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+          await button(page, 'Päivitä nyt').waitFor();
         });
 
         await run('the update offer is accessible on small screens in both color schemes', async (page) => {

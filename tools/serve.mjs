@@ -5,8 +5,8 @@ import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-const ALLOW = new Set(['index.html', 'app.js', 'core.js', 'progression.js', 'cheers.js', 'statistics.js', 'statistics-ui.js', 'exercises.js', 'styles.css', 'sw.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png']);
+const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+const ALLOW = new Set(['index.html', 'app.js', 'core.js', 'progression.js', 'cheers.js', 'statistics.js', 'statistics-ui.js', 'exercises.js', 'styles.css', 'release-notes.json', 'sw.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png']);
 const port = Number(process.argv[2]) || 8080;
 // Loopback only by default. Pass a host such as 0.0.0.0 to serve other devices on the LAN.
 const host = process.argv[3] || process.env.HOST || '127.0.0.1';

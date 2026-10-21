@@ -1,0 +1,25 @@
+[
+  { "version": 38, "date": "2026-10-21", "changes": [
+    "Päivitysikkuna kertoo nyt, mitä muutoksia uusi versio sisältää.",
+    "Päivitysilmoitus tarkistetaan uudelleen, kun sovellus palaa taustalta."
+  ] },
+  { "version": 37, "date": "2026-10-21", "changes": [
+    "Etusivulta poistettu toistuva Treenipäiväkirja-otsikko; logo riittää."
+  ] },
+  { "version": 36, "date": "2026-10-21", "changes": [
+    "Etusivu tiivistetty: tilastot sekä Tilastot- ja Ennätykset-painikkeet ovat heti logon alla ja ohjelmakortit ovat kompakteja."
+  ] },
+  { "version": 35, "date": "2026-10-21", "changes": [
+    "Harjoitusohjelmat näkyvät etusivulla ensin, selkeämmin ja vihreällä korostuksella."
+  ] },
+  { "version": 34, "date": "2026-10-21", "changes": [
+    "Varmuuskopiointi siirretty Asetuksiin. Pieni muistutus näkyy, kun varmuuskopio on myöhässä."
+  ] },
+  { "version": 33, "date": "2026-10-21", "changes": [
+    "Ennätykset-sivu näyttää viimeisimmän päivän, jolloin ennätyspaino saavutettiin."
+  ] },
+  { "version": 31, "date": "2026-10-21", "changes": [
+    "Uusi Ennätykset-sivu ja lyhyempi Tilastot-painike.",
+    "Etusivun jaksoa voi vaihtaa napauttamalla jaksolaattaa."
+  ] }
+]

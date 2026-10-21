@@ -102,6 +102,8 @@ let updateBusy = false;
 let updateError = '';
 let updateCheck = null;
 let updateTimer;
+let offeredWorker = null;
+let releaseNotes = [];
 let reloadPending = false;
 let wakeLock = null;
 let wakePending = false;
@@ -252,7 +254,7 @@ function renderUpdateNotice() {
   if (ready || updateBusy) {
     if (notice.nextElementSibling !== $app) $app.before(notice);
   } else if (notice.previousElementSibling !== $app) $app.after(notice);
-  const html = `<h2 id="update-title">${updateBusy ? 'Päivitetään sovellusta…' : ready ? 'Uusi versio saatavilla' : 'Päivityksen tarkistus ei onnistunut'}</h2><p role="status">${esc(updateError || (updateBusy ? 'Odota hetki. Sovellus avautuu uudelleen päivittyneenä.' : 'Päivitä sovellus nyt tai myöhemmin. Tallennettu harjoitus, historia ja muokkausluonnos säilyvät. Sulje muut tämän sovelluksen ikkunat ennen päivittämistä.'))}</p><div class="update-actions">${ready ? `<button class="btn primary" data-action="installupdate" data-key="installupdate" ${updateBusy ? 'disabled' : ''}>Päivitä nyt</button>` : '<button class="btn" data-action="checkupdates" data-key="checkupdates">Yritä uudelleen</button>'}<button class="btn" data-action="laterupdate" data-key="laterupdate" ${updateBusy ? 'disabled' : ''}>Myöhemmin</button></div>`;
+  const html = `<h2 id="update-title">${updateBusy ? 'Päivitetään sovellusta…' : ready ? 'Uusi versio saatavilla' : 'Päivityksen tarkistus ei onnistunut'}</h2><p role="status">${esc(updateError || (updateBusy ? 'Odota hetki. Sovellus avautuu uudelleen päivittyneenä.' : 'Päivitä sovellus nyt tai myöhemmin. Tallennettu harjoitus, historia ja muokkausluonnos säilyvät. Sulje muut tämän sovelluksen ikkunat ennen päivittämistä.'))}</p>${ready && !updateBusy && releaseNotes.length ? `<div class="release-notes"><strong>Muutokset</strong>${releaseNotes.map((n) => `<p class="release-version">Versio ${esc(n.version)}</p><ul>${n.changes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>`).join('')}</div>` : ''}<div class="update-actions">${ready ? `<button class="btn primary" data-action="installupdate" data-key="installupdate" ${updateBusy ? 'disabled' : ''}>Päivitä nyt</button>` : '<button class="btn" data-action="checkupdates" data-key="checkupdates">Yritä uudelleen</button>'}<button class="btn" data-action="laterupdate" data-key="laterupdate" ${updateBusy ? 'disabled' : ''}>Myöhemmin</button></div>`;
   if (notice.innerHTML !== html) notice.innerHTML = html;
 }
 
@@ -262,13 +264,45 @@ function updateFailed(message) {
   renderUpdateNotice(); announce(message);
 }
 
+function askWorker(worker) {
+  return new Promise((resolve) => {
+    if (!worker) { resolve(null); return; }
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => { channel.port1.close(); resolve(null); }, 2000);
+    channel.port1.onmessage = ({ data }) => { clearTimeout(timer); channel.port1.close(); resolve(data); };
+    try { worker.postMessage({ type: 'RELEASE_INFO' }, [channel.port2]); } catch { clearTimeout(timer); channel.port1.close(); resolve(null); }
+  });
+}
+
+// The waiting version carries its own release notes. Show every entry newer than the running version.
+async function loadReleaseNotes(worker) {
+  const [next, current] = await Promise.all([askWorker(worker), askWorker(navigator.serviceWorker.controller)]);
+  if (updateRegistration?.waiting !== worker || !Array.isArray(next?.notes)) return;
+  const notes = next.notes.filter((n) => n && Number.isFinite(n.version) && Array.isArray(n.changes) && n.changes.every((c) => typeof c === 'string'));
+  const from = Number(current?.version), to = Number(next.version);
+  releaseNotes = Number.isFinite(from) && Number.isFinite(to) ? notes.filter((n) => n.version > from && n.version <= to) : notes.slice(0, 1);
+  renderUpdateNotice();
+}
+
+function syncUpdateState() {
+  const registration = updateRegistration;
+  if (!registration) { renderUpdateNotice(); return; }
+  updateReady = !!registration.waiting && !!navigator.serviceWorker.controller;
+  if (updateReady && offeredWorker !== registration.waiting) {
+    offeredWorker = registration.waiting; updateDismissed = false; updateError = ''; releaseNotes = [];
+    announce('Uusi sovellusversio on saatavilla. Voit päivittää nyt tai myöhemmin.');
+    void loadReleaseNotes(offeredWorker);
+  }
+  renderUpdateNotice();
+}
+
 async function checkForUpdates() {
   if (updateBusy || updateCheck || !updateRegistration || !navigator.onLine) return;
   if (updateRegistration.installing && !updateRegistration.active) return;
   updateCheck = updateRegistration.update();
   try { await updateCheck; }
   catch { updateFailed('Uutta versiota ei voitu tarkistaa. Nykyinen sovellus ja tietosi säilyvät. Tarkista verkkoyhteys ja yritä uudelleen.'); }
-  finally { updateCheck = null; renderUpdateNotice(); }
+  finally { updateCheck = null; syncUpdateState(); }
 }
 
 async function registerUpdates() {
@@ -276,15 +310,7 @@ async function registerUpdates() {
   try {
     const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
     updateRegistration = registration;
-    let offeredWorker = null;
-    const refresh = () => {
-      updateReady = !!registration.waiting && !!navigator.serviceWorker.controller;
-      if (updateReady && offeredWorker !== registration.waiting) {
-        offeredWorker = registration.waiting; updateDismissed = false; updateError = '';
-        announce('Uusi sovellusversio on saatavilla. Voit päivittää nyt tai myöhemmin.');
-      }
-      renderUpdateNotice();
-    };
+    const refresh = syncUpdateState;
     const watch = (worker) => worker?.addEventListener('statechange', () => {
       if (worker.state === 'redundant' && registration.active) updateFailed('Uuden version lataus ei valmistunut. Nykyinen versio ja tietosi säilyvät. Yritä uudelleen verkkoyhteydessä.');
       refresh();
@@ -1328,7 +1354,7 @@ document.addEventListener('visibilitychange', () => {
   cancelExerciseScroll();
   if (document.visibilityState === 'visible') {
     readLatest(); if (view !== 'edit') render();
-    updateDismissed = false; renderUpdateNotice(); void checkForUpdates();
+    updateDismissed = false; syncUpdateState(); void checkForUpdates();
   }
   tick(); syncWakeLock();
 });

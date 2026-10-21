@@ -347,7 +347,17 @@ Returning to the app (including an already-open standalone window) and reconnect
 to the network check again. A fully downloaded update shows an accessible
 "Uusi versio saatavilla" notice on every view, with "Päivitä nyt" and "Myöhemmin".
 Finding an update does not reload the app or steal focus from an editor.
-Postponement lasts until the next launch or foreground visit.
+Postponement lasts until the next launch or foreground visit. Returning to the
+app also re-reads the worker state, so a version downloaded while the app was in
+the background is offered even if its state events were missed.
+
+The notice lists the changes ("Muutokset") of every version between the running
+one and the downloaded one, read from the downloaded worker's cached
+`release-notes.json`. When releasing, add an entry (newest first, integer
+`version` equal to the `VERSION` in `sw.js`, Finnish `changes`) to that file
+together with the version bump; `npm test` verifies it. Notes appear only when
+the running version already contains this feature (from the update after
+version 38).
 
 Accepting an update activates the downloaded worker and reloads the app only
 after outstanding changes and any draft can be saved. Storage failures or

@@ -64,6 +64,18 @@ test('every module the app imports, directly or not, is precached by the service
   for (const [, file] of html.matchAll(/(?:src|href)="([^"#:]+\.(?:js|css))"/g)) assert.ok(worker.includes(`'./${file}'`), `${file} missing from sw.js ASSETS`);
 });
 
+test('release notes are valid, newest first, and the worker precaches them with the current version', async () => {
+  const notes = JSON.parse(await readFile(new URL('../release-notes.json', import.meta.url), 'utf8'));
+  const worker = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
+  const server = await readFile(new URL('../tools/serve.mjs', import.meta.url), 'utf8');
+  assert.ok(worker.includes("'./release-notes.json'") && server.includes("'release-notes.json'"));
+  assert.equal(notes[0].version, Number(/const VERSION = '(\d+)'/.exec(worker)[1]), 'newest note matches the service worker VERSION');
+  for (let i = 0; i < notes.length; i++) {
+    assert.ok(Number.isInteger(notes[i].version) && notes[i].changes.length > 0 && notes[i].changes.every((c) => typeof c === 'string' && c.trim()));
+    if (i) assert.ok(notes[i].version < notes[i - 1].version, 'versions strictly descend');
+  }
+});
+
 test('iOS home-screen launch retains app-capable metadata and safe-area support', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /<meta name="apple-mobile-web-app-capable" content="yes">/);
