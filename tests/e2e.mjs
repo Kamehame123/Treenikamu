@@ -82,6 +82,13 @@ async function suite(name, type, device) {
     await importFile('import', extra);
     after = await saved();
     eq([after.routines.length, after.history.length], [2, 1], 'importing the same file again changes nothing');
+    await page.reload();
+    eq(await page.locator('.routine-details[open]').count(), 0, 'programs start collapsed after reload');
+    await views(page, name, 'home-programs');
+    await page.locator('.routine-details > summary').first().click();
+    eq(await page.locator('.routine-details[open]').count(), 1, 'program disclosure opens independently');
+    await audit(page, `${name}/expanded-program`);
+    await page.locator('.settings summary').click();
     await importFile('import', { v: 1, routines: [{ id: 'old-1', name: 'Legacy plan', exercises: [{ name: 'Press' }] }], history: [] });
     eq((await saved()).routines.length, 3, 'legacy pre-envelope export imports');
     await importFile('import', 'not a backup', false);

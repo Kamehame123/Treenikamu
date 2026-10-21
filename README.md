@@ -4,9 +4,14 @@ Finnish, local-first resistance-training diary. Run `npm start` to serve the app
 Run `npm test` for pure logic and asset tests; `npm run test:progression` exercises
 the progression UI in Chromium and WebKit. Browser tests use isolated storage.
 
-The home screen prioritizes starting or resuming a workout. Backup reminders and
-the coaching guide appear below the workout list; backup reminders and export
-remain available with the same weekly schedule.
+The home screen puts training programs before activity statistics, with larger
+titles, green-accented cards, exercise/set badges and a labelled one-tap **Aloita**
+button. Program details still expand on demand; an unfinished workout keeps its
+resume shortcut above the list. Statistics sit alongside programs on desktop and
+below them on phones. Backup reminders and export remain inside **Asetukset**,
+with the same weekly schedule. This is a presentation-only update: existing
+browser storage, training history, imports and active sessions are unchanged;
+no migration or reset is needed.
 
 ## Training statistics
 

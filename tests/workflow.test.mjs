@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
+import { configuredState } from './statistics-fixtures.mjs';
 import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm, openSettings } from './support.mjs';
 
 const { server, url } = await startServer();
@@ -80,7 +81,7 @@ try {
           try { await work(page); assert.deepEqual(errors, []); } finally { await context.close(); }
         });
 
-        await run('routines are listed compactly and expand on demand with their details and actions', async (p) => {
+        await run('program cards expand on demand with their details and actions', async (p) => {
           await p.goto(url);
           const first = p.locator('.routine-details').first();
           assert.equal(await p.locator('.routine-details').count() >= 1, true);
@@ -97,6 +98,55 @@ try {
           assert.equal(await first.getByRole('button', { name: /^Muokkaa: /, exact: false }).isVisible(), true);
           await p.reload();
           assert.equal(await p.locator('.routine-details').first().evaluate((d) => d.open), false);
+        });
+
+        await run('programs lead the home screen in both themes without changing existing data', async (p) => {
+          const state = configuredState();
+          state.routines.push(core.sanitizeRoutine({
+            id: 'imported-plan', name: 'Oma pitkä harjoitusohjelma – ylävartalo & keskivartalo <3',
+            exercises: [{ id: 'imported-ex', name: 'Oma liike', sets: 4, reps: '8', setReps: ['8', '7', '6', '5'], weight: '22,5' }],
+          }));
+          state.history.push({ id: 'legacy-history', name: 'Vanha tuotu treeni', startedAt: 1000, endedAt: 2000, setsDone: 2, setsTotal: 3 });
+          const raw = JSON.stringify(state);
+          await p.goto(url);
+          await p.evaluate((raw) => localStorage.setItem('gym-tracker-v1', raw), raw);
+          await p.reload();
+          assert.equal(await p.locator('.routine').count(), 2);
+          assert.equal(await p.locator('.routine h3').last().textContent(), state.routines[1].name);
+          assert.match(await p.locator('.routine-meta').last().innerText(), /1 liikettä\s+4 sarjaa/);
+          for (const colorScheme of ['dark', 'light']) {
+            await p.emulateMedia({ colorScheme });
+            for (const width of [320, 390, 700, 768, 1280]) {
+              await p.setViewportSize({ width, height: 844 });
+              const layout = await p.evaluate(() => {
+                const programs = document.querySelector('.home-programs');
+                const aside = document.querySelector('.home-aside');
+                const rect = (e) => e.getBoundingClientRect();
+                return {
+                  first: !!(programs.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING),
+                  stacked: rect(aside).top >= rect(programs).bottom,
+                  wider: rect(programs).width > rect(aside).width,
+                  visible: rect(document.querySelector('.routine')).bottom < innerHeight,
+                  noOverflow: document.documentElement.scrollWidth <= innerWidth,
+                  noOverlap: [...document.querySelectorAll('.routine')].every((r) =>
+                    rect(r.querySelector('h3')).right <= rect(r.querySelector('.quick-start')).left),
+                };
+              });
+              assert.equal(layout.first, true, 'reading order puts programs first');
+              assert.equal(width <= 700 ? layout.stacked : layout.wider, true, `${colorScheme}/${width}: program priority`);
+              assert.equal(layout.visible, true, 'first program is fully visible without scrolling');
+              assert.equal(layout.noOverflow, true, `${colorScheme}/${width}: no overflow`);
+              assert.equal(layout.noOverlap, true, 'long names do not overlap the start button');
+            }
+          }
+          const summary = p.locator('.routine-details > summary').last();
+          await summary.focus(); await p.keyboard.press('Space');
+          assert.equal(await p.locator('.routine-details').last().evaluate((d) => d.open), true);
+          assert.equal(await p.locator('.routine-hide').last().isVisible(), true);
+          await p.keyboard.press('Enter');
+          assert.equal(await p.locator('.routine-details').last().evaluate((d) => d.open), false);
+          await p.reload();
+          assert.equal(await p.evaluate(() => localStorage.getItem('gym-tracker-v1')), raw, 'history, imported targets and index metadata are byte-for-byte unchanged');
         });
 
         await run('backup controls live only in Asetukset, with a small flag when a backup is due', async (p) => {
@@ -144,7 +194,10 @@ try {
           const box = await quick.boundingBox();
           assert.ok(box.width >= 44 && box.height >= 44, 'touch target');
           assert.equal(await p.locator('.routine-details[open]').count(), 0);
-          await tap(quick);
+          assert.match(await quick.getAttribute('aria-label'), /^Aloita: /);
+          assert.equal(await quick.innerText(), 'Aloita');
+          await quick.focus(); await p.keyboard.press('Enter');
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
           const state = await saved(p);
           assert.ok(state.session, 'session started');
           assert.equal(state.session.routineId, state.routines[0].id);
