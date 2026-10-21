@@ -13,7 +13,7 @@
 //   BACKUP_VERSION if the envelope itself changes; then keep reading the older envelopes.
 // - Files from a newer app version are refused, never guessed at.
 import { CATEGORIES, EQUIPMENT, EXERCISES, normalizeSearch } from './exercises.js';
-import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight } from './progression.js';
+import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight, lightenRoutine } from './progression.js';
 import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking } from './statistics.js';
 import { sanitizeHr } from './heartrate.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
@@ -396,14 +396,26 @@ export function saveStateResult(storage, state) {
 // every other page on the same host, so warn well before the limit.
 export const STORAGE_WARN_CHARS = 2_500_000;
 
-export function startSession(routine, now = Date.now()) {
-  const r = sanitizeRoutine(routine);
+// "Super": one extra set per exercise for this workout only; reps and load stay as planned.
+function boostRoutine(routine) {
+  return sanitizeRoutine({
+    ...routine,
+    exercises: routine.exercises.map((e) => e.recoveryBase || e.sets >= MAX_SETS ? e
+      : { ...e, sets: e.sets + 1, ...(e.setReps ? { setReps: [...e.setReps, e.setReps.at(-1)] } : {}) }),
+  });
+}
+
+// mode: 'light' (poor recovery: lighter and kept out of progression) or 'super' (one extra set); anything else is normal.
+export function startSession(routine, now = Date.now(), { mode = 'normal' } = {}) {
+  const clean = sanitizeRoutine(routine);
+  const r = mode === 'light' ? sanitizeRoutine(lightenRoutine(clean)) : mode === 'super' ? boostRoutine(clean) : clean;
   if (!r.exercises.length) return null;
   return {
     id: uid(),
     routineId: r.id,
     name: r.name,
     startedAt: now,
+    ...(mode === 'light' ? { fatigued: true } : {}),
     exercises: r.exercises.map((e) => ({
       id: e.id,
       name: e.name,
@@ -411,7 +423,7 @@ export function startSession(routine, now = Date.now()) {
       weight: e.weight,
       ...(e.tracking ? { tracking: structuredClone(e.tracking) } : {}),
       ...(e.progression?.weightStep !== undefined ? { weightStep: progressionConfig(e).weightStep } : {}),
-      ...(e.recoveryBase ? { deload: true } : {}),
+      ...(e.recoveryBase || mode === 'light' ? { deload: true } : {}),
       sets: Array.from({ length: e.sets }, (_, i) => ({
         done: false,
         ...(e.tracking ? { kind: 'working' } : {}),

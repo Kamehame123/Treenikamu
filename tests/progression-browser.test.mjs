@@ -120,14 +120,13 @@ try {
           assert.equal(await page.locator('[data-progression="autoLoad"]').isChecked(), false);
         });
 
-        await run('stepper reps and loads, RIR zero, fatigue and pain persist across reload', async (page) => {
+        await run('stepper reps and loads, RIR zero and pain persist across reload', async (page) => {
           await seed(page, fixture());
           await tap(page.locator('[data-key="reps-minus-0-0"]'));
           await tap(page.locator('[data-key="reps-plus-0-1"]'));
           await tap(page.locator('[data-key="weight-minus-0-0"]'));
           await page.locator('.exercise-log summary').click();
           await log(page, 'rir', '0');
-          await page.locator('[data-log="fatigued"]').check(); await idle(page);
           await page.locator('[data-log="pain"]').check(); await idle(page);
           const before = await saved(page);
           assert.equal(before.session.exercises[0].sets[0].actualReps, '9');

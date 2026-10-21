@@ -251,7 +251,23 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   manual step configuration. Numeric kg loads are supported. Bodyweight, compound
   notation, other units, assisted/band movements, or disabled external-load
   progression never receive guessed load changes.
-- Explicit poor recovery, acute severe failure (< 70% of target reps at RIR 0),
+- Poor recovery is reported **before** a workout: open a program and start it with
+  **Kevennetty**. That workout (and only that one) keeps every set but lowers each
+  numeric rep target by 15% and numeric kg loads by 15%, both rounded down (reps to
+  at least 1, load to the exercise's weight step). A coarse step never cuts load by
+  more than 30%; then the load stays. Assisted/band movements and exercises with
+  automatic load changes disabled keep their load. Exercises already in an
+  automatic deload are not reduced again. The session is flagged as a poor-recovery
+  workout, so it never changes the saved program and its result is not read as
+  normal performance: revision holds the program afterwards. Older sessions saved
+  with the earlier post-workout recovery flag keep that flag and are read as before.
+  The 15% is a chosen preset, not a validated prescription.
+- **Super** starts a workout with one extra set per exercise (up to the 20-set
+  limit; exercises in an active deload are left as planned). Reps, loads and the
+  saved program stay as they are. It is an unvalidated convenience preset, not a
+  researched prescription; completed extra sets count like any added set.
+- A poor-recovery flag on a session saved before version 45 (the former
+  post-workout checkbox), acute severe failure (< 70% of target reps at RIR 0),
   or two comparable sessions achieving less than 90% of total target reps at
   RIR <= 1 triggers an automatic recovery deload: approximately
   half the sets (rounded up), lower-bound reps, and around 10% less load when the

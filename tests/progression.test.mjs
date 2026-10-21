@@ -385,6 +385,57 @@ test('continued fatigue holds the deload rather than repeatedly halving volume',
   assert.deepEqual(exercise(state), deload);
 });
 
+test('a Kevennetty start lowers reps and load by 15% rounded down, keeps every set and never touches the saved program', () => {
+  const state = fixture('12');
+  const original = structuredClone(state.routines[0]);
+  const session = core.startSession(state.routines[0], NOW, { mode: 'light' });
+  assert.deepEqual(state.routines[0], original);
+  assert.equal(session.fatigued, true);
+  const [lightened] = session.exercises;
+  assert.deepEqual([lightened.sets.length, lightened.reps, lightened.weight, lightened.deload], [3, '10', '85 kg', true]);
+  const mixed = fixture('8-12', { sets: 3, setReps: ['20', '5', '1'], weight: '60 kg' });
+  const eased = core.startSession(mixed.routines[0], NOW, { mode: 'light' }).exercises[0];
+  assert.deepEqual(eased.sets.map((set) => set.reps), ['17', '4', '1']);
+  assert.equal(eased.weight, '50 kg');
+  assert.equal(core.startSession(fixture('8-12').routines[0], NOW, { mode: 'light' }).exercises[0].reps, '6-10');
+});
+
+test('a lightened session holds the program instead of counting as normal performance', () => {
+  const state = fixture('12');
+  const original = structuredClone(exercise(state));
+  const session = core.startSession(state.routines[0], NOW - 3600000, { mode: 'light' });
+  for (const e of session.exercises) { e.rir = '3'; e.sets.forEach((set) => { set.done = true; }); }
+  state.history.unshift(core.summarize(session, NOW));
+  revise(state);
+  assert.equal(decision(state).kind, 'hold');
+  assert.deepEqual(exercise(state), original);
+});
+
+test('a Kevennetty start keeps loads it must not guess and still flags the whole workout as poor recovery', () => {
+  const light = (reps, extra) => core.startSession(fixture(reps, extra).routines[0], NOW, { mode: 'light' }).exercises[0];
+  assert.deepEqual([light('30 s', { weight: '' }).reps, light('30 s', { weight: '' }).deload], ['30 s', true]);
+  assert.equal(light('10', { weight: '10 kg', progression: { weightStep: 5 } }).weight, '10 kg');
+  assert.equal(light('10', { weight: '30 kg', progression: { autoLoad: false } }).weight, '30 kg');
+  assert.equal(light('10', { name: 'Avustettu leuanveto', weight: '30 kg' }).weight, '30 kg');
+  assert.equal('fatigued' in core.startSession(fixture('10').routines[0], NOW), false);
+  assert.equal('deload' in core.startSession(fixture('10').routines[0], NOW).exercises[0], false);
+});
+
+test('a Super start adds one set per exercise for that workout only, without recovery flags', () => {
+  const state = fixture('10', { setReps: ['10', '10', '8'], sets: 3 });
+  const original = structuredClone(state.routines[0]);
+  const session = core.startSession(state.routines[0], NOW, { mode: 'super' });
+  assert.deepEqual(state.routines[0], original);
+  assert.equal('fatigued' in session, false);
+  const [boosted] = session.exercises;
+  assert.equal('deload' in boosted, false);
+  assert.deepEqual(boosted.sets.map((set) => set.reps), ['10', '10', '8', '8']);
+  assert.equal(boosted.weight, '100 kg');
+  const full = fixture('10', { sets: core.MAX_SETS });
+  assert.equal(core.startSession(full.routines[0], NOW, { mode: 'super' }).exercises[0].sets.length, core.MAX_SETS);
+  assert.equal(core.startSession(state.routines[0], NOW, { mode: 'whatever' }).exercises[0].sets.length, 3);
+});
+
 test('an already minimal prescription is truly unchanged when no deload reduction is possible', () => {
   const state = fixture('8', { sets: 1, weight: '' });
   record(state, 0, { fatigued: true });

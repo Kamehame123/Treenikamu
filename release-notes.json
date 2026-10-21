@@ -1,4 +1,8 @@
 [
+  { "version": 45, "date": "2026-10-21", "changes": [
+    "Ohjelman avattavassa osiossa on nyt Kevennetty- ja Super-aloituspainikkeet. Kevennetty aloittaa treenin heti heikon palautumisen mukaisena: toistot ja painot noin 15 % pienemmät, samat sarjat, vain kyseiselle treenille. Super lisää jokaiseen liikkeeseen yhden sarjan. Ohjelma ei muutu.",
+    "Palautumisen merkitseminen treenin lopussa poistui. Aiemmin tallennetut harjoitukset ja niiden merkinnät säilyvät ennallaan."
+  ] },
   { "version": 44, "date": "2026-10-21", "changes": [
     "Yhtenäiset välit ja korttien sisennykset etusivulla, asetuksissa, historiassa, treenissä, ohjelmaeditorissa, liikekirjastossa ja tilastoissa.",
     "Varmuuskopioinnin painikkeet ovat saman avattavan osion sisällä tasavälein. Harjoitustiedot säilyvät ennallaan."

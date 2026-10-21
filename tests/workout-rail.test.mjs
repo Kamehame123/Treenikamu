@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as core from '../core.js';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, expandRoutines } from './support.mjs';
 
 const { server, url } = await startServer();
 const saved = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')));
@@ -40,6 +40,19 @@ async function seedWorkout(page, { finished = 0, rir = null } = {}) {
   await page.reload();
   await page.locator('.ex').first().waitFor();
   return state;
+}
+
+async function seedProgram(page) {
+  const state = core.defaultState();
+  state.settings.autoRest = false;
+  state.routines = [core.sanitizeRoutine({
+    id: 'r', name: 'Kasvu',
+    exercises: [{ id: 'e', name: 'Kyykky', sets: 4, reps: '10', weight: '100 kg', progression: { minReps: 8, maxReps: 15, weightStep: 2.5, autoLoad: true } }],
+  })];
+  await page.goto(url);
+  await page.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+  await page.reload();
+  await page.locator('.routine').first().waitFor();
 }
 
 try {
@@ -93,17 +106,36 @@ try {
           assert.ok(remaining > 40000 && remaining <= 46000, `rest ${remaining} ms`);
         });
 
-        await run('the recovery toggle sits below the exercises', async (p) => {
-          await seedWorkout(p);
-          const order = await p.evaluate(() => {
-            const list = document.querySelector('.exercise-list'), recovery = document.querySelector('.recovery-check');
-            const end = document.querySelector('.session-end');
-            return [list.compareDocumentPosition(recovery) & Node.DOCUMENT_POSITION_FOLLOWING, recovery.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING];
-          });
-          assert.deepEqual(order.map(Boolean), [true, true]);
-          await p.locator('[data-log="fatigued"]').check();
-          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
-          assert.equal((await saved(p)).session.fatigued, true);
+        await run('an opened program offers Kevennetty and Super starts below the normal start, and the Kevennetty workout is lightened and flagged', async (p) => {
+          await seedProgram(p);
+          await expandRoutines(p);
+          const normal = p.getByRole('button', { name: 'Aloita harjoitus', exact: true });
+          const light = p.getByRole('button', { name: 'Kevennetty treeni: Kasvu', exact: true });
+          const boosted = p.getByRole('button', { name: 'Super treeni: Kasvu', exact: true });
+          assert.equal(await light.innerText(), 'Kevennetty');
+          assert.equal(await boosted.innerText(), 'Super');
+          const [n, l, s] = await Promise.all([normal, light, boosted].map((b) => b.boundingBox()));
+          assert.ok(l.y >= n.y + n.height && s.y >= n.y + n.height, 'variant starts sit below the normal start');
+          await tap(light);
+          await p.locator('.ex').first().waitFor();
+          const { session, routines } = await saved(p);
+          assert.equal(session.fatigued, true);
+          assert.deepEqual([session.exercises[0].sets.length, session.exercises[0].reps, session.exercises[0].weight, session.exercises[0].deload], [4, '8', '85 kg', true]);
+          assert.deepEqual([routines[0].exercises[0].sets, routines[0].exercises[0].reps, routines[0].exercises[0].weight], [4, '10', '100 kg']);
+          assert.match(await p.locator('.notice[role="status"]').innerText(), /Kevennetty treeni/);
+          assert.equal(await p.locator('[data-log="fatigued"]').count(), 0);
+        });
+
+        await run('the Super workout adds one set per exercise and leaves the program, load and recovery flag alone', async (p) => {
+          await seedProgram(p);
+          await tap(p.getByRole('button', { name: 'Super treeni: Kasvu', exact: true }));
+          await p.locator('.ex').first().waitFor();
+          const { session, routines } = await saved(p);
+          assert.equal('fatigued' in session, false);
+          const [exercise] = session.exercises;
+          assert.deepEqual([exercise.sets.length, exercise.weight, exercise.reps, 'deload' in exercise], [5, '100 kg', '10', false]);
+          assert.equal(routines[0].exercises[0].sets, 4);
+          assert.equal(await p.locator('.notice[role="status"]').count(), 0);
         });
 
         await run('the rail lists every exercise with its set count, greens finished ones and jumps on tap', async (p) => {

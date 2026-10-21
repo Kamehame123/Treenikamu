@@ -235,11 +235,36 @@ function resolveLoadStep(exercise, weight, config, referenceReps, surplusReps) {
   return null;
 }
 
+// Kevennetty start: 15% fewer reps and 15% less load (both rounded down), same sets; the saved plan is never touched.
+export function lightenRoutine(routine) {
+  const ease = (value) => {
+    const target = targetReps(value);
+    if (!target) return value;
+    const low = Math.max(1, Math.floor(target.low * 85 / 100)), high = Math.max(1, Math.floor(target.high * 85 / 100));
+    return low === high ? String(high) : `${low}-${high}`;
+  };
+  const light = structuredClone(routine);
+  light.exercises = light.exercises.map((exercise) => {
+    if (exercise.recoveryBase) return exercise;
+    const next = { ...exercise, reps: ease(exercise.reps), setReps: exercise.setReps?.map(ease) ?? null };
+    const weight = parseWeight(exercise.weight);
+    const config = progressionConfig(exercise);
+    if (config.autoLoad && weight > 0 && !/avust|assist|kuminauh/i.test(exercise.name)) {
+      const lighter = round(Math.floor(round(weight * 0.85) / config.weightStep) * config.weightStep);
+      // A coarse equipment step must not turn the 15% reduction into a much larger one.
+      if (lighter > 0 && lighter >= weight * 0.7) next.weight = `${lighter} kg`;
+    }
+    return next;
+  });
+  return light;
+}
+
 function recommendExercise(exercise, latest, previous, fatigued, now) {
   const next = structuredClone(exercise);
   const hold = (reason) => ({ exercise: structuredClone(exercise), kind: 'hold', reason });
   const logged = latest.exercises.find((e) => e.id === exercise.id);
   if (logged?.pain) return hold('Kirjasit kipua. Älä harjoittele kivun läpi. Selvitä oireen syy tarvittaessa terveydenhuollossa; ohjelmaa ei nosteta eikä kipua hoideta kevennyksellä.');
+  if (logged?.deload && !exercise.recoveryBase) return hold('Tämä harjoitus tehtiin kevennettynä heikon palautumisen vuoksi. Kevennetty tulos ei kerro normaalista suorituskyvystä, joten ohjelma säilyy ennallaan.');
   if (!matchesPlan(exercise, logged)) return hold('Ohjelma, liike tai sarjamäärä poikkeaa kirjauksesta. Nykyinen suunnitelma säilyy.');
   if (!logged.sets.every((set) => set.done)) return hold('Liike jäi kesken. Tekemättömiä sarjoja ei tulkita epäonnistumisiksi tai syyksi nostaa kuormaa.');
   if (now - latest.endedAt > 14 * DAY || latest.endedAt > now) return hold('Kirjaus ei ole viimeisen 14 päivän ajalta. Tee ensin uusi harjoitus nykyisillä tavoitteilla.');
