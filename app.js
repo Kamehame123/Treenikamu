@@ -789,7 +789,11 @@ function scheduleExerciseScroll(sessionId, index) {
   cancelExerciseScroll();
   // Leave time to undo a mistaken last-set tap. Any new interaction cancels it.
   exerciseScroll = setTimeout(() => {
-    if (state.session?.id === sessionId && core.currentExercise(state.session) === index) showCurrentExercise();
+    if (state.session?.id !== sessionId || core.currentExercise(state.session) !== index) return;
+    if (index < 0) {
+      if (view !== 'workout' || document.hidden) return;
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    } else showCurrentExercise();
   }, 350);
 }
 for (const event of ['pointerdown', 'touchstart', 'wheel', 'keydown']) {
@@ -1082,9 +1086,10 @@ const actions = {
         next.restEnd = next.settings.autoRest && p.done < p.total ? Date.now() + restSeconds * 1000 : null;
         const following = core.currentExercise(next.session);
         if (ei === current && following > current) advance = { sessionId: next.session.id, index: following };
+        else if (p.done === p.total) advance = { sessionId: next.session.id, index: -1 };
         // Show the cheer where the user looks next: right below the tapped set, or above the sets of the exercise the view advances to.
         const text = pickCheer(p.done, p.total, lastCheer);
-        if (text) { cheer = { sessionId: next.session.id, exerciseId: next.session.exercises[advance ? advance.index : ei].id, after: advance ? -1 : si, text }; lastCheer = text; }
+        if (text) { cheer = { sessionId: next.session.id, exerciseId: next.session.exercises[advance && advance.index >= 0 ? advance.index : ei].id, after: advance && advance.index >= 0 ? -1 : si, text }; lastCheer = text; }
       }
       announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${restSeconds} sekuntia.` : ''}${cheer ? ` ${cheer.text}` : ''}`);
     }, sessionOptions());

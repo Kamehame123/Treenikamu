@@ -1,4 +1,7 @@
 [
+  { "version": 42, "date": "2026-10-21", "changes": [
+    "Kun viimeinen sarja on kirjattu, näkymä vierittyy automaattisesti sivun loppuun."
+  ] },
   { "version": 41, "date": "2026-10-21", "changes": [
     "Bluetooth-sykemittari (esim. Polar H10): yhdistä mittari Asetuksissa ennen treeniä. Syke näkyy treenin aikana kellon vieressä, ja keskiarvo sekä huippu tallentuvat harjoitukseen. Toimii Chromessa ja Edgessä (Android, Windows, Mac), ei iPhonessa."
   ] },

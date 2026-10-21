@@ -300,6 +300,20 @@ try {
           assert.equal(await p.locator('.ex.current').getAttribute('id'), 'exercise-0');
         });
 
+        await run('logging the very last set scrolls to the end of the page', async (p) => {
+          await p.clock.install();
+          await seedWorkout(p, { autoRest: false });
+          const keys = await p.locator('[data-action="set"][data-key]').evaluateAll((els) => els.map((e) => e.dataset.key));
+          for (const key of keys.slice(0, -1)) await tap(p.locator(`[data-key="${key}"]`));
+          await p.clock.runFor(400);
+          assert.equal(await p.evaluate(() => window.scrollCalls.length), 0);
+          await tap(p.locator(`[data-key="${keys.at(-1)}"]`));
+          await p.clock.runFor(400);
+          await p.waitForFunction(() => Math.abs(window.scrollY + innerHeight - document.documentElement.scrollHeight) < 2);
+          assert.ok(await p.evaluate(() => window.scrollCalls.length) >= 1);
+          assert.ok(await p.locator('[data-action="finish"]').evaluate((e) => e.getBoundingClientRect().bottom <= innerHeight + 1));
+        });
+
         await run('an immediate undo or a manual gesture cancels scheduled advancement', async (p) => {
           await p.clock.install();
           await seedWorkout(p, { almostDone: true });
