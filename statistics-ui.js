@@ -79,7 +79,7 @@ export function trackingEditor(exercise, i) {
 export function recordsView(state) {
   const records = buildRecords(state.history);
   const rows = records.map((r) => `<li class="record-row"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></li>`).join('');
-  return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin ensimmäisen kerran.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
+  return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin viimeksi.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
 }
 
 export function statisticsView(state, filters) {

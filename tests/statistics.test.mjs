@@ -301,7 +301,7 @@ test('all analytics modules ship through both the static server and the atomic o
   }
 });
 
-test('records keep the heaviest logged kg per move name across programs, with the first date reached', () => {
+test('records keep the heaviest logged kg per move name across programs, with the latest date reached', () => {
   const set = (actualWeight, done = true) => ({ done, actualWeight });
   const entry = (id, endedAt, name, sets, weight = '') => ({ id, name: 'Ohjelma ' + id, startedAt: endedAt - 1000, endedAt, exercises: [{ name, weight, sets }] });
   const history = [
@@ -316,6 +316,6 @@ test('records keep the heaviest logged kg per move name across programs, with th
   const records = stats.buildRecords(history, NOW);
   assert.deepEqual(records.map((r) => [r.name, r.weight, r.at]), [
     ['Kyykky', 100, NOW - 2 * DAY],
-    ['Penkkipunnerrus', 62.5, NOW - 5 * DAY],
+    ['penkkipunnerrus', 62.5, NOW - 3 * DAY],
   ]);
 });

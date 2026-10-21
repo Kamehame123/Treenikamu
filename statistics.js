@@ -113,7 +113,7 @@ export function statisticsPeriod(range, now, first, fromInput = '', toInput = ''
   return { ok: true, from, to, previous: { from: shiftDays(from, -days), to: shiftDays(to, -days) } };
 }
 
-// Heaviest kg ever logged per move name (all programs combined) and the first day it was reached.
+// Heaviest kg ever logged per move name (all programs combined) and the latest day it was reached.
 // The weight is the set's logged weight, otherwise the move's planned weight.
 export function buildRecords(history, now = Date.now()) {
   const records = new Map(), seen = new Set();
@@ -129,7 +129,7 @@ export function buildRecords(history, now = Date.now()) {
         const weight = parseWeight(set.actualWeight || e.weight);
         if (weight === null || weight <= 0) continue;
         const current = records.get(key);
-        if (!current || weight > current.weight || (weight === current.weight && h.endedAt < current.at)) {
+        if (!current || weight > current.weight || (weight === current.weight && h.endedAt > current.at)) {
           records.set(key, { key, name: e.name, weight, at: h.endedAt });
         }
       }
