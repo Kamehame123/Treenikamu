@@ -117,9 +117,11 @@ try {
           assert.equal(await p.locator('.home-programs > h2, .home-programs > .programs-heading').count(), 0);
           const order = await p.evaluate(() => {
             const top = (s) => document.querySelector(s).getBoundingClientRect();
-            return { title: top('h1').bottom <= top('.stats').top, stats: top('.stats').bottom <= top('.stats-links').top, links: top('.stats-links').bottom <= top('.routine').top };
+            return { brand: top('.brand-row').bottom <= top('.stats').top, stats: top('.stats').bottom <= top('.stats-links').top, links: top('.stats-links').bottom <= top('.routine').top };
           });
-          assert.deepEqual(order, { title: true, stats: true, links: true }, 'title, stat tiles, link buttons, then programs');
+          assert.deepEqual(order, { brand: true, stats: true, links: true }, 'brand row, stat tiles, link buttons, then programs');
+          assert.equal(await p.locator('h1').innerText(), 'Treenipäiväkirja');
+          assert.equal(await p.locator('h1').evaluate((e) => e.getBoundingClientRect().width <= 1), true, 'title heading is screen-reader only');
           const compact = await p.locator('.routine').first().evaluate((e) => e.getBoundingClientRect().height);
           assert.ok(compact <= 90, `collapsed program is compact (${compact}px)`);
           assert.equal(await p.locator('.routine').count(), 2);
