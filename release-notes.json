@@ -1,4 +1,8 @@
 [
+  { "version": 43, "date": "2026-10-21", "changes": [
+    "Historia on nyt oma sivunsa: Historia-, Tilastot- ja Ennätykset-painikkeet ovat etusivun yläosassa. Etusivu on lyhyempi, ja harjoitushistoria säilyy ennallaan.",
+    "Kehitysindeksi näkyy vain Tilastot-sivulla."
+  ] },
   { "version": 42, "date": "2026-10-21", "changes": [
     "Kun viimeinen sarja on kirjattu, näkymä vierittyy automaattisesti sivun loppuun."
   ] },

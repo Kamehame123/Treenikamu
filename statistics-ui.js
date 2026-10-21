@@ -40,15 +40,11 @@ function trendChart(points, title, unit, baseline = null) {
     <figcaption>${esc(title)} · ${esc(unit)}. Katkokset tarkoittavat puuttuvaa tietoa; tarkat arvot ovat taulukossa.</figcaption></figure>`;
 }
 
-function indexCard(data, config, compact = false) {
+function indexCard(data, config) {
   const index = calculateIndex(data, config);
   const label = !config ? 'Valitse vertailuliikkeet tilastoissa.' : index.value === null ?
     'Indeksi odottaa puuttuvia tai tuoreempia suorituksia.' : `${index.value >= 100 ? '+' : ''}${fmt(index.value - 100, 1)} % lähtötasosta · lähtötaso 100`;
-  return `<section class="card index-card${compact ? ' index-compact' : ''}" aria-label="Kehitysindeksi"><div><p class="eyebrow accent">KEHITYSINDEKSI</p><p class="index-value">${fmt(index.value, 1)}</p><p>${esc(label)}</p><p class="muted small-copy">${config ? `${index.covered}/${index.total} vertailuliikettä ajan tasalla · ` : ''}Oma suorituskyky, ei lihaskasvun tai terveyden mittaus.</p></div>${compact ? '<button class="btn secondary" data-action="statistics" data-key="statistics">Avaa tilastot</button>' : '<button class="btn secondary" data-action="indexsettings" data-key="indexsettings">Valitse vertailuliikkeet</button>'}</section>`;
-}
-
-export function statisticsSummary(state) {
-  return indexCard(buildStatistics(state.history, { range: '4w' }), state.statistics, true);
+  return `<section class="card index-card" aria-label="Kehitysindeksi"><div><p class="eyebrow accent">KEHITYSINDEKSI</p><p class="index-value">${fmt(index.value, 1)}</p><p>${esc(label)}</p><p class="muted small-copy">${config ? `${index.covered}/${index.total} vertailuliikettä ajan tasalla · ` : ''}Oma suorituskyky, ei lihaskasvun tai terveyden mittaus.</p></div><button class="btn secondary" data-action="indexsettings" data-key="indexsettings">Valitse vertailuliikkeet</button></section>`;
 }
 
 function indexSection(data, config) {

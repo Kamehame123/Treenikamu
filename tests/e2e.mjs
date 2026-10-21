@@ -53,6 +53,7 @@ async function suite(name, type, device) {
     await page.goto(url);
     const button = (name) => page.getByRole('button', { name, exact: true });
     const sets = () => page.locator('.set');
+    const histCount = async () => { await tap(button('Historia')); const n = await page.locator('.hist').count(); await tap(button('Harjoituksiin')); return n; };
     const doneCount = () => page.locator('.set[aria-pressed="true"]').count();
     const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')));
     await views(page, name, 'home');
@@ -139,16 +140,16 @@ async function suite(name, type, device) {
     }
     eq(await page.locator('.ex').first().locator('.set').count(), 1, 'min set count');
     check(await page.locator('[data-action="rmset"]').first().isDisabled(), 'min disables removal');
-    await tapConfirm(button('Lopeta kesken')); eq(await page.locator('.hist').count(), 1, 'finish early history');
-    await page.reload(); eq(await page.locator('.hist').count(), 1, 'history durable after reload');
+    await tapConfirm(button('Lopeta kesken')); eq(await histCount(), 1, 'finish early history');
+    await page.reload(); eq(await histCount(), 1, 'history durable after reload');
 
     await tap(button('Aloita harjoitus'));
     const n = await sets().count();
     for (let i = 0; i < n; i++) await tap(sets().nth(i));
     eq(await doneCount(), 15, 'all sets completed');
     check(await page.locator('#rest').isHidden(), 'no timer after final set');
-    await tap(button('Tallenna harjoitus')); eq(await page.locator('.hist').count(), 2, 'complete saved');
-    await page.reload(); eq(await page.locator('.hist').count(), 2, 'completed history durable');
+    await tap(button('Tallenna harjoitus')); eq(await histCount(), 2, 'complete saved');
+    await page.reload(); eq(await histCount(), 2, 'completed history durable');
 
     await tap(button('Uusi harjoitus'));
     await tap(button('Tallenna harjoitus')); check(await page.locator('#err').isVisible(), 'validation errors visible');
@@ -180,7 +181,7 @@ async function suite(name, type, device) {
     await tap(button('Takaisin harjoituksiin')); await tap(button('Muokkaa: Koko keho A'));
     await page.locator('[data-f="sets"]').first().fill('5'); await tap(button('Tallenna harjoitus'));
     await tap(button('Jatka harjoitusta')); eq(await sets().count(), 15, 'template edit leaves active snapshot alone');
-    await tapConfirm(button('Hylkää harjoitus')); eq(await page.locator('.hist').count(), 2, 'discard adds no history');
+    await tapConfirm(button('Hylkää harjoitus')); eq(await histCount(), 2, 'discard adds no history');
     await tap(page.getByRole('button', { name: /Muokkaa: <img/ })); await tapConfirm(button('Poista harjoitus'));
     eq(await page.locator('.routine').count(), 1, 'delete template');
 

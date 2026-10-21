@@ -187,6 +187,7 @@ try {
           await tap(button(page, 'Peru tarkistus'));
           assert.equal((await saved(page)).routines[0].autoProgress, true);
           assert.equal((await saved(page)).routines[0].exercises[0].reps, '10');
+          await tap(button(page, 'Historia'));
           await page.locator('.history-log summary').click();
           assert.match(await page.locator('.history-log').innerText(), /10 toistoa @ 100 kg/);
         });
@@ -359,13 +360,17 @@ try {
         await run('new controls remain accessible and fit narrow screens in dark and light modes', async (page) => {
           await seed(page, fixture({ autoProgress: true, complete: true }));
           await page.locator('.exercise-log summary').click();
-          for (const view of ['workout', 'home', 'edit']) {
+          for (const view of ['workout', 'home', 'history', 'edit']) {
             if (view === 'home') {
               await tap(button(page, 'Tallenna harjoitus'));
               await page.locator('.coaching-guide summary').click();
+            }
+            if (view === 'history') {
+              await tap(button(page, 'Historia'));
               await page.locator('.history-log summary').click();
             }
             if (view === 'edit') {
+              await tap(button(page, 'Harjoituksiin'));
               await tap(button(page, 'Muokkaa: Kasvu'));
               await page.locator('.progression-editor summary').click();
             }

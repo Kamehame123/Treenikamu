@@ -120,6 +120,13 @@ try {
             return { brand: top('.brand-row').bottom <= top('.stats').top, stats: top('.stats').bottom <= top('.stats-links').top, links: top('.stats-links').bottom <= top('.routine').top };
           });
           assert.deepEqual(order, { brand: true, stats: true, links: true }, 'brand row, stat tiles, link buttons, then programs');
+          assert.deepEqual(await p.locator('.stats-links button').allInnerTexts(), ['Historia', 'Tilastot', 'Ennätykset']);
+          assert.equal(await p.locator('.index-card, .hist').count(), 0, 'index card and history live on their own pages');
+          for (const width of [320, 390]) {
+            await p.setViewportSize({ width, height: 800 });
+            assert.equal(await p.evaluate(() => [...document.querySelectorAll('.stats-links button')].every((b) => b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().height <= 60)), true, `link buttons fit at ${width}`);
+          }
+          await p.setViewportSize({ width: 390, height: 844 });
           assert.equal(await p.locator('h1').innerText(), 'Treenipäiväkirja');
           assert.equal(await p.locator('h1').evaluate((e) => e.getBoundingClientRect().width <= 1), true, 'title heading is screen-reader only');
           const compact = await p.locator('.routine').first().evaluate((e) => e.getBoundingClientRect().height);
@@ -502,6 +509,9 @@ try {
           await p.reload();
           const idle = () => p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
 
+          assert.equal(await p.locator('.hist, .history-list').count(), 0, 'the home screen no longer lists history');
+          await tap(button(p, 'Historia'));
+          assert.equal(await p.locator('h1').innerText(), 'Historia');
           assert.equal(await p.locator('.hist').count(), 10);
           assert.match(await p.locator('[data-hist="legacy-0"] .muted').first().innerText(), /2020/);
           await tap(p.locator('[data-key="morehistory"]'));
@@ -543,6 +553,26 @@ try {
 
           const results = await new AxeBuilder({ page: p }).analyze();
           assert.deepEqual(results.violations.map((v) => v.id), []);
+          await tap(button(p, 'Harjoituksiin'));
+          assert.equal(await p.locator('.hist').count(), 0);
+          assert.deepEqual((await saved(p)).history, before);
+        });
+
+        await run('the saved-workout card edits its result on the history page', async (p) => {
+          const state = core.defaultState();
+          const session = core.startSession(state.routines[0], 1000);
+          session.exercises.forEach((e) => e.sets.forEach((set) => { set.done = true; }));
+          state.session = session;
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          await tap(button(p, 'Tallenna harjoitus'));
+          await p.locator('.saved-card').waitFor();
+          await tap(button(p, 'Muokkaa tulosta'));
+          assert.equal(await p.locator('h1').innerText(), 'Historia');
+          assert.equal(await p.locator('[data-hist] .history-editor').count(), 1, 'the saved workout opens for editing');
+          await tap(button(p, 'Harjoituksiin'));
+          assert.equal(await p.locator('.hist').count(), 0);
         });
 
         await run('the previous result of each movement is shown, and unknown values stay unknown', async (p) => {

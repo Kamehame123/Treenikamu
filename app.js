@@ -5,7 +5,7 @@ import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from
 import { pickCheer } from './cheers.js';
 import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from './heartrate.js';
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
-import { escapeHtml as esc, statisticsView, recordsView, statisticsSummary, trackingEditor } from './statistics-ui.js';
+import { escapeHtml as esc, statisticsView, recordsView, trackingEditor } from './statistics-ui.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -298,7 +298,6 @@ function backupCompact() {
 function backupFlag() {
   return backupInfo().due ? '<span class="settings-flag">Varmuuskopioi</span>' : '';
 }
-const sectionHead = (title, label = '') => `<div class="section-head"><h2>${title}</h2>${label ? `<span class="eyebrow">${label}</span>` : ''}</div>`;
 const progressBar = (p) => `<progress class="progress" max="${Math.max(1, p.total)}" value="${p.done}" aria-label="Harjoituksen edistyminen">${p.pct}%</progress>`;
 
 function brand() {
@@ -462,7 +461,7 @@ function historyEditor(h) {
 
 function historyItem(h) {
   const id = esc(h.id), editing = historyEditing === h.id;
-  return `<li data-hist="${id}"><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h3>${esc(h.name)}</h3><span class="muted">${historyDate(h.endedAt)} · ${core.formatDuration(h.endedAt - h.startedAt)}${h.editedAt ? ' · muokattu' : ''}${hrText(h)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${editing ? historyEditor(h) : historyDetails(h)}<div class="history-actions"><button class="btn small" data-action="edithistory" data-id="${id}" data-key="hedit-${id}" aria-label="${editing ? 'Valmis' : 'Muokkaa'}: ${esc(h.name)}, ${historyDate(h.endedAt)}" aria-expanded="${editing}">${editing ? 'Valmis' : 'Muokkaa'}</button><button class="btn small delete" data-action="delhistory" data-id="${id}" data-key="hdel-${id}" aria-label="Poista: ${esc(h.name)}, ${historyDate(h.endedAt)}">Poista</button></div></li>`;
+  return `<li data-hist="${id}"><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h2>${esc(h.name)}</h2><span class="muted">${historyDate(h.endedAt)} · ${core.formatDuration(h.endedAt - h.startedAt)}${h.editedAt ? ' · muokattu' : ''}${hrText(h)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${editing ? historyEditor(h) : historyDetails(h)}<div class="history-actions"><button class="btn small" data-action="edithistory" data-id="${id}" data-key="hedit-${id}" aria-label="${editing ? 'Valmis' : 'Muokkaa'}: ${esc(h.name)}, ${historyDate(h.endedAt)}" aria-expanded="${editing}">${editing ? 'Valmis' : 'Muokkaa'}</button><button class="btn small delete" data-action="delhistory" data-id="${id}" data-key="hdel-${id}" aria-label="Poista: ${esc(h.name)}, ${historyDate(h.endedAt)}">Poista</button></div></li>`;
 }
 
 function savedCard() {
@@ -474,6 +473,15 @@ function savedCard() {
 
 function coachingGuide() {
   return `<details class="coaching-guide card"><summary>Miten tavoitteita tarkistetaan?</summary><div class="small-copy"><p>Yhtä parasta toistoaluetta ei ole. ACSM:n vuoden 2026 katsauksessa raskaammat kuormat tukivat maksimivoimaa ja suurempi viikkovolyymi lihaskasvua. Harjoita suuria lihasryhmiä säännöllisesti, yleensä vähintään kahdesti viikossa. Noin 10 sarjaa lihasryhmää kohti viikossa on hyödyllinen lihaskasvun suunnittelun vertailukohta, ei kaikille pakollinen vähimmäismäärä. Sovellus laskee toistoalueen, kuorman noston tai kevennyksen, sarjamäärän ja lepoajan automaattisesti liikkeen ja toteutuneen suorituksen perusteella.</p><p>Liikkeen tyyppi ja nykyinen tavoite ohjaavat automaattista aluetta: esimerkiksi 3–6 toistoa voimapainotteiseen työhön, 6–12 yhdistettyyn voima-/massaharjoitteluun, 10–20 eristäviin liikkeisiin tai 15–30 pitkille sarjoille. Painoaskel (0,25–5 kg) skaalataan automaattisesti liikkeen ja kuorman mukaan siten, ettei yksittäinen korotus ylitä 10 % kuormasta.</p><p>Ylimääräiset toistot ja lisäsarjat huomioidaan tieteellisesti seuraavassa harjoituksessa: jos teet tavoitetta enemmän toistoja tai lisäsarjoja hyvällä varalla, seuraava toisto- tai sarjatavoite nousee suoraan osoitetun suorituskyvyn mukaan (enintään 5 työsarjaa liikettä kohti roskavolyymin estämiseksi). Jos ylität toistoalueen ylärajan lisätoistoilla tai lisäsarjalla, kuormaa nostetaan heti seuraavaan harjoitukseen ja toistot sovitetaan uuteen painoon.</p><p>Heikko palautuminen, jyrkkä toistojen putoaminen tai kaksi selvää alisuoriutumista keventää seuraavaa harjoituskertaa automaattisesti. Palautuneena onnistunut kevennys palauttaa aiemmat tavoitteet. Kipua ei käsitellä tavallisena väsymyksenä: lopeta kipua aiheuttava liike ja selvitä oire tarvittaessa ammattilaisen kanssa.</p><p>Lepoajastin valitsee lepoajan automaattisesti liikkeen ja sarjan kuormittavuuden mukaan: raskaissa moninivelliikkeissä 2–3 minuuttia (120–180 s), eristävissä liikkeissä 75–120 s ja keskivartalo- tai liikkuvuusliikkeissä 45–60 s. Uni, riittävä ravinto ja jatkuvuus tukevat kehitystä.</p><p>Tutkimuspohja:</p><ul class="sources"><li><a href="https://acsm.org/resistance-training-guidelines-update-2026/" target="_blank" rel="noopener noreferrer">ACSM 2026</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10579494/" target="_blank" rel="noopener noreferrer">Voima- ja hypertrofiaharjoittelun meta-analyysi 2023</a></li><li><a href="https://doi.org/10.47206/ijsc.v1i1.81" target="_blank" rel="noopener noreferrer">IUSCA 2021</a></li><li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10511399/" target="_blank" rel="noopener noreferrer">Kevennyksen asiantuntijakonsensus</a></li></ul></div></details>`;
+}
+
+function historyView() {
+  const history = state.history.slice(0, historyLimit).map(historyItem).join('');
+  const remaining = state.history.length - historyLimit;
+  const more = remaining > 0 ? `<button class="btn secondary" data-action="morehistory" data-key="morehistory">Näytä lisää (${remaining} vanhempaa)</button>` : '';
+  const undoDelete = lastDeleted ? `<div class="notice" role="status">Harjoitus "${esc(lastDeleted.entry.name)}" poistettiin. <button class="btn small" data-action="undodelete" data-key="undodelete">Peru poisto</button></div>` : '';
+  const historyError = historyMessage ? `<div class="banner" role="alert"><div>${esc(historyMessage)}</div></div>` : '';
+  return `<div class="stat-heading"><h1 tabindex="-1">Historia</h1><p class="muted">Viimeisimmät harjoitukset. Voit korjata tai poistaa tuloksia.</p></div>${undoDelete}${historyError}${history ? `<ul class="list history-list">${history}</ul>${more}` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}`;
 }
 
 function homeView() {
@@ -497,18 +505,13 @@ function homeView() {
         <div class="routine-body"><ul class="routine-pills" aria-label="Liikkeet: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div>${progressionControls(r)}</div>
       </details></li>`;
   }).join('');
-  const history = state.history.slice(0, historyLimit).map(historyItem).join('');
-  const remaining = state.history.length - historyLimit;
-  const more = remaining > 0 ? `<button class="btn secondary" data-action="morehistory" data-key="morehistory">Näytä lisää (${remaining} vanhempaa)</button>` : '';
-  const undoDelete = lastDeleted ? `<div class="notice" role="status">Harjoitus "${esc(lastDeleted.entry.name)}" poistettiin. <button class="btn small" data-action="undodelete" data-key="undodelete">Peru poisto</button></div>` : '';
-  const historyError = historyMessage ? `<div class="banner" role="alert"><div>${esc(historyMessage)}</div></div>` : '';
   const ios = (/iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) && !navigator.standalone;
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${savedCard()}${resume}<h1 class="sr-only" tabindex="-1">Treenipäiväkirja</h1>
     <div class="stats"><button type="button" class="stat-tile" data-action="homeperiod" data-key="homeperiod"><strong>${thisWeek}</strong> <span>${periodLabel}</span></button><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
-    <div class="stats-links"><button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
+    <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
     <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${coachingGuide()}</section>
-    <div class="home-aside">${statisticsSummary(state)}<section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${undoDelete}${historyError}${history ? `<ul class="list history-list">${history}</ul>${more}` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
+    <div class="home-aside">
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan, ellet aseta omaa aikaa</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label>${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}<label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>${hrSettings()}<p class="muted small-copy">Automaattinen lepoaika: moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p>${backupCompact()}<div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}<section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
 }
 
@@ -745,7 +748,7 @@ function render() {
   if (view === 'library' && !(picker.mode === 'session' ? state.session : draft)) view = 'home';
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
-  $app.innerHTML = view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="statistics-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
+  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="statistics-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -949,6 +952,7 @@ async function shareBackup(text) {
 
 const actions = {
   statistics() { readLatest(); view = 'statistics'; render(); },
+  showhistory() { readLatest(); view = 'history'; render(); },
   records() { readLatest(); view = 'records'; render(); },
   homeperiod() {
     homePeriod = HOME_PERIODS[(HOME_PERIODS.indexOf(homePeriod) + 1) % HOME_PERIODS.length];
@@ -1025,7 +1029,7 @@ const actions = {
     historyMessage = ''; render();
   },
   fixsaved() {
-    historyEditing = savedId; savedId = null; historyMessage = '';
+    historyEditing = savedId; savedId = null; historyMessage = ''; view = 'history';
     render(); document.querySelector(`[data-hist="${CSS.escape(historyEditing)}"]`)?.scrollIntoView({ block: 'center' });
     document.querySelector(`[data-key="hedit-${CSS.escape(historyEditing)}"]`)?.focus({ preventScroll: true });
   },
