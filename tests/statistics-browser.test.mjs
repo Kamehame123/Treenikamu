@@ -148,7 +148,7 @@ try {
 
         await run('library selection snapshots its canonical identity, category and equipment', async (page) => {
           await page.goto(url);
-          await tap(button(page, 'Uusi harjoitus'));
+          await tap(button(page, 'Luo treeniohjelma'));
           await page.locator('[data-f="rname"]').fill('Tilastokirjasto');
           await page.getByRole('button', { name: 'Valitse kirjastosta', exact: true }).first().click(); await idle(page);
           await page.locator('#exercise-search').fill('penkkipunnerrus käsipainoilla');

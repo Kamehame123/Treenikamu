@@ -59,7 +59,7 @@ try {
         await run('first installation is quiet; a waiting update offers now/later without reloading or stealing focus', async (page) => {
           await ready(page);
           assert.equal(await page.locator('#update-notice').isVisible(), false);
-          await tap(button(page, 'Uusi harjoitus'));
+          await tap(button(page,           'Luo treeniohjelma'));
           await page.locator('[data-f="rname"]').fill('Luonnos');
           await page.locator('[data-f="name"]').first().fill('Oma liike');
           await page.locator('[data-f="rname"]').focus();
@@ -148,7 +148,7 @@ try {
           await page.goto(url);
           await page.locator('#update-notice').getByText(/sivusto-oikeudet/).waitFor();
           assert.equal(await page.evaluate(() => !!(document.getElementById('app').compareDocumentPosition(document.getElementById('update-notice')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
-          await tap(button(page, 'Uusi harjoitus'));
+                    await tap(button(page, 'Luo treeniohjelma'));
           await page.locator('[data-f="rname"]').fill('Säilyvä luonnos');
           await page.evaluate(() => window.restoreRegistration());
           await tap(button(page, 'Yritä uudelleen'));
@@ -167,7 +167,7 @@ try {
               return window.originalSetItem.call(this, key, value);
             };
           });
-          await tap(button(page, 'Uusi harjoitus'));
+          await tap(button(page, 'Luo treeniohjelma'));
           await page.locator('[data-f="rname"]').fill('Ei saa kadota');
           await tap(button(page, 'Päivitä nyt'));
           await page.locator('#update-notice').getByText(/Muokkausluonnosta ei voitu tallentaa/).waitFor();

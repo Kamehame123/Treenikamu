@@ -1,4 +1,8 @@
 [
+  { "version": 46, "date": "2026-10-21", "changes": [
+    "Asetuksiin tuli kytkin, jolla ruotsinkielisen kannustuksen voi poistaa käytöstä. Valinta tallentuu, ja kannustukset ovat edelleen oletuksena päällä.",
+    "Etusivun Uusi harjoitus -painikkeen nimi on nyt Luo treeniohjelma, ja valmennusohje siirtyi ohjelman avattavaan osioon. Tallennetut tiedot säilyvät ennallaan."
+  ] },
   { "version": 45, "date": "2026-10-21", "changes": [
     "Ohjelman avattavassa osiossa on nyt Kevennetty- ja Super-aloituspainikkeet. Kevennetty aloittaa treenin heti heikon palautumisen mukaisena: toistot ja painot noin 15 % pienemmät, samat sarjat, vain kyseiselle treenille. Super lisää jokaiseen liikkeeseen yhden sarjan. Ohjelma ei muutu.",
     "Palautumisen merkitseminen treenin lopussa poistui. Aiemmin tallennetut harjoitukset ja niiden merkinnät säilyvät ennallaan."

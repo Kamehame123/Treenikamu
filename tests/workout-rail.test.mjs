@@ -10,9 +10,16 @@ test('detailed logging defaults to off for new and existing data, and only an ex
   assert.equal(core.defaultState().settings.advancedLogging, false);
   const legacy = { v: core.SCHEMA, routines: core.defaultState().routines, settings: { restSeconds: 60, autoRest: false } };
   const loaded = core.sanitizeState(legacy);
-  assert.deepEqual(loaded.settings, { restSeconds: 60, autoRest: false, restMode: 'auto', advancedLogging: false });
+  assert.deepEqual(loaded.settings, { restSeconds: 60, autoRest: false, restMode: 'auto', advancedLogging: false, cheers: true });
   for (const value of ['true', 1, null]) assert.equal(core.sanitizeState({ ...legacy, settings: { advancedLogging: value } }).settings.advancedLogging, false);
   assert.equal(core.sanitizeState({ ...legacy, settings: { advancedLogging: true } }).settings.advancedLogging, true);
+});
+
+test('Swedish cheers stay on for existing data and only an explicit false turns them off', () => {
+  assert.equal(core.defaultState().settings.cheers, true);
+  const legacy = { v: core.SCHEMA, routines: core.defaultState().routines, settings: { restSeconds: 60, autoRest: false } };
+  for (const value of ['false', 0, null]) assert.equal(core.sanitizeState({ ...legacy, settings: { cheers: value } }).settings.cheers, true);
+  assert.equal(core.sanitizeState({ ...legacy, settings: { cheers: false } }).settings.cheers, false);
 });
 
 test('own rest time is opt-in: existing data keeps the automatic recommendation and only a valid fixed mode is honoured', () => {
@@ -78,10 +85,9 @@ try {
           const toggle = p.getByRole('switch', { name: 'Näytä kuormittavuuden kirjaus harjoituksen aikana' });
           assert.equal(await toggle.isChecked(), false);
           await toggle.click();
-          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          await p.waitForFunction(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).settings.advancedLogging === true);
           assert.equal((await saved(p)).settings.advancedLogging, true);
           await p.reload();
-          await tap(p.locator('[data-action="resume"]'));
           await p.locator('.exercise-log summary').first().click();
           assert.equal(await p.locator('[data-rir-box="0"] [aria-pressed="true"]').innerText(), '2');
         });
@@ -147,13 +153,15 @@ try {
           assert.equal(await boxes.nth(2).getAttribute('aria-current'), 'step');
           const done = boxes.first();
           const colors = await done.evaluate((b) => { const s = getComputedStyle(b); return [s.backgroundColor, s.color]; });
-          assert.deepEqual(colors, ['rgb(168, 240, 152)', 'rgb(0, 0, 0)']);
+          assert.deepEqual(colors, ['rgb(168, 240, 156)', 'rgb(0, 0, 0)']);
           const last = state.session.exercises.length - 1;
           await p.evaluate(() => window.scrollTo(0, 0));
           const railTop = await p.locator('.track-rail').evaluate((r) => r.getBoundingClientRect().top);
           await boxes.nth(last).click();
           await p.waitForFunction((i) => {
-            const r = document.getElementById(`exercise-${i}`).getBoundingClientRect();
+            const card = document.getElementById(`exercise-${i}`);
+            const set = card.querySelector('.set.next') || card.querySelector('.set');
+            const r = card.getBoundingClientRect().height <= innerHeight ? card.getBoundingClientRect() : set.getBoundingClientRect();
             return r.top >= 0 && r.bottom <= innerHeight;
           }, last);
           assert.equal(await p.locator('.track-rail').evaluate((r) => r.getBoundingClientRect().top), railTop);

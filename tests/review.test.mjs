@@ -149,13 +149,13 @@ try {
           assert.ok(await p.locator('#err').isVisible());
         });
         await check('unfinished editor draft survives reload', async (p) => {
-          await p.goto(url); await tap(p.getByRole('button', { name: 'Uusi harjoitus', exact: true }));
+          await p.goto(url); await tap(p.getByRole('button', { name: 'Luo treeniohjelma', exact: true }));
           await p.locator('[data-f="rname"]').fill('Unsaved draft');
           await p.reload();
           assert.equal(await p.locator('[data-f="rname"]').inputValue(), 'Unsaved draft');
         });
         await check('draft storage failure is announced without losing typed text', async (p) => {
-          await p.goto(url); await tap(p.getByRole('button', { name: 'Uusi harjoitus', exact: true }));
+          await p.goto(url); await tap(p.getByRole('button', { name: 'Luo treeniohjelma', exact: true }));
           await p.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('quota'); }; });
           await p.locator('[data-f="rname"]').fill('Keep this text');
           assert.match(await p.locator('.editor-header').innerText(), /LUONNOS EI TALLENTUNUT/);

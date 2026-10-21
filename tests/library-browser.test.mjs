@@ -15,7 +15,7 @@ try {
           try { await page.goto(url); await fn(page, context); } finally { await context.close(); }
         });
         const button = (p, name) => p.getByRole('button', { name, exact: true });
-        const newPlan = async (p) => { await tap(button(p, 'Uusi harjoitus')); await p.locator('[data-f="rname"]').fill('Kirjastotesti'); };
+        const newPlan = async (p) => { await tap(button(p, 'Luo treeniohjelma')); await p.locator('[data-f="rname"]').fill('Kirjastotesti'); };
         const open = async (p) => { await newPlan(p); await tap(button(p, 'Lisää liike')); };
         const select = async (p, id, value) => {
           await p.locator(`#${id} summary`).click();
@@ -30,7 +30,7 @@ try {
         await run('Finnish language, identity, validation and labels regardless of browser locale', async (p) => {
           assert.equal(await p.locator('html').getAttribute('lang'), 'fi');
           assert.equal(await p.title(), 'Treenipäiväkirja');
-          await tap(button(p, 'Uusi harjoitus')); await tap(button(p, 'Tallenna harjoitus'));
+          await tap(button(p, 'Luo treeniohjelma')); await tap(button(p, 'Tallenna harjoitus'));
           assert.match(await p.locator('#err').innerText(), /Anna harjoitukselle nimi/);
           assert.equal(await p.locator('#err').evaluate((e) => e === document.activeElement), true);
         });

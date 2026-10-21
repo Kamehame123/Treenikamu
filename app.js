@@ -440,7 +440,7 @@ function progressionControls(r) {
   const active = state.session?.routineId === r.id;
   const revision = r.revision;
   const report = revision ? `<div class="revision-report"><strong>${revision.undone ? 'Tarkistus peruttu – edelliset tavoitteet käytössä' : 'Viimeisin tarkistus'}</strong><ul>${revision.changes.map((change) => `<li><strong>${esc(change.name)}</strong><p>${esc(change.before)}${change.kind !== 'hold' ? ` → ${esc(change.after)}` : ' · ennallaan'}</p><p class="muted">${esc(change.reason)}</p></li>`).join('')}</ul>${canUndoRevision(r) ? `<button class="btn secondary" data-action="undorevision" data-id="${esc(r.id)}" data-key="undo-${esc(r.id)}" ${active ? 'disabled' : ''}>Peru tarkistus</button>` : ''}</div>` : '';
-  return `<div class="progression-controls"><label class="check"><span>Tarkista seuraava treeni automaattisesti<small>Vain tämän ohjelman tallennuksen jälkeen. Muutokset voi perua.</small></span><input type="checkbox" role="switch" data-action="autoprogress" data-id="${esc(r.id)}" data-key="auto-${esc(r.id)}" aria-label="Tarkista automaattisesti: ${esc(r.name)}" ${r.autoProgress ? 'checked' : ''}></label><button class="btn secondary" data-action="revise" data-id="${esc(r.id)}" data-key="revise-${esc(r.id)}" ${active ? 'disabled' : ''}>Tarkista seuraava treeni</button>${active ? '<p class="muted small-copy">Keskeneräistä harjoitusta ei muuteta. Tarkista tavoitteet tallennuksen jälkeen.</p>' : ''}${revisionMessages.has(r.id) ? `<p class="small-copy" role="status">${esc(revisionMessages.get(r.id))}</p>` : ''}${report}</div>`;
+  return `<div class="progression-controls"><label class="check"><span>Tarkista seuraava treeni automaattisesti<small>Vain tämän ohjelman tallennuksen jälkeen. Muutokset voi perua.</small></span><input type="checkbox" role="switch" data-action="autoprogress" data-id="${esc(r.id)}" data-key="auto-${esc(r.id)}" aria-label="Tarkista automaattisesti: ${esc(r.name)}" ${r.autoProgress ? 'checked' : ''}></label><button class="btn secondary" data-action="revise" data-id="${esc(r.id)}" data-key="revise-${esc(r.id)}" ${active ? 'disabled' : ''}>Tarkista seuraava treeni</button>${active ? '<p class="muted small-copy">Keskeneräistä harjoitusta ei muuteta. Tarkista tavoitteet tallennuksen jälkeen.</p>' : ''}${revisionMessages.has(r.id) ? `<p class="small-copy" role="status">${esc(revisionMessages.get(r.id))}</p>` : ''}${report}${coachingGuide()}</div>`;
 }
 
 function historyDetails(h) {
@@ -519,7 +519,7 @@ function homeView() {
   return `${brand()}${warn()}${savedCard()}${resume}<h1 class="sr-only" tabindex="-1">Treenipäiväkirja</h1>
     <div class="stats"><button type="button" class="stat-tile" data-action="homeperiod" data-key="homeperiod"><strong>${thisWeek}</strong> <span>${periodLabel}</span></button><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
     <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
-    <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${coachingGuide()}</section>
+    <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Luo treeniohjelma</button></section>
     <div class="home-aside">
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
       <div class="settings-body">
@@ -529,6 +529,7 @@ function homeView() {
           ${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}
         </div>
         <label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>
+        <label class="check"><span>Ruotsalaiset kannustukset<small>Näyttää sarjan kirjaamisen jälkeen lyhyen ruotsinkielisen kannustuksen.</small></span><input type="checkbox" role="switch" data-action="cheers" data-key="cheers" ${state.settings.cheers !== false ? 'checked' : ''} aria-label="Näytä ruotsalaiset kannustukset"></label>
         ${hrSettings()}${backupCompact()}
         <section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section>
       </div>
@@ -1115,7 +1116,7 @@ const actions = {
         if (ei === current && following > current) advance = { sessionId: next.session.id, index: following };
         else if (p.done === p.total) advance = { sessionId: next.session.id, index: -1 };
         // Show the cheer where the user looks next: right below the tapped set, or above the sets of the exercise the view advances to.
-        const text = pickCheer(p.done, p.total, lastCheer);
+        const text = next.settings.cheers === false ? '' : pickCheer(p.done, p.total, lastCheer);
         if (text) { cheer = { sessionId: next.session.id, exerciseId: next.session.exercises[advance && advance.index >= 0 ? advance.index : ei].id, after: advance && advance.index >= 0 ? -1 : si, text }; lastCheer = text; }
       }
       announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${restSeconds} sekuntia.` : ''}${cheer ? ` ${cheer.text}` : ''}`);
@@ -1508,6 +1509,10 @@ document.addEventListener('change', async (e) => {
   if (t.dataset.action === 'advancedlogging') {
     const checked = t.checked;
     await mutate((next) => { next.settings.advancedLogging = checked; });
+  }
+  if (t.dataset.action === 'cheers') {
+    const checked = t.checked;
+    await mutate((next) => { next.settings.cheers = checked; });
   }
   if (t.dataset.action === 'restfixed') {
     const fixed = t.checked;

@@ -49,7 +49,7 @@ async function centered(page, selector) {
 
 async function openLibrary(page) {
   await page.goto(url);
-  await tap(button(page, 'Uusi harjoitus'));
+  await tap(button(page, 'Luo treeniohjelma'));
   await page.locator('[data-f="rname"]').fill('Testiohjelma');
   await tap(button(page, 'Lisää liike'));
 }
@@ -612,7 +612,7 @@ try {
 
         await run('per-set targets survive planning, set-count edits, reload, tracking and export', async (p) => {
           await p.goto(url);
-          await tap(button(p, 'Uusi harjoitus'));
+          await tap(button(p, 'Luo treeniohjelma'));
           await p.locator('[data-f="rname"]').fill('Sarjakohtainen treeni');
           await p.locator('[data-f="name"]').fill('Kyykky');
           await p.locator('[data-f="reps"]').fill('5');

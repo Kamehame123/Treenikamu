@@ -71,7 +71,7 @@ export function defaultState() {
     session: null,
     history: [],
     customExercises: [],
-    settings: { restSeconds: 90, autoRest: true, restMode: 'auto', advancedLogging: false },
+    settings: { restSeconds: 90, autoRest: true, restMode: 'auto', advancedLogging: false, cheers: true },
     restEnd: null,
   };
 }
@@ -233,6 +233,7 @@ function normalizeState(raw) {
       autoRest: raw.settings?.autoRest !== false,
       restMode: raw.settings?.restMode === 'fixed' ? 'fixed' : 'auto',
       advancedLogging: raw.settings?.advancedLogging === true,
+      cheers: raw.settings?.cheers !== false,
     },
     restEnd: session ? timestamp(raw.restEnd, null) : null,
   };

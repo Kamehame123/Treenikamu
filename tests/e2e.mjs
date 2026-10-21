@@ -152,7 +152,7 @@ async function suite(name, type, device) {
     await tap(button('Tallenna harjoitus')); eq(await histCount(), 2, 'complete saved');
     await page.reload(); eq(await histCount(), 2, 'completed history durable');
 
-    await tap(button('Uusi harjoitus'));
+    await tap(button('Luo treeniohjelma'));
     await tap(button('Tallenna harjoitus')); check(await page.locator('#err').isVisible(), 'validation errors visible');
     await page.locator('[data-f="rname"]').fill('<img src=x onerror=window.__xss=1>');
     await page.locator('[data-f="name"]').first().fill('Dumbbell curl');
