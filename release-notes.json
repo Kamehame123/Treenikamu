@@ -1,4 +1,8 @@
 [
+  { "version": 44, "date": "2026-10-21", "changes": [
+    "Yhtenäiset välit ja korttien sisennykset etusivulla, asetuksissa, historiassa, treenissä, ohjelmaeditorissa, liikekirjastossa ja tilastoissa.",
+    "Varmuuskopioinnin painikkeet ovat saman avattavan osion sisällä tasavälein. Harjoitustiedot säilyvät ennallaan."
+  ] },
   { "version": 43, "date": "2026-10-21", "changes": [
     "Historia on nyt oma sivunsa: Historia-, Tilastot- ja Ennätykset-painikkeet ovat etusivun yläosassa. Etusivu on lyhyempi, ja harjoitushistoria säilyy ennallaan.",
     "Kehitysindeksi näkyy vain Tilastot-sivulla."

@@ -14,6 +14,18 @@ desktop and below them on phones. Backup reminders and export remain inside
 existing browser storage, training history, imports and active sessions are
 unchanged; no migration or reset is needed.
 
+## Layout spacing
+
+Shared spacing tokens in `styles.css` keep screen sections 16 px apart and
+related controls 12 px apart. Cards use 16 px padding (12 px on screens up to
+380 px); compact labels and metadata use the smaller 4/8 px steps. Containers
+own their gaps, so child margins must not add a second layer of spacing.
+All three backup actions share one button stack inside **Asetukset >
+Varmuuskopio**, with status and help text above and below the actions.
+Run `node --test tests/spacing-browser.test.mjs` for measured layout regressions
+across Chromium/WebKit and narrow phone through desktop widths. These tests
+also verify that navigating the updated layouts leaves existing data unchanged.
+
 ## Training statistics
 
 Open **Tilastot** from home. All calculations and charts run locally,

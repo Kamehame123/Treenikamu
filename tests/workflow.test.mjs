@@ -87,7 +87,7 @@ try {
           assert.equal(await p.locator('.routine-details').count() >= 1, true);
           assert.equal(await first.evaluate((d) => d.open), false);
           assert.equal(await p.getByRole('button', { name: 'Aloita harjoitus', exact: true }).count(), 0);
-          const summary = first.locator('summary');
+          const summary = first.locator('> summary');
           assert.equal(await summary.isVisible(), true);
           assert.match(await summary.innerText(), /liikettä/);
           assert.equal((await summary.boundingBox()).height >= 48, true);
@@ -191,7 +191,7 @@ try {
             const due = ['overdue', 'resume'].includes(scenario);
             assert.equal(await p.locator('.backup').count(), 1);
             assert.equal(await p.locator('.settings .backup').count(), 1);
-            assert.equal(await p.locator('.settings-flag').count(), due ? 1 : 0);
+            assert.equal(await p.locator('.settings > summary .settings-flag').count(), due ? 1 : 0);
             for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 900 }]) {
               await p.setViewportSize(viewport);
               assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${scenario} at ${viewport.width}px`);
@@ -655,7 +655,7 @@ try {
           await tap(button(p, 'Muokkaa: Sarjakohtainen treeni'));
           assert.deepEqual(await targets().evaluateAll((es) => es.map((e) => e.value)), ['5', '8', '12']);
           await tap(button(p, 'Peruuta'));
-          if (await p.locator('.settings:not([open]) summary').count()) await p.locator('.settings summary').click();
+          await openSettings(p);
           const download = p.waitForEvent('download');
           await tap(button(p, 'Vie varmuuskopio'));
           const parsed = core.parseBackup(await readFile(await (await download).path(), 'utf8'));

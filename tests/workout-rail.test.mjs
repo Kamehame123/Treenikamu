@@ -61,7 +61,7 @@ try {
           assert.equal(await p.locator('[data-rir-box="0"] [aria-pressed="true"]').innerText(), '2', 'RIR is visible without the logging panel');
           assert.deepEqual((await saved(p)).session, before.session);
           await tap(p.getByRole('button', { name: 'Takaisin harjoituksiin' }));
-          await p.locator('.settings summary').click();
+          await p.locator('.settings > summary').click();
           const toggle = p.getByRole('switch', { name: 'Näytä kuormittavuuden kirjaus harjoituksen aikana' });
           assert.equal(await toggle.isChecked(), false);
           await toggle.click();
@@ -76,7 +76,7 @@ try {
         await run('a user-defined rest time persists and drives the rest timer after a set', async (p) => {
           await seedWorkout(p);
           await tap(p.getByRole('button', { name: 'Takaisin harjoituksiin' }));
-          await p.locator('.settings summary').click();
+          await p.locator('.settings > summary').click();
           await p.getByRole('switch', { name: 'Käynnistä lepoajastin sarjan jälkeen' }).click();
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
           await p.getByRole('switch', { name: 'Käytä omaa lepoaikaa sarjojen välillä' }).click();

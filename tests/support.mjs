@@ -20,9 +20,9 @@ export async function expandRoutines(page) {
   await page.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
 }
 
-// Backup controls sit inside the collapsed Asetukset card.
+// Backup controls sit inside two nested disclosures.
 export async function openSettings(page) {
-  await page.evaluate(() => { const d = document.querySelector('details.settings'); if (d) d.open = true; });
+  await page.evaluate(() => document.querySelectorAll('details.settings, details.backup-group').forEach((d) => { d.open = true; }));
   await page.waitForFunction(() => document.querySelector('details.settings')?.open === true);
 }
 

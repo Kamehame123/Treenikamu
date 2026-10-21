@@ -83,6 +83,7 @@ try { const saved = localStorage.getItem(HOME_PERIOD_KEY); if (HOME_PERIODS.incl
 let renderedView;
 let editError = '';
 let settingsOpen = false;
+let backupOpen = false;
 const statisticsFilters = { range: '12w', from: localDateKey(shiftDays(Date.now(), -83)), to: localDateKey(Date.now()), routineId: '', exerciseKey: '', page: 0 };
 // mode 'draft' picks for the program editor; mode 'session' swaps or adds an exercise in the active workout only.
 let picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target: null, adding: true, keepOpen: false, added: [], mode: 'draft' };
@@ -293,7 +294,15 @@ function backupInfo() {
 function backupCompact() {
   const { due, status } = backupInfo();
   const advice = due ? '<p class="backup-status" id="backup-advice">Tietosi ovat vain tällä laitteella ja katoavat, jos selaintiedot tyhjennetään tai sovellus poistetaan.</p>' : '';
-  return `<section class="backup compact" aria-label="Varmuuskopio"><div class="backup-text"><p class="backup-status" id="backup-status">${status}</p>${advice}<p class="backup-status" id="persist-status">${esc(storageNote())}</p></div><button class="btn secondary" data-action="export" data-key="export">Vie varmuuskopio</button></section>`;
+  return `<details class="backup-group" ${backupOpen || importMessage ? 'open' : ''}>
+    <summary>Varmuuskopio${due ? ' <span class="settings-flag">Tee varmuuskopio</span>' : ''}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
+    <section class="backup compact" aria-label="Varmuuskopio">
+      <div class="backup-text"><p class="backup-status" id="backup-status">${status}</p>${advice}<p class="backup-status" id="persist-status">${esc(storageNote())}</p></div>
+      <div class="settings-actions"><button class="btn secondary" data-action="export" data-key="export">Vie varmuuskopio</button><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div>
+      <p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>
+      ${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}
+    </section>
+  </details>`;
 }
 function backupFlag() {
   return backupInfo().due ? '<span class="settings-flag">Varmuuskopioi</span>' : '';
@@ -512,7 +521,18 @@ function homeView() {
     <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
     <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${coachingGuide()}</section>
     <div class="home-aside">
-    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan, ellet aseta omaa aikaa</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label>${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}<label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>${hrSettings()}<p class="muted small-copy">Automaattinen lepoaika: moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p>${backupCompact()}<div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}<section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
+      <div class="settings-body">
+        <div class="rest-settings">
+          <label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan, ellet aseta omaa aikaa</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label>
+          <p class="muted small-copy">Automaattinen lepoaika: moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p>
+          ${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}
+        </div>
+        <label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>
+        ${hrSettings()}${backupCompact()}
+        <section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section>
+      </div>
+    </details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
 }
 
 function stepper({ kind, cls, ei, si, e, value, unit, group, down, up, canDown, canUp }) {
@@ -1509,6 +1529,7 @@ document.addEventListener('toggle', (e) => {
     else openRoutines.delete(e.target.dataset.routinePanel);
   }
   if (e.target.matches('.settings')) settingsOpen = e.target.open;
+  if (e.target.matches('.backup-group')) backupOpen = e.target.open;
   if (e.target.matches('.custom-exercise')) customOpen = e.target.open;
 }, true);
 window.addEventListener('storage', (e) => {

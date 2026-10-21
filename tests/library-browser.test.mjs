@@ -78,7 +78,7 @@ try {
           await tap(button(p, 'Lisää liike')); await p.locator('#library-own').check();
           assert.equal(await p.locator('.exercise-choice').count(), 1);
           await tap(button(p, 'Takaisin harjoitukseen')); await tap(button(p, 'Tallenna harjoitus'));
-          await p.reload(); await p.locator('.settings summary').click();
+          await p.reload();
           await openSettings(p); const download = p.waitForEvent('download'); await tap(button(p, 'Vie varmuuskopio'));
           const backup = JSON.parse(await readFile(await (await download).path(), 'utf8'));
           assert.equal(backup.data.customExercises[0].name, 'Oma ääkkösliike');

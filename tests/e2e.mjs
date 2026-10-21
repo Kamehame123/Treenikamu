@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm, openSettings } from './support.mjs';
 
 const shots = join(tmpdir(), 'tracker-shots'); mkdirSync(shots, { recursive: true });
 const { server, url } = await startServer();
@@ -57,8 +57,9 @@ async function suite(name, type, device) {
     const doneCount = () => page.locator('.set[aria-pressed="true"]').count();
     const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')));
     await views(page, name, 'home');
-    await page.locator('.settings summary').click();
+    await openSettings(page);
     await audit(page, `${name}/settings-open`);
+    await page.screenshot({ path: join(shots, `${name}-settings.png`), fullPage: true, scale: 'css' });
     const download = page.waitForEvent('download');
     await tap(button('Vie varmuuskopio'));
     const file = await download;
@@ -89,7 +90,7 @@ async function suite(name, type, device) {
     await page.locator('.routine-details > summary').first().click();
     eq(await page.locator('.routine-details[open]').count(), 1, 'program disclosure opens independently');
     await audit(page, `${name}/expanded-program`);
-    await page.locator('.settings summary').click();
+    await openSettings(page);
     await importFile('import', { v: 1, routines: [{ id: 'old-1', name: 'Legacy plan', exercises: [{ name: 'Press' }] }], history: [] });
     eq((await saved()).routines.length, 3, 'legacy pre-envelope export imports');
     await importFile('import', 'not a backup', false);
@@ -99,7 +100,7 @@ async function suite(name, type, device) {
     await importFile('restore', backup);
     after = await saved();
     eq([after.routines.length, after.history.length], [1, 0], 'restore replaces plans and history');
-    await page.locator('.settings summary').click();
+    await page.locator('.settings > summary').click();
 
     await tap(button('Aloita harjoitus'));
     eq(await sets().count(), 15, 'starter has 15 independent sets');
