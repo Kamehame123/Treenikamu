@@ -815,6 +815,104 @@ try {
             }
           }
         }, { bypassCSP: true });
+
+        const openActions = (p, index) => p.locator('.exercise-actions > summary').nth(index).click();
+
+        await run('swapping a workout exercise opens the library on the same muscle group and leaves the program alone', async (p) => {
+          const state = await seedWorkout(p);
+          const programs = structuredClone(state.routines);
+          const category = core.sessionExerciseCategory({ name: 'Takakyykky' });
+          assert.ok(category);
+          await openActions(p, 0);
+          await tap(button(p, 'Vaihda liike: Takakyykky'));
+          assert.equal(await p.locator('#library-category-value').innerText(), category);
+          const metas = await p.locator('.exercise-choice .choice-meta').allInnerTexts();
+          assert.ok(metas.length > 1 && metas.every((text) => text.startsWith(category)), 'only that muscle group is listed');
+          assert.equal(await p.getByRole('button', { name: /^Lisää useita peräkkäin/ }).count(), 0);
+          await p.locator('#exercise-search').fill('etukyykky');
+          await tap(p.locator('.exercise-choice').first());
+          assert.equal(await p.locator('.ex').count(), 5);
+          assert.equal(await p.locator('.ex h2').first().innerText(), 'Etukyykky');
+          assert.equal(await p.locator('.ex').first().locator('.set').count(), 3);
+          let data = await saved(p);
+          assert.equal(data.session.exercises[0].name, 'Etukyykky');
+          assert.match(data.session.exercises[0].id, /^adhoc-/);
+          assert.equal(data.session.exercises[0].weight, '');
+          assert.deepEqual(data.routines, programs);
+          await p.reload();
+          assert.equal(await p.locator('.ex h2').first().innerText(), 'Etukyykky');
+          await tap(p.locator('.set').first());
+          await tapConfirm(button(p, 'Lopeta kesken'));
+          data = await saved(p);
+          assert.equal(data.history[0].exercises[0].name, 'Etukyykky');
+          assert.equal(data.history[0].exercises[0].sets[0].done, true);
+          assert.deepEqual(data.routines, programs);
+        });
+
+        await run('swapping an exercise with logged sets asks first and then clears them', async (p) => {
+          await seedWorkout(p, { current: 1 });
+          await openActions(p, 0);
+          await tap(button(p, 'Vaihda liike: Takakyykky'));
+          await p.locator('#exercise-search').fill('etukyykky');
+          await tapConfirm(p.locator('.exercise-choice').first(), false);
+          assert.equal((await saved(p)).session.exercises[0].name, 'Takakyykky');
+          assert.equal(await p.getByRole('alertdialog').count(), 0);
+          await tapConfirm(p.locator('.exercise-choice').first(), true);
+          const data = await saved(p);
+          assert.equal(data.session.exercises[0].name, 'Etukyykky');
+          assert.ok(data.session.exercises[0].sets.every((set) => !set.done));
+        });
+
+        await run('an exercise can be added after the current one and removed again', async (p) => {
+          const state = await seedWorkout(p);
+          const programs = structuredClone(state.routines);
+          await tap(button(p, 'Lisää liike tähän treeniin'));
+          assert.equal(await p.locator('#library-category-value').innerText(), 'Kaikki lihasryhmät');
+          await p.locator('#exercise-search').fill('alavinopenkkipunnerrus');
+          await tap(p.locator('.exercise-choice').first());
+          let names = await p.locator('.ex h2').allInnerTexts();
+          assert.equal(names.length, 6);
+          assert.equal(names[1], (await saved(p)).session.exercises[1].name);
+          assert.match(names[1], /^Alavinopenkkipunnerrus/);
+          assert.equal(await p.locator('.ex').nth(1).locator('.set').count(), 3);
+          assert.deepEqual((await saved(p)).routines, programs);
+          await openActions(p, 1);
+          await tap(button(p, `Poista liike: ${names[1]}`));
+          names = await p.locator('.ex h2').allInnerTexts();
+          assert.equal(names.length, 5);
+          assert.ok(!names.some((name) => name.startsWith('Alavinopenkkipunnerrus')));
+          assert.deepEqual((await saved(p)).routines, programs);
+        });
+
+        await run('removing a logged exercise asks first and the last exercise cannot be removed', async (p) => {
+          await seedWorkout(p, { current: 1 });
+          await openActions(p, 0);
+          await tapConfirm(button(p, 'Poista liike: Takakyykky'), false);
+          assert.equal(await p.locator('.ex').count(), 5);
+          await tapConfirm(button(p, 'Poista liike: Takakyykky'), true);
+          assert.equal(await p.locator('.ex').count(), 4);
+          for (const name of ['Penkkipunnerrus', 'Kulmasoutu tangolla', 'Pystypunnerrus tangolla']) {
+            await openActions(p, 0);
+            await tap(button(p, `Poista liike: ${name}`));
+          }
+          assert.equal(await p.locator('.ex').count(), 1);
+          await openActions(p, 0);
+          assert.equal(await button(p, 'Poista liike: Lankku').isDisabled(), true);
+        });
+
+        await run('workout exercise actions pass accessibility and touch-size checks', async (p) => {
+          await seedWorkout(p);
+          await openActions(p, 0);
+          for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }]) {
+            await p.setViewportSize(viewport);
+            const violations = (await new AxeBuilder({ page: p }).analyze()).violations;
+            assert.deepEqual(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), []);
+            assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.exercise-actions button, .exercise-actions summary, .add-ex-btn')].filter((e) => {
+              const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.height < 47.9;
+            }).map((e) => e.outerHTML.slice(0, 100))), []);
+          }
+        }, { bypassCSP: true });
       });
     } finally { await browser.close(); }
   }

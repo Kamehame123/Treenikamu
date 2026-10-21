@@ -208,6 +208,102 @@ test('add/remove set respect bounds', () => {
   assert.equal(s.exercises[1].sets.length, 1);
 });
 
+const bench = { id: 'lib-penkkipunnerrus', name: 'Penkkipunnerrus', category: 'Rinta', equipment: 'Levytanko', reps: '8' };
+const fly = { id: 'lib-rintaprassi', name: 'Rintaprassi', category: 'Rinta', equipment: 'Laite', reps: '12' };
+
+test('replacing a session exercise keeps targets, clears values and never touches the program', () => {
+  const r = routine();
+  r.exercises[0].weight = '100 kg';
+  r.exercises[0].setReps = ['5', '6', '8'];
+  const original = structuredClone(r);
+  const s = c.startSession(r);
+  s.exercises[0].rir = '2'; s.exercises[0].pain = true;
+  c.toggleSet(s, 0, 0); c.adjustSetWeight(s, 0, 0, 1);
+  const programId = s.exercises[0].id;
+  assert.deepEqual(c.replaceSessionExercise(s, programId, bench), { ok: true, index: 0 });
+  const swapped = s.exercises[0];
+  assert.equal(swapped.name, 'Penkkipunnerrus');
+  assert.equal(swapped.id, 'adhoc-lib-penkkipunnerrus');
+  assert.notEqual(swapped.id, programId);
+  assert.equal(swapped.weight, '');
+  assert.equal(swapped.reps, '5');
+  assert.deepEqual(swapped.sets, [{ done: false, kind: 'working', reps: '5' }, { done: false, kind: 'working', reps: '6' }, { done: false, kind: 'working', reps: '8' }]);
+  assert.equal(swapped.tracking.sourceId, 'lib-penkkipunnerrus');
+  assert.equal('rir' in swapped, false);
+  assert.equal('pain' in swapped, false);
+  assert.deepEqual(r, original);
+  assert.equal(c.sanitizeSession(s).exercises[0].id, 'adhoc-lib-penkkipunnerrus');
+  assert.equal(c.replaceSessionExercise(s, 'missing', bench).ok, false);
+  assert.equal(c.replaceSessionExercise(null, 'x', bench).ok, false);
+});
+
+test('inserting puts the exercise after the current one, or last when all are done', () => {
+  const s = c.startSession(routine());
+  [0, 1, 2].forEach((i) => c.toggleSet(s, 0, i));
+  assert.deepEqual(c.insertSessionExercise(s, fly), { ok: true, index: 2 });
+  assert.deepEqual(s.exercises.map((e) => e.name), ['Squat', 'Row', 'Rintaprassi']);
+  assert.deepEqual(s.exercises[2].sets, [0, 1, 2].map(() => ({ done: false, kind: 'working' })));
+  assert.equal(s.exercises[2].reps, '12');
+  assert.equal(s.exercises[2].weight, '');
+  [0, 1].forEach((i) => c.toggleSet(s, 1, i));
+  assert.equal(c.currentExercise(s), 2);
+  assert.deepEqual(c.insertSessionExercise(s, bench), { ok: true, index: 3 });
+  [0, 1, 2].forEach((i) => c.toggleSet(s, 2, i));
+  [0, 1, 2].forEach((i) => c.toggleSet(s, 3, i));
+  assert.equal(c.currentExercise(s), -1);
+  assert.deepEqual(c.insertSessionExercise(s, fly), { ok: true, index: 4 });
+  assert.equal(new Set(s.exercises.map((e) => e.id)).size, 5, 'ids stay unique when the same library exercise is added twice');
+  assert.equal(c.insertSessionExercise(s, null).ok, false);
+});
+
+test('inserting respects the exercise limit', () => {
+  const s = c.startSession(routine());
+  while (s.exercises.length < c.SESSION_EXERCISE_LIMIT) assert.equal(c.insertSessionExercise(s, fly).ok, true);
+  const before = structuredClone(s);
+  assert.equal(c.insertSessionExercise(s, bench).ok, false);
+  assert.deepEqual(s, before);
+});
+
+test('removing a session exercise keeps the last one and the program unchanged', () => {
+  const r = routine(), original = structuredClone(r);
+  const s = c.startSession(r);
+  assert.equal(c.removeSessionExercise(s, 'missing').ok, false);
+  assert.deepEqual(c.removeSessionExercise(s, 'e1'), { ok: true, index: 0 });
+  assert.deepEqual(s.exercises.map((e) => e.id), ['e2']);
+  const before = structuredClone(s);
+  assert.equal(c.removeSessionExercise(s, 'e2').ok, false);
+  assert.deepEqual(s, before);
+  assert.deepEqual(r, original);
+  assert.equal(c.loggedSetCount(c.startSession(r).exercises[0]), 0);
+});
+
+test('swap category falls back from tracking to the library, custom exercises and nothing', () => {
+  assert.equal(c.sessionExerciseCategory({ name: 'x', tracking: { category: 'Selkä' } }), 'Selkä');
+  assert.equal(c.sessionExerciseCategory({ name: 'Penkkipunnerrus' }), 'Rinta');
+  assert.equal(c.sessionExerciseCategory({ name: 'Oma veto' }, [{ name: 'Oma veto', category: 'Hauis' }]), 'Hauis');
+  assert.equal(c.sessionExerciseCategory({ name: 'Tuntematon liike' }), '');
+  assert.equal(c.sessionExerciseCategory(null), '');
+});
+
+test('a changed session is saved to history and survives reload while the program stays identical', () => {
+  const state = c.defaultState();
+  const programs = structuredClone(state.routines);
+  state.session = c.startSession(state.routines[0]);
+  const first = state.session.exercises[0].id;
+  c.replaceSessionExercise(state.session, first, bench);
+  c.removeSessionExercise(state.session, state.session.exercises[1].id);
+  c.insertSessionExercise(state.session, fly);
+  state.session.exercises.forEach((e, ei) => e.sets.forEach((_, si) => c.toggleSet(state.session, ei, si)));
+  const store = mem();
+  assert.equal(c.saveState(store, state), true);
+  const recovered = c.loadState(store);
+  assert.deepEqual(recovered.session.exercises.map((e) => e.name), state.session.exercises.map((e) => e.name));
+  recovered.history.unshift(c.summarize(recovered.session));
+  assert.ok(recovered.history[0].exercises.some((e) => e.name === 'Penkkipunnerrus' && e.sets.every((x) => x.done)));
+  assert.ok(recovered.history[0].exercises.some((e) => e.name === 'Rintaprassi'));
+  assert.deepEqual(recovered.routines, programs);
+});
+
 test('set buttons format weights, unweighted reps, ranges and durations', () => {
   for (const weight of ['25', '25kg', '25 kg', ' 25 kg ']) {
     assert.equal(c.setTargetLabel('5', weight), '5 x 25kg');

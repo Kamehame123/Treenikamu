@@ -85,13 +85,16 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .revision-report li { margin-block: 12px; }
 .revision-report li p { margin-top: 4px; }
 .coaching-guide { margin-bottom: 18px; }
-.coaching-guide summary, .exercise-log summary, .progression-editor summary, .history-log summary { cursor: pointer; min-height: 48px; padding-block: 14px; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.coaching-guide summary, .exercise-log summary, .exercise-actions summary, .progression-editor summary, .history-log summary { cursor: pointer; min-height: 48px; padding-block: 14px; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
 .coaching-guide p { margin-block: 10px; }
 .coaching-guide a { color: var(--accent); }
 .coaching-guide .sources { list-style: none; margin: 0; padding: 0; }
 .autorange-note, .progression-editor .notice { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 11px; background: var(--accent-soft); }
 .coaching-guide .sources a { display: flex; align-items: center; min-height: 48px; }
-.exercise-log, .progression-editor { border-top: 1px solid var(--line); margin-top: 10px; }
+.exercise-log, .exercise-actions, .progression-editor { border-top: 1px solid var(--line); margin-top: 10px; }
+.exercise-actions-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.exercise-actions-row .btn { flex: 1 1 140px; }
+.exercise-list + .add-ex-btn { margin-top: 14px; }
 .exercise-log > .field, .exercise-log > .check, .progression-editor > .check { margin-top: 12px; }
 .recovery-check { padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
 .history-log { padding-inline: 12px; font-size: 12px; overflow-wrap: anywhere; }

@@ -131,6 +131,19 @@ on the browser. Do not uninstall the app or clear site data to force an update:
 training records are stored on the device. This change keeps the same start URL,
 scope, storage keys and user data; no data migration or reset is required.
 
+## Changing exercises during a workout
+
+During a workout, each exercise has "Vaihda tai poista liike" (swap or remove), and
+"Lisää liike tähän treeniin" adds an exercise after the current one. Swapping opens
+the exercise library on the original exercise's muscle group (inferred from its
+tracking data or its library entry); the filter can be changed. A swap keeps the set
+count and target reps but clears weight and logged values, so it asks before
+discarding logged sets. Removing asks only when sets are logged, and the last
+exercise cannot be removed. These edits apply to the running workout only: the saved
+program is never changed, the history records the exercises actually done, and
+automatic progression never raises the original exercise from a substitute's sets.
+No stored fields or formats changed, so no data migration is needed.
+
 ## Workout progression
 
 Each routine has an **off-by-default** automatic revision switch and a manual

@@ -1,4 +1,8 @@
 [
+  { "version": 39, "date": "2026-10-21", "changes": [
+    "Treenin aikana voi nyt vaihtaa, poistaa tai lisätä liikkeitä. Muutos koskee vain käynnissä olevaa treeniä, ohjelma ei muutu.",
+    "Liikkeen vaihdossa kirjasto avautuu valmiiksi saman lihasryhmän liikkeisiin."
+  ] },
   { "version": 38, "date": "2026-10-21", "changes": [
     "Päivitysikkuna kertoo nyt, mitä muutoksia uusi versio sisältää.",
     "Päivitysilmoitus tarkistetaan uudelleen, kun sovellus palaa taustalta."

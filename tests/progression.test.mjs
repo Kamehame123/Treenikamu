@@ -565,3 +565,16 @@ test('re-revising after correcting the source workout recomputes instead of stac
   assert.notEqual(exercise(state).weight, raised);
   assert.equal(state.routines[0].revision.before[0].weight, '100 kg');
 });
+
+test('a session exercise swapped out of the program holds that slot and never progresses the substitute', () => {
+  const state = fixture();
+  const session = core.startSession(state.routines[0], NOW - 3600000);
+  core.replaceSessionExercise(session, 'exercise', { id: 'lib-penkkipunnerrus', name: 'Penkkipunnerrus', category: 'Rinta', equipment: 'Levytanko', reps: '10' });
+  session.exercises[0].rir = '2';
+  session.exercises[0].sets.forEach((set) => { set.done = true; });
+  state.history.unshift(core.summarize(session, NOW));
+  const before = structuredClone(state.routines[0].exercises);
+  assert.equal(revise(state).ok, true);
+  assert.deepEqual(state.routines[0].exercises, before);
+  assert.equal(decision(state).kind, 'hold');
+});

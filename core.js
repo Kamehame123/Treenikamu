@@ -12,9 +12,9 @@
 // - Backups are wrapped in an envelope (format/formatVersion/exportedAt/data). Only bump
 //   BACKUP_VERSION if the envelope itself changes; then keep reading the older envelopes.
 // - Files from a newer app version are refused, never guessed at.
-import { CATEGORIES, EQUIPMENT, normalizeSearch } from './exercises.js';
+import { CATEGORIES, EQUIPMENT, EXERCISES, normalizeSearch } from './exercises.js';
 import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight } from './progression.js';
-import { sanitizeTracking, sanitizeIndex, exerciseKey } from './statistics.js';
+import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking } from './statistics.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
@@ -516,6 +516,71 @@ export function removeSet(session, ei) {
   const e = session?.exercises[ei];
   if (e && e.sets.length > 1) e.sets.pop();
 }
+
+// ---- Changing the exercises of an active session (the program itself is never touched) ----
+
+const MAX_SESSION_EXERCISES = 60;
+const EXERCISES_BY_NAME = new Map(EXERCISES.map((e) => [normalizeSearch(e.name), e]));
+export const SESSION_EXERCISE_LIMIT = MAX_SESSION_EXERCISES;
+
+// Ad-hoc exercises get their own id so progression never mistakes them for the program's exercise.
+function adhocId(session, entry) {
+  const base = `adhoc-${entry.id}`.slice(0, 70);
+  return session.exercises.some((e) => e.id === base) ? `${base}-${uid()}`.slice(0, 80) : base;
+}
+
+// Muscle group of a session exercise, so a swap can start from the same group.
+export function sessionExerciseCategory(exercise, custom = []) {
+  if (CATEGORIES.includes(exercise?.tracking?.category)) return exercise.tracking.category;
+  const key = normalizeSearch(exercise?.name);
+  const match = custom.find((c) => normalizeSearch(c.name) === key) ?? EXERCISES_BY_NAME.get(key);
+  return CATEGORIES.includes(match?.category) ? match.category : '';
+}
+
+// Swaps one exercise for another. Set count and rep targets stay; weight and every logged value are cleared.
+export function replaceSessionExercise(session, exerciseId, entry) {
+  const index = session?.exercises.findIndex((e) => e.id === exerciseId) ?? -1;
+  if (index < 0 || !entry?.name) return { ok: false, error: 'Vaihdettavaa liikettä ei enää löytynyt. Tarkista harjoitus.' };
+  const old = session.exercises[index];
+  session.exercises[index] = {
+    id: adhocId(session, entry),
+    name: entry.name,
+    reps: old.reps,
+    weight: '',
+    tracking: libraryTracking(entry),
+    sets: old.sets.map((set) => ({ done: false, kind: 'working', ...(set.reps ? { reps: set.reps } : {}) })),
+  };
+  return { ok: true, index };
+}
+
+// Adds an exercise right after the current one (or last when everything is done).
+export function insertSessionExercise(session, entry) {
+  if (!session || !entry?.name) return { ok: false, error: 'Liikettä ei löytynyt.' };
+  if (session.exercises.length >= MAX_SESSION_EXERCISES) return { ok: false, error: `Harjoituksessa voi olla enintään ${MAX_SESSION_EXERCISES} liikettä.` };
+  const current = currentExercise(session);
+  const index = current < 0 ? session.exercises.length : current + 1;
+  const reps = cleanText(entry.reps, 20) || '10';
+  session.exercises.splice(index, 0, {
+    id: adhocId(session, entry),
+    name: entry.name,
+    reps,
+    weight: '',
+    tracking: libraryTracking(entry),
+    sets: Array.from({ length: 3 }, () => ({ done: false, kind: 'working' })),
+  });
+  return { ok: true, index };
+}
+
+// The last exercise stays: a session without exercises cannot exist.
+export function removeSessionExercise(session, exerciseId) {
+  const index = session?.exercises.findIndex((e) => e.id === exerciseId) ?? -1;
+  if (index < 0) return { ok: false, error: 'Poistettavaa liikettä ei enää löytynyt. Tarkista harjoitus.' };
+  if (session.exercises.length < 2) return { ok: false, error: 'Viimeistä liikettä ei voi poistaa. Hylkää harjoitus, jos et halua tehdä sitä.' };
+  session.exercises.splice(index, 1);
+  return { ok: true, index };
+}
+
+export const loggedSetCount = (exercise) => exercise?.sets.filter((s) => s.done).length ?? 0;
 
 export function progress(session) {
   let done = 0, total = 0;
