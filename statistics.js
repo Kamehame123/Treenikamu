@@ -136,7 +136,12 @@ export function buildStatistics(history, options = {}) {
         volumeSets: 0, seconds: 0, timedSets: 0, unclassifiedSets: 0, missingReps: 0, missingLoad: 0,
         pain: e.pain === true, rir: integer(e.rir, 0, 5), maxLoad: null, bestReps: null, estimate: null, efforts: [] };
       const bestByEffort = new Map();
-      for (const set of e.sets ?? []) {
+      // One RIR per movement describes its hardest (last) working set; per-set RIR from older records still wins.
+      const exerciseRir = integer(e.rir, 0, 5);
+      const hasSetRir = (e.sets ?? []).some((s) => integer(s.setRir, 0, 5) !== null);
+      let hardestSet = -1;
+      if (exerciseRir !== null && !hasSetRir) (e.sets ?? []).forEach((s, i) => { if (s.done && s.kind === 'working') hardestSet = i; });
+      for (const [setIndex, set] of (e.sets ?? []).entries()) {
         if (!set.done) continue;
         row.sets++;
         if (set.kind === 'working') row.workingSets++;
@@ -152,7 +157,7 @@ export function buildStatistics(history, options = {}) {
           row.volume += load * reps; row.volumeSets++;
           row.maxLoad = Math.max(row.maxLoad ?? 0, load);
         } else if (external) row.missingLoad++;
-        const rir = integer(set.setRir, 0, 5);
+        const rir = integer(set.setRir, 0, 5) ?? (setIndex === hardestSet ? exerciseRir : null);
         if (rir !== null && set.kind === 'working') row.efforts.push(rir);
         const estimate = external && load !== null && reps !== null ? estimateStrength(load, reps) : null;
         if (estimate !== null && set.kind === 'working' && rir !== null && rir <= 3 && !e.pain && !e.deload && !h.fatigued) {

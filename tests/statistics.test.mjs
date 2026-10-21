@@ -79,6 +79,18 @@ test('working/warmup classifications, actual time and set RIR remain distinct fr
   assert.deepEqual(data.efforts, [0, 0, 2, 0, 0, 0]);
 });
 
+test('one exercise RIR describes only the last working set and never overrides logged per-set RIR', () => {
+  const h = workout();
+  h.exercises[0].rir = '1';
+  h.exercises[0].sets.forEach((s) => { delete s.setRir; });
+  assert.deepEqual(dataFor([h]).efforts, [0, 1, 2, 0, 0, 0]);
+  const withSetRir = workout(); withSetRir.exercises[0].rir = '1';
+  assert.deepEqual(dataFor([withSetRir]).efforts, [0, 0, 4, 0, 0, 0]);
+  const warmupOnly = workout(); warmupOnly.exercises[0].rir = '1';
+  warmupOnly.exercises[0].sets.forEach((s) => { delete s.setRir; s.kind = 'warmup'; });
+  assert.deepEqual(dataFor([warmupOnly]).efforts, [0, 0, 2, 0, 0, 0]);
+});
+
 test('pain, fatigue, high-rep and unknown-effort sets remain workload data but cannot support the index', () => {
   for (const modify of [
     (h) => { h.fatigued = true; },

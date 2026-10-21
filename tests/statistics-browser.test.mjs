@@ -125,11 +125,11 @@ try {
           const log = page.locator('.exercise-log').first();
           await log.locator('summary').click();
           await log.locator('[data-log="actualReps"][data-s="0"]').fill('7'); await idle(page);
-          await tap(page.locator('[data-action="setrir"][data-s="0"][data-value="2"]').first()); await idle(page);
+          await tap(page.locator('[data-action="exrir"][data-e="0"][data-value="2"]')); await idle(page);
           await log.locator('[data-log="kind"][data-s="0"][value="warmup"]').check(); await idle(page);
           let current = await saved(page);
           assert.equal(current.session.exercises[0].sets[0].actualReps, '7');
-          assert.equal(current.session.exercises[0].sets[0].setRir, '2');
+          assert.equal(current.session.exercises[0].rir, '2');
           assert.equal(current.session.exercises[0].sets[0].kind, 'warmup');
           assert.equal(current.session.exercises[0].tracking.variant, 'Yksi käsipaino, sali A');
           assert.deepEqual(current.history, state.history);

@@ -33,6 +33,14 @@ async function seed(page, state) {
   await page.locator('h1').waitFor();
 }
 async function log(page, field, value) {
+  if (field === 'rir') {
+    // The always-visible RIR row: tapping the pressed value again clears it.
+    const pressed = page.locator('[data-action="exrir"][aria-pressed="true"]');
+    const target = value === '' ? pressed : page.locator(`[data-action="exrir"][data-value="${value}"]`);
+    if (value === '' || await pressed.getAttribute('data-value').catch(() => null) !== value) await tap(target);
+    await idle(page);
+    return;
+  }
   const input = page.locator(`[data-log="${field}"]`);
   await input.fill(value);
   await idle(page);
@@ -129,7 +137,7 @@ try {
           await page.reload();
           assert.deepEqual((await saved(page)).session, before.session);
           await page.locator('.exercise-log summary').click();
-          assert.equal(await page.locator('[data-log="rir"]').inputValue(), '0');
+          assert.equal(await page.locator('[data-action="exrir"][aria-pressed="true"]').getAttribute('data-value'), '0');
           assert.equal(await page.locator('[data-log="pain"]').isChecked(), true);
           await log(page, 'rir', '');
           assert.equal('rir' in (await saved(page)).session.exercises[0], false);

@@ -46,6 +46,7 @@ try {
         await run('the logging panel is hidden by default, keeps saved values, and returns when enabled in settings', async (p) => {
           const before = await seedWorkout(p, { rir: '2' });
           assert.equal(await p.locator('.exercise-log').count(), 0);
+          assert.equal(await p.locator('[data-rir-box="0"] [aria-pressed="true"]').innerText(), '2', 'RIR is visible without the logging panel');
           assert.deepEqual((await saved(p)).session, before.session);
           await tap(p.getByRole('button', { name: 'Takaisin harjoituksiin' }));
           await p.locator('.settings summary').click();
@@ -57,7 +58,7 @@ try {
           await p.reload();
           await tap(p.locator('[data-action="resume"]'));
           await p.locator('.exercise-log summary').first().click();
-          assert.equal(await p.locator('[data-log="rir"]').first().inputValue(), '2');
+          assert.equal(await p.locator('[data-rir-box="0"] [aria-pressed="true"]').innerText(), '2');
         });
 
         await run('the recovery toggle sits below the exercises', async (p) => {
