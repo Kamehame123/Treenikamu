@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm, openSettings } from './support.mjs';
 
 const { server, url } = await startServer();
 const button = (page, name) => page.getByRole('button', { name, exact: true });
@@ -99,7 +99,7 @@ try {
           assert.equal(await p.locator('.routine-details').first().evaluate((d) => d.open), false);
         });
 
-        await run('workout actions come before the backup reminder without hiding or changing backups', async (p) => {
+        await run('backup controls live only in Asetukset, with a small flag when a backup is due', async (p) => {
           await p.goto(url);
           let state;
           for (const scenario of ['new', 'overdue', 'recent', 'resume']) {
@@ -118,34 +118,22 @@ try {
             if (state.session) await tap(button(p, 'Takaisin harjoituksiin'));
             const due = ['overdue', 'resume'].includes(scenario);
             assert.equal(await p.locator('.backup').count(), 1);
-            assert.equal(await p.locator('.backup.due').count(), due ? 1 : 0);
-            assert.equal(await p.locator('.settings .backup').count(), due ? 0 : 1);
-            if (!due) await p.locator('.settings summary').click();
-            for (const viewport of due ? [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 900 }] : []) {
+            assert.equal(await p.locator('.settings .backup').count(), 1);
+            assert.equal(await p.locator('.settings-flag').count(), due ? 1 : 0);
+            for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 900 }]) {
               await p.setViewportSize(viewport);
-              const layout = await p.evaluate((resume) => {
-                window.scrollTo(0, 0);
-                const action = document.querySelector(resume ? '[data-action="resume"]' : '.routine-details > summary');
-                const backup = document.querySelector('.backup');
-                const rect = action.getBoundingClientRect();
-                return {
-                  actionVisible: rect.top >= 0 && rect.bottom <= innerHeight,
-                  backupAfterList: backup.getBoundingClientRect().top >= document.querySelector('.routine-list').getBoundingClientRect().bottom,
-                  actionBeforeBackup: !!(action.compareDocumentPosition(backup) & Node.DOCUMENT_POSITION_FOLLOWING),
-                  overflow: document.documentElement.scrollWidth > innerWidth,
-                };
-              }, !!state.session);
-              assert.deepEqual(layout, { actionVisible: true, backupAfterList: true, actionBeforeBackup: true, overflow: false }, `${scenario} at ${viewport.width}px`);
+              assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${scenario} at ${viewport.width}px`);
             }
             assert.deepEqual(await saved(p), state);
           }
+          await openSettings(p);
           const download = p.waitForEvent('download');
           await tap(button(p, 'Vie varmuuskopio'));
           const parsed = core.parseBackup(await readFile(await (await download).path(), 'utf8'));
           assert.equal(parsed.ok, true);
           assert.deepEqual(parsed.state.history, state.history);
           assert.deepEqual(parsed.state.session, state.session);
-          assert.equal(await p.locator('.backup.due').count(), 0);
+          assert.equal(await p.locator('.settings-flag').count(), 0);
         });
 
         await run('quick-start button beside a program name starts it without opening the program', async (p) => {
@@ -318,6 +306,7 @@ try {
           assert.equal(after.history[0].exercises[0].sets[0].actualReps, '3');
           assert.equal(after.history[0].exercises[0].sets[1].actualReps, '9');
           assert.deepEqual(after.routines, state.routines);
+          await openSettings(p);
           const download = p.waitForEvent('download');
           await tap(button(p, 'Vie varmuuskopio'));
           const parsed = core.parseBackup(await readFile(await (await download).path(), 'utf8'));

@@ -20,6 +20,12 @@ export async function expandRoutines(page) {
   await page.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
 }
 
+// Backup controls sit inside the collapsed Asetukset card.
+export async function openSettings(page) {
+  await page.evaluate(() => { const d = document.querySelector('details.settings'); if (d) d.open = true; });
+  await page.waitForFunction(() => document.querySelector('details.settings')?.open === true);
+}
+
 export async function tap(locator) {
   await expandRoutines(locator.page());
   await locator.click();

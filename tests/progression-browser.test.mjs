@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap, expandRoutines } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, expandRoutines, openSettings } from './support.mjs';
 
 const { server, url } = await startServer();
 const button = (page, name) => page.getByRole('button', { name, exact: true });
@@ -330,6 +330,7 @@ try {
           await page.locator('[data-progression="autoLoad"]').uncheck();
           await tap(button(page, 'Tallenna harjoitus'));
           assert.deepEqual((await saved(page)).routines[0].exercises[0].progression, { minReps: 4, maxReps: 6, weightStep: 1.25, autoLoad: false });
+          await openSettings(page);
           const download = page.waitForEvent('download');
           await tap(button(page, 'Vie varmuuskopio'));
           const backup = core.parseBackup(await readFile(await (await download).path(), 'utf8'));

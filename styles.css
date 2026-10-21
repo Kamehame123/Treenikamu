@@ -177,6 +177,8 @@ button.quick-start .icon { fill: currentColor; }
 .settings summary > .icon { color: var(--muted); }
 .settings h2 { font-size: 15px; }
 .settings-chevron { margin-left: auto; color: var(--muted); transition: transform .15s; }
+.settings-flag { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; }
+.settings-flag + .settings-chevron { margin-left: 0; }
 .settings[open] .settings-chevron { transform: rotate(180deg); }
 .settings-body { border-top: 1px solid var(--line); padding-block: 14px; }
 .settings-actions { display: grid; gap: 8px; margin-top: 14px; }

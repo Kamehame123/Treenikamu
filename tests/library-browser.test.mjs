@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { chromium, webkit, devices, startServer, tap } from './support.mjs';
+import { chromium, webkit, devices, startServer, tap, openSettings } from './support.mjs';
 
 const { server, url } = await startServer();
 try {
@@ -79,7 +79,7 @@ try {
           assert.equal(await p.locator('.exercise-choice').count(), 1);
           await tap(button(p, 'Takaisin harjoitukseen')); await tap(button(p, 'Tallenna harjoitus'));
           await p.reload(); await p.locator('.settings summary').click();
-          const download = p.waitForEvent('download'); await tap(button(p, 'Vie varmuuskopio'));
+          await openSettings(p); const download = p.waitForEvent('download'); await tap(button(p, 'Vie varmuuskopio'));
           const backup = JSON.parse(await readFile(await (await download).path(), 'utf8'));
           assert.equal(backup.data.customExercises[0].name, 'Oma ääkkösliike');
         });
