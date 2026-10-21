@@ -154,12 +154,16 @@ async function mutate(change, { critical = false, sessionId = null, patch = null
     }
     const next = clone(state);
     if (change(next) === false) return false;
-    const saved = core.saveState(storage, next);
+    const result = core.saveStateResult(storage, next);
+    const saved = result.ok;
     const wasHealthy = storageOk && !saveMessage;
     storageOk = saved;
     if (saved) { durableRaw = JSON.stringify(next); saveConflict = false; }
-    saveMessage = saved ? '' : critical ? 'Muutosta ei voitu tallentaa. Harjoitus on yhä tallessa tässä välilehdessä. Yritä uudelleen ennen sulkemista.' : 'Muutokset ovat vain tässä välilehdessä. Tallennus ei onnistu. Älä sulje välilehteä ennen tallentamista.';
+    saveMessage = saved ? ''
+      : result.quota ? 'Selaimen tallennustila on täynnä, joten muutosta ei voitu tallentaa. Muutokset ovat vain tässä välilehdessä. Vie varmuuskopio nyt ja vapauta tilaa (esimerkiksi poista vanhoja harjoituksia varmuuskopion jälkeen). Älä sulje välilehteä ennen kuin tallennus onnistuu.'
+      : critical ? 'Muutosta ei voitu tallentaa. Harjoitus on yhä tallessa tässä välilehdessä. Yritä uudelleen ennen sulkemista.' : 'Muutokset ovat vain tässä välilehdessä. Tallennus ei onnistu. Älä sulje välilehteä ennen tallentamista.';
     if (saved || !critical) { state = next; dirty = !saved; }
+    if (saved && state.history.length) requestPersistence();
     if (patch && saved && wasHealthy && view === renderedView) patch(); else render();
     return saved || !critical;
   };
@@ -177,6 +181,27 @@ const warn = () => {
     : `<button class="btn small" data-action="retry" data-key="retry">Yritä tallentaa uudelleen</button><button class="btn small" data-action="export" data-key="export-pending">Vie tallentamattomat muutokset</button>${saveConflict ? '<button class="btn small" data-action="reloadsaved" data-key="reloadsaved">Lataa tallennettu versio</button>' : ''}`;
   return `<div class="banner" role="alert">${icon('shield')}<div><strong>${title}</strong><p>${esc(text)}</p><div class="recovery-actions">${actions}</div></div></div>`;
 };
+// Ask the browser not to evict the saved data under storage pressure. Works offline; the answer
+// is only shown, never required. Asked once per page load, and only once there is history to protect.
+let persisted = null;
+let persistAsked = false;
+const persistText = () => persisted === true ? 'Selain suojaa tietosi automaattiselta poistolta.'
+  : persisted === false ? 'Selain voi poistaa tiedot, jos laitteen tila loppuu. Tee varmuuskopio säännöllisesti.' : '';
+async function requestPersistence() {
+  if (persistAsked || !navigator.storage?.persist) return;
+  persistAsked = true;
+  try {
+    persisted = (await navigator.storage.persisted?.()) || (await navigator.storage.persist());
+  } catch { persisted = null; }
+  const el = document.getElementById('persist-status');
+  if (el) el.textContent = persistText();
+}
+const storageNearlyFull = () => (durableRaw?.length ?? 0) > core.STORAGE_WARN_CHARS;
+function storageNote() {
+  const parts = [persistText()];
+  if (storageNearlyFull()) parts.push('Selaimen tallennustila alkaa täyttyä. Vie varmuuskopio ja harkitse vanhimpien harjoitusten poistamista sen jälkeen.');
+  return parts.filter(Boolean).join(' ');
+}
 function lastBackupAt() {
   try { const t = Number(localStorage.getItem(BACKUP_KEY)); return Number.isFinite(t) && t > 0 ? t : 0; } catch { return 0; }
 }
@@ -186,9 +211,9 @@ function backupCard() {
   const due = state.history.length > 0 && (days === null || days >= BACKUP_REMIND_DAYS);
   const status = days === null ? 'Et ole vielä tehnyt varmuuskopiota.'
     : `Viimeisin varmuuskopio: ${new Date(last).toLocaleDateString('fi-FI')} (${days === 0 ? 'tänään' : days === 1 ? 'eilen' : `${days} päivää sitten`}).`;
-  if (!due) return `<section class="backup compact" aria-label="Varmuuskopio"><p class="backup-status" id="backup-status">${status}</p><button class="btn secondary" data-action="export" data-key="export">Vie varmuuskopio</button></section>`;
+  if (!due) return `<section class="backup compact" aria-label="Varmuuskopio"><div class="backup-text"><p class="backup-status" id="backup-status">${status}</p><p class="backup-status" id="persist-status">${esc(storageNote())}</p></div><button class="btn secondary" data-action="export" data-key="export">Vie varmuuskopio</button></section>`;
   const advice = 'Tee varmuuskopio nyt. Tietosi ovat vain tällä laitteella ja katoavat, jos selaintiedot tyhjennetään tai sovellus poistetaan.';
-  return `<section class="backup card due" aria-labelledby="backup-title"><div class="row">${icon('shield')}<div class="grow"><span class="eyebrow accent">MUISTUTUS</span><h2 id="backup-title">Varmuuskopio</h2></div></div><p class="backup-status" id="backup-status">${status}</p><p class="muted small-copy">${advice}</p><button class="btn primary big" data-action="export" data-key="export">Vie varmuuskopio</button></section>`;
+  return `<section class="backup card due" aria-labelledby="backup-title"><div class="row">${icon('shield')}<div class="grow"><span class="eyebrow accent">MUISTUTUS</span><h2 id="backup-title">Varmuuskopio</h2></div></div><p class="backup-status" id="backup-status">${status}</p><p class="muted small-copy">${advice}</p><p class="muted small-copy" id="persist-status">${esc(storageNote())}</p><button class="btn primary big" data-action="export" data-key="export">Vie varmuuskopio</button></section>`;
 }
 const sectionHead = (title, label = '') => `<div class="section-head"><h2>${title}</h2>${label ? `<span class="eyebrow">${label}</span>` : ''}</div>`;
 const progressBar = (p) => `<progress class="progress" max="${Math.max(1, p.total)}" value="${p.done}" aria-label="Harjoituksen edistyminen">${p.pct}%</progress>`;
@@ -1297,4 +1322,5 @@ if ('serviceWorker' in navigator) {
   void registerUpdates();
 }
 render();
+if (state.history.length && !locked()) void requestPersistence();
 if (view === 'workout') showCurrentExercise({ instant: true });

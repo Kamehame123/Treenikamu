@@ -375,15 +375,24 @@ export function storageProblem(text) {
 }
 
 // Returns false when persistence fails (quota / private mode) so the UI can warn.
-export function saveState(storage, state) {
+export function saveState(storage, state) { return saveStateResult(storage, state).ok; }
+
+export const isQuotaError = (e) => !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+
+// Like saveState, but tells a full browser storage apart from other failures so the UI can say what to do.
+export function saveStateResult(storage, state) {
   try {
-    if (storageProblem(storage.getItem?.(STORAGE_KEY))) return false;
+    if (storageProblem(storage.getItem?.(STORAGE_KEY))) return { ok: false, quota: false };
     storage.setItem(STORAGE_KEY, JSON.stringify(state));
-    return true;
-  } catch {
-    return false;
+    return { ok: true, quota: false };
+  } catch (e) {
+    return { ok: false, quota: isQuotaError(e) };
   }
 }
+
+// Browsers keep roughly 5 million characters of localStorage per origin; the origin is shared with
+// every other page on the same host, so warn well before the limit.
+export const STORAGE_WARN_CHARS = 2_500_000;
 
 export function startSession(routine, now = Date.now()) {
   const r = sanitizeRoutine(routine);

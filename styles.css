@@ -130,7 +130,10 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .backup p { margin: 10px 0 0; font-size: 13px; }
 .backup .btn { margin-top: 14px; width: 100%; }
 .backup.compact { display: flex; align-items: center; gap: 10px; margin-block: 12px; }
-.backup.compact p { flex: 1 1 auto; margin: 0; font-size: 12px; color: var(--muted); }
+.backup.compact p { margin: 0; font-size: 12px; color: var(--muted); }
+.backup.compact .backup-text { flex: 1 1 auto; min-width: 0; }
+.backup.compact p + p { margin-top: 4px; }
+#persist-status:empty { display: none; }
 .backup.compact .btn { flex: 0 0 auto; width: auto; margin-top: 0; }
 .backup.due { border: 2px solid var(--accent); background: var(--accent-soft); }
 .resume { margin-bottom: 16px; border: 2px solid var(--accent); background: var(--accent-soft); padding: 16px; }

@@ -354,6 +354,13 @@ test('saveState reports failure when storage throws', () => {
   assert.equal(c.saveState({ setItem() { throw new Error('quota'); } }, c.defaultState()), false);
 });
 
+test('saveStateResult tells a full storage apart from other failures', () => {
+  const full = new DOMException('full', 'QuotaExceededError');
+  assert.deepEqual(c.saveStateResult({ setItem() { throw full; } }, c.defaultState()), { ok: false, quota: true });
+  assert.deepEqual(c.saveStateResult({ setItem() { throw new Error('denied'); } }, c.defaultState()), { ok: false, quota: false });
+  assert.deepEqual(c.saveStateResult({ setItem() {} }, c.defaultState()), { ok: true, quota: false });
+});
+
 test('formatDuration', () => {
   assert.equal(c.formatDuration(65000), '1:05');
   assert.equal(c.formatDuration(3723000), '1:02:03');
