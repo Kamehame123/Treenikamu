@@ -10,9 +10,21 @@ test('detailed logging defaults to off for new and existing data, and only an ex
   assert.equal(core.defaultState().settings.advancedLogging, false);
   const legacy = { v: core.SCHEMA, routines: core.defaultState().routines, settings: { restSeconds: 60, autoRest: false } };
   const loaded = core.sanitizeState(legacy);
-  assert.deepEqual(loaded.settings, { restSeconds: 60, autoRest: false, advancedLogging: false });
+  assert.deepEqual(loaded.settings, { restSeconds: 60, autoRest: false, restMode: 'auto', advancedLogging: false });
   for (const value of ['true', 1, null]) assert.equal(core.sanitizeState({ ...legacy, settings: { advancedLogging: value } }).settings.advancedLogging, false);
   assert.equal(core.sanitizeState({ ...legacy, settings: { advancedLogging: true } }).settings.advancedLogging, true);
+});
+
+test('own rest time is opt-in: existing data keeps the automatic recommendation and only a valid fixed mode is honoured', () => {
+  const legacy = { v: core.SCHEMA, routines: core.defaultState().routines, settings: { restSeconds: 45, autoRest: true } };
+  const exercise = core.defaultState().routines[0].exercises[0];
+  const auto = core.sanitizeState(legacy).settings;
+  assert.equal(auto.restMode, 'auto');
+  assert.equal(core.restFor(auto, exercise), core.recommendedRestSeconds(exercise));
+  const fixed = core.sanitizeState({ ...legacy, settings: { restSeconds: 45, autoRest: true, restMode: 'fixed' } }).settings;
+  assert.equal(core.restFor(fixed, exercise, 0), 45);
+  assert.equal(core.sanitizeState({ ...legacy, settings: { restMode: 'other' } }).settings.restMode, 'auto');
+  assert.equal(core.restFor({ restMode: 'fixed', restSeconds: 9999 }, exercise), 600);
 });
 
 async function seedWorkout(page, { finished = 0, rir = null } = {}) {
@@ -59,6 +71,26 @@ try {
           await tap(p.locator('[data-action="resume"]'));
           await p.locator('.exercise-log summary').first().click();
           assert.equal(await p.locator('[data-rir-box="0"] [aria-pressed="true"]').innerText(), '2');
+        });
+
+        await run('a user-defined rest time persists and drives the rest timer after a set', async (p) => {
+          await seedWorkout(p);
+          await tap(p.getByRole('button', { name: 'Takaisin harjoituksiin' }));
+          await p.locator('.settings summary').click();
+          await p.getByRole('switch', { name: 'Käynnistä lepoajastin sarjan jälkeen' }).click();
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          await p.getByRole('switch', { name: 'Käytä omaa lepoaikaa sarjojen välillä' }).click();
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          await p.locator('[data-action="restsecs"]').fill('45');
+          await p.locator('[data-action="restsecs"]').press('Enter');
+          await p.waitForFunction(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).settings.restSeconds === 45);
+          assert.equal((await saved(p)).settings.restMode, 'fixed');
+          await tap(p.locator('[data-action="resume"]'));
+          const before = Date.now();
+          await tap(p.locator('[data-action="set"]').first());
+          await p.waitForFunction(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).restEnd);
+          const remaining = (await saved(p)).restEnd - before;
+          assert.ok(remaining > 40000 && remaining <= 46000, `rest ${remaining} ms`);
         });
 
         await run('the recovery toggle sits below the exercises', async (p) => {

@@ -70,9 +70,16 @@ export function defaultState() {
     session: null,
     history: [],
     customExercises: [],
-    settings: { restSeconds: 90, autoRest: true, advancedLogging: false },
+    settings: { restSeconds: 90, autoRest: true, restMode: 'auto', advancedLogging: false },
     restEnd: null,
   };
+}
+
+// Rest between sets: the user's own fixed time when chosen, otherwise the evidence-based recommendation.
+export function restFor(settings, exercise, setIndex = null) {
+  return settings?.restMode === 'fixed'
+    ? clampInt(settings.restSeconds, 10, 600, 90)
+    : recommendedRestSeconds(exercise, setIndex);
 }
 
 // Defensive normalisation: corrupt or older data must never crash the app.
@@ -222,6 +229,7 @@ function normalizeState(raw) {
     settings: {
       restSeconds: clampInt(raw.settings?.restSeconds, 10, 600, 90),
       autoRest: raw.settings?.autoRest !== false,
+      restMode: raw.settings?.restMode === 'fixed' ? 'fixed' : 'auto',
       advancedLogging: raw.settings?.advancedLogging === true,
     },
     restEnd: session ? timestamp(raw.restEnd, null) : null,
