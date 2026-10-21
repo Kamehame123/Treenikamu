@@ -10,7 +10,7 @@ remain available with the same weekly schedule.
 
 ## Training statistics
 
-Open **Tilastot ja kehitys** from home. All calculations and charts run locally,
+Open **Tilastot** from home. All calculations and charts run locally,
 including offline; no account, analytics service, CDN or external chart library
 is needed. Statistics are derived from saved history, not separately accumulated
 counters. A running or discarded workout is not counted.

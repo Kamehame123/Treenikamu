@@ -300,3 +300,22 @@ test('all analytics modules ship through both the static server and the atomic o
     assert.ok(worker.includes(`'./${name}'`), `${name} missing from offline cache`);
   }
 });
+
+test('records keep the heaviest logged kg per move name across programs, with the first date reached', () => {
+  const set = (actualWeight, done = true) => ({ done, actualWeight });
+  const entry = (id, endedAt, name, sets, weight = '') => ({ id, name: 'Ohjelma ' + id, startedAt: endedAt - 1000, endedAt, exercises: [{ name, weight, sets }] });
+  const history = [
+    entry('a', NOW - 5 * DAY, 'Penkkipunnerrus', [set('60'), set('62,5')]),
+    entry('b', NOW - 3 * DAY, 'penkkipunnerrus', [set('62.5 kg'), set('80', false)]),
+    entry('c', NOW - 2 * DAY, 'Kyykky', [{ done: true }], '100'),
+    entry('d', NOW - 1 * DAY, 'Vipunosto', [set('0'), set('2 x 10 kg')]),
+    entry('d', NOW - 1 * DAY, 'Kyykky', [set('500')]),
+    entry('e', NOW + DAY, 'Maastaveto', [set('200')]),
+    { id: 'legacy', name: 'Vanha', startedAt: 1, endedAt: NOW - DAY, setsDone: 3, setsTotal: 3 },
+  ];
+  const records = stats.buildRecords(history, NOW);
+  assert.deepEqual(records.map((r) => [r.name, r.weight, r.at]), [
+    ['Kyykky', 100, NOW - 2 * DAY],
+    ['Penkkipunnerrus', 62.5, NOW - 5 * DAY],
+  ]);
+});

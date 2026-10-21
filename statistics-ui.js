@@ -1,4 +1,4 @@
-import { buildStatistics, calculateIndex, indexCandidate, indexTimeline, localDateKey, LOAD_TYPES } from './statistics.js';
+import { buildStatistics, buildRecords, calculateIndex, indexCandidate, indexTimeline, localDateKey, LOAD_TYPES } from './statistics.js';
 
 export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const esc = escapeHtml;
@@ -74,6 +74,12 @@ export function trackingEditor(exercise, i) {
     <fieldset><legend>Kuorman merkitys</legend>${Object.entries(LOAD_TYPES).map(([value, label]) => `<label class="choice-option"><input type="radio" name="tracking-load-${i}" data-tracking="loadType" data-i="${i}" value="${value}" ${(t?.loadType ?? 'unknown') === value ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('')}</fieldset>
     <label class="field">Laite / suoritustapa / kuormakäytäntö<input type="text" maxlength="60" value="${esc(t?.variant ?? '')}" data-tracking="variant" data-i="${i}" data-key="tracking-variant-${esc(exercise.id)}" placeholder="Esim. salin jalkaprässi 1, syvyys vakio"></label>
     <p class="muted small-copy">Pidä kuormakäytäntö samana. Vaihda tunniste, jos laite, liikerata tai suoritustapa muuttuu. Käsipainon kg-lukua ei tuplata.</p></details>`;
+}
+
+export function recordsView(state) {
+  const records = buildRecords(state.history);
+  const rows = records.map((r) => `<li class="record-row"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></li>`).join('');
+  return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin ensimmäisen kerran.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
 }
 
 export function statisticsView(state, filters) {

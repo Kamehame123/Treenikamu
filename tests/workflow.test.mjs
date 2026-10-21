@@ -160,6 +160,40 @@ try {
           assert.equal(await p.locator('.session-header').count() > 0, true);
         });
 
+        await run('records page lists the heaviest weight per move and the home tile cycles its period quietly', async (p) => {
+          await p.goto(url);
+          const day = 86400000, now = Date.now();
+          const state = core.defaultState();
+          const sets = (w) => [{ done: true, actualWeight: w }];
+          state.history = [
+            { id: 'r1', name: 'A', startedAt: now - 400 * day, endedAt: now - 400 * day + 1000, setsDone: 1, setsTotal: 1, exercises: [{ name: 'Penkkipunnerrus', sets: sets('70') }] },
+            { id: 'r2', name: 'B', startedAt: now - 2000, endedAt: now - 1000, setsDone: 1, setsTotal: 1, exercises: [{ name: 'Penkkipunnerrus', sets: sets('65') }, { name: 'Kyykky', sets: sets('100') }] },
+          ];
+          await p.evaluate((s) => { localStorage.setItem('gym-tracker-v1', JSON.stringify(s)); localStorage.removeItem('gym-tracker-home-period'); }, state);
+          await p.reload();
+          const tile = p.locator('.stat-tile');
+          const tileText = async () => (await tile.innerText()).replace(/\s+/g, ' ').trim();
+          assert.match(await tileText(), /tällä viikolla/);
+          await tap(tile); assert.match(await tileText(), /tässä kuussa/);
+          await tap(tile); assert.match(await tileText(), /^1 tänä vuonna/);
+          await tap(tile); assert.match(await tileText(), /tällä viikolla/);
+          await tap(tile);
+          await p.reload();
+          assert.match(await tileText(), /tässä kuussa/);
+          assert.equal(await p.getByText(/vaihtuu|napauta|kuukausi.*vuosi/i).count(), 0);
+          for (const width of [320, 390]) {
+            await p.setViewportSize({ width, height: 800 });
+            assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow at ${width}`);
+          }
+          await tap(button(p, 'Ennätykset'));
+          const rows = (await p.locator('.record-row').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+          assert.equal(rows.length, 2);
+          assert.match(rows[0], /^Kyykky 100 kg /);
+          assert.match(rows[1], /^Penkkipunnerrus 70 kg /);
+          await tap(button(p, 'Harjoituksiin'));
+          assert.deepEqual(await saved(p), state);
+        });
+
         await run('resume and reload center the current exercise without losing the session', async (p) => {
           const state = await seedWorkout(p, { current: 3 });
           await centered(p, '#exercise-3');

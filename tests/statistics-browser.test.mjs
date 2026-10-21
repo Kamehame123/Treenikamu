@@ -15,7 +15,7 @@ async function seed(page, state) {
   await page.locator('h1').waitFor();
 }
 async function openStatistics(page) {
-  await tap(button(page, 'Tilastot ja kehitys'));
+  await tap(button(page, 'Tilastot'));
   await page.getByRole('heading', { name: 'Tilastot', exact: true }).waitFor();
 }
 

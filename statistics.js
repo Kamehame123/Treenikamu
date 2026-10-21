@@ -113,6 +113,31 @@ export function statisticsPeriod(range, now, first, fromInput = '', toInput = ''
   return { ok: true, from, to, previous: { from: shiftDays(from, -days), to: shiftDays(to, -days) } };
 }
 
+// Heaviest kg ever logged per move name (all programs combined) and the first day it was reached.
+// The weight is the set's logged weight, otherwise the move's planned weight.
+export function buildRecords(history, now = Date.now()) {
+  const records = new Map(), seen = new Set();
+  for (const h of history ?? []) {
+    if (!h || seen.has(h.id)) continue;
+    seen.add(h.id);
+    if (!Number.isFinite(h.endedAt) || h.endedAt <= 0 || h.endedAt > now) continue;
+    for (const e of h.exercises ?? []) {
+      const key = normalizeSearch(e.name ?? '');
+      if (!key) continue;
+      for (const set of e.sets ?? []) {
+        if (!set.done) continue;
+        const weight = parseWeight(set.actualWeight || e.weight);
+        if (weight === null || weight <= 0) continue;
+        const current = records.get(key);
+        if (!current || weight > current.weight || (weight === current.weight && h.endedAt < current.at)) {
+          records.set(key, { key, name: e.name, weight, at: h.endedAt });
+        }
+      }
+    }
+  }
+  return [...records.values()].sort((a, b) => a.name.localeCompare(b.name, 'fi-FI'));
+}
+
 function emptyTotals() {
   return { workouts: 0, partial: 0, sets: 0, workingSets: 0, reps: 0, repSets: 0, volume: 0,
     volumeSets: 0, seconds: 0, timedSets: 0, duration: 0, durationSessions: 0, fatigue: 0, pain: 0,
