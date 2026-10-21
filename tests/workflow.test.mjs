@@ -116,9 +116,12 @@ try {
             }, { state, recent: scenario === 'recent' });
             await p.reload();
             if (state.session) await tap(button(p, 'Takaisin harjoituksiin'));
+            const due = ['overdue', 'resume'].includes(scenario);
             assert.equal(await p.locator('.backup').count(), 1);
-            assert.equal(await p.locator('.backup.due').count(), ['overdue', 'resume'].includes(scenario) ? 1 : 0);
-            for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+            assert.equal(await p.locator('.backup.due').count(), due ? 1 : 0);
+            assert.equal(await p.locator('.settings .backup').count(), due ? 0 : 1);
+            if (!due) await p.locator('.settings summary').click();
+            for (const viewport of due ? [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 900 }] : []) {
               await p.setViewportSize(viewport);
               const layout = await p.evaluate((resume) => {
                 window.scrollTo(0, 0);
@@ -551,6 +554,7 @@ try {
           await tap(button(p, 'Muokkaa: Sarjakohtainen treeni'));
           assert.deepEqual(await targets().evaluateAll((es) => es.map((e) => e.value)), ['5', '8', '12']);
           await tap(button(p, 'Peruuta'));
+          if (await p.locator('.settings:not([open]) summary').count()) await p.locator('.settings summary').click();
           const download = p.waitForEvent('download');
           await tap(button(p, 'Vie varmuuskopio'));
           const parsed = core.parseBackup(await readFile(await (await download).path(), 'utf8'));
