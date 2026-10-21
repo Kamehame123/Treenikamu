@@ -1,4 +1,7 @@
 [
+  { "version": 40, "date": "2026-10-21", "changes": [
+    "Ruotsinkielinen kannustus näkyy nyt liikkeen kortissa sarjojen alla, eikä näkymä enää hyppää sen ilmestyessä."
+  ] },
   { "version": 39, "date": "2026-10-21", "changes": [
     "Treenin aikana voi nyt vaihtaa, poistaa tai lisätä liikkeitä. Muutos koskee vain käynnissä olevaa treeniä, ohjelma ei muutu.",
     "Liikkeen vaihdossa kirjasto avautuu valmiiksi saman lihasryhmän liikkeisiin."

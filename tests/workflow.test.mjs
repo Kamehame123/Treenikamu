@@ -816,6 +816,29 @@ try {
           }
         }, { bypassCSP: true });
 
+        await run('a cheer appears inside the exercise without moving the tapped set', async (p) => {
+          await seedWorkout(p, { current: 2 });
+          await p.evaluate(() => { Math.random = () => 0; });
+          const top = (key) => p.locator(`[data-key="${key}"]`).evaluate((e) => e.getBoundingClientRect().top);
+          assert.ok(await p.evaluate(() => window.scrollY) > 0, 'the page is scrolled to the current exercise');
+          const before = await top('s2-0');
+          await tap(p.locator('[data-key="s2-0"]'));
+          assert.equal(await p.locator('#exercise-2 .cheer').count(), 1);
+          assert.equal(await p.locator('.session-intro .cheer').count(), 0);
+          assert.ok(Math.abs(await top('s2-0') - before) < 1, 'the tapped set stays put');
+          const geo = await p.locator('#exercise-2 .cheer').evaluate((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, h: innerHeight, prev: e.previousElementSibling?.dataset.key ?? e.previousElementSibling?.querySelector('[data-key]')?.dataset.key }; });
+          assert.ok(geo.top >= 0 && geo.bottom <= geo.h, `the cheer is on screen ${JSON.stringify(geo)}`);
+          assert.equal(geo.prev, 's2-0', 'the cheer sits directly below the tapped set');
+          const second = await top('s2-1');
+          await tap(p.locator('[data-key="s2-1"]'));
+          assert.equal(await p.locator('.cheer').count(), 1);
+          assert.ok(Math.abs(await top('s2-1') - second) < 1);
+          await tap(p.locator('[data-key="s2-2"]'));
+          assert.equal(await p.locator('#exercise-3 .cheer').count(), 1, 'after finishing an exercise the cheer goes to the next one');
+          assert.ok(await p.locator('#exercise-3 .sets > .cheer:first-child').count(), 'above the next exercise sets');
+          assert.equal(await p.locator('.cheer').count(), 1);
+        });
+
         const openActions = (p, index) => p.locator('.exercise-actions > summary').nth(index).click();
 
         await run('swapping a workout exercise opens the library on the same muscle group and leaves the program alone', async (p) => {

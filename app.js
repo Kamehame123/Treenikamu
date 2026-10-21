@@ -546,13 +546,15 @@ function workoutView() {
     const done = core.exerciseDone(e);
     const completed = e.sets.filter((set) => set.done).length;
     const nextSi = ei === cur ? e.sets.findIndex((set) => !set.done) : -1;
-    const sets = e.sets.map((set, si) => setEntry(e, ei, si, nextSi)).join('');
+    const cheerAt = cheer && cheer.sessionId === s.id && cheer.exerciseId === e.id && p.done < p.total ? cheer.after : null;
+    const cheerHtml = cheerAt === null ? '' : `<p class="cheer">${esc(cheer.text)}</p>`;
+    const sets = (cheerAt === -1 ? cheerHtml : '') + e.sets.map((set, si) => setEntry(e, ei, si, nextSi) + (cheerAt === si ? cheerHtml : '')).join('');
     const individual = e.sets.some((set) => set.reps);
     const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
     const restLabel = core.formatDuration(core.restFor(state.settings, e, nextSi >= 0 ? nextSi : 0) * 1000);
     return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div>${exerciseRir(e, ei)}<div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseActions(e, s.exercises.length)}${state.settings.advancedLogging ? exerciseLog(e, ei) : ''}</li>`;
   }).join('');
-  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}${cheer && cheer.sessionId === s.id && p.done < p.total ? `<p class="cheer">${esc(cheer.text)}</p>` : ''}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<ul class="list exercise-list">${exercises}</ul><button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button>${recoveryControls(s)}<div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>${trackRail(s, cur)}`;
+  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<ul class="list exercise-list">${exercises}</ul><button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button>${recoveryControls(s)}<div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>${trackRail(s, cur)}`;
 }
 
 function progressionEditor(e, i) {
@@ -670,6 +672,10 @@ function render() {
   const key = previous?.dataset?.key;
   const selection = previous?.tagName === 'INPUT' && previous.type === 'text' ? [previous.selectionStart, previous.selectionEnd] : null;
   const scroll = window.scrollY;
+  // Keep the tapped workout control where it was, so content added or removed above it cannot move the screen.
+  // Safari does not focus tapped buttons, so the action's own control is the fallback anchor.
+  const anchorKey = view === 'workout' ? key || actionAnchor : null;
+  const anchorTop = anchorKey ? document.querySelector(`[data-key="${CSS.escape(anchorKey)}"]`)?.getBoundingClientRect().top : undefined;
   if (view === 'workout' && !state.session) view = 'home';
   if (view === 'library' && !(picker.mode === 'session' ? state.session : draft)) view = 'home';
   const changed = renderedView !== view;
@@ -681,6 +687,9 @@ function render() {
     if (selection) target.setSelectionRange(...selection);
   } else if (changed && renderedView) document.querySelector('h1')?.focus({ preventScroll: true });
   window.scrollTo(0, changed ? 0 : scroll);
+  const anchor = !changed && anchorTop !== undefined && document.querySelector(`[data-key="${CSS.escape(anchorKey)}"]`);
+  const shift = anchor ? anchor.getBoundingClientRect().top - anchorTop : 0;
+  if (shift) window.scrollTo(0, window.scrollY + shift);
   renderedView = view;
   const rail = document.querySelector('.track-rail'), box = rail?.querySelector('.current');
   if (box) rail.scrollTop = box.offsetTop - (rail.clientHeight - box.offsetHeight) / 2;
@@ -726,6 +735,7 @@ let lastRestBeep = 0;
 // Transient, never persisted.
 let cheer = null;
 let lastCheer = '';
+let actionAnchor = null;
 function tick() {
   const elapsed = document.getElementById('elapsed');
   if (elapsed && state.session) elapsed.textContent = core.formatDuration(Date.now() - state.session.startedAt);
@@ -1003,11 +1013,12 @@ const actions = {
       if (done) {
         navigator.vibrate?.(15);
         const p = core.progress(next.session);
-        const text = pickCheer(p.done, p.total, lastCheer);
-        if (text) { cheer = { sessionId: next.session.id, text }; lastCheer = text; }
         next.restEnd = next.settings.autoRest && p.done < p.total ? Date.now() + restSeconds * 1000 : null;
         const following = core.currentExercise(next.session);
         if (ei === current && following > current) advance = { sessionId: next.session.id, index: following };
+        // Show the cheer where the user looks next: right below the tapped set, or above the sets of the exercise the view advances to.
+        const text = pickCheer(p.done, p.total, lastCheer);
+        if (text) { cheer = { sessionId: next.session.id, exerciseId: next.session.exercises[advance ? advance.index : ei].id, after: advance ? -1 : si, text }; lastCheer = text; }
       }
       announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${restSeconds} sekuntia.` : ''}${cheer ? ` ${cheer.text}` : ''}`);
     }, sessionOptions());
@@ -1271,7 +1282,12 @@ function enqueueAction(work) {
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-action]');
   if (!t || t.disabled || !Object.hasOwn(actions, t.dataset.action) || t.tagName === 'INPUT') return;
-  e.preventDefault(); enqueueAction(() => actions[t.dataset.action](t));
+  e.preventDefault();
+  const key = t.dataset.key ?? null;
+  enqueueAction(async () => {
+    actionAnchor = key;
+    try { return await actions[t.dataset.action](t); } finally { actionAnchor = null; }
+  });
 });
 document.addEventListener('submit', (e) => {
   if (e.target.id !== 'custom-exercise-form') return;
