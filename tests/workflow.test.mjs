@@ -145,6 +145,21 @@ try {
           assert.equal(await p.locator('.backup.due').count(), 0);
         });
 
+        await run('quick-start button beside a program name starts it without opening the program', async (p) => {
+          await p.goto(url);
+          await p.evaluate(() => localStorage.clear());
+          await p.reload();
+          const quick = p.locator('.quick-start').first();
+          const box = await quick.boundingBox();
+          assert.ok(box.width >= 44 && box.height >= 44, 'touch target');
+          assert.equal(await p.locator('.routine-details[open]').count(), 0);
+          await tap(quick);
+          const state = await saved(p);
+          assert.ok(state.session, 'session started');
+          assert.equal(state.session.routineId, state.routines[0].id);
+          assert.equal(await p.locator('.session-header').count() > 0, true);
+        });
+
         await run('resume and reload center the current exercise without losing the session', async (p) => {
           const state = await seedWorkout(p, { current: 3 });
           await centered(p, '#exercise-3');
