@@ -100,7 +100,7 @@ try {
           assert.equal(await p.locator('.routine-details').first().evaluate((d) => d.open), false);
         });
 
-        await run('programs lead the home screen in both themes without changing existing data', async (p) => {
+        await run('the home screen is title, activity rows, then compact programs without extra headings', async (p) => {
           const state = configuredState();
           state.routines.push(core.sanitizeRoutine({
             id: 'imported-plan', name: 'Oma pitkä harjoitusohjelma – ylävartalo & keskivartalo <3',
@@ -111,8 +111,19 @@ try {
           await p.goto(url);
           await p.evaluate((raw) => localStorage.setItem('gym-tracker-v1', raw), raw);
           await p.reload();
+          for (const text of ['OMAT OHJELMASI', 'Valitse ohjelma', 'Aktiivisuus', 'OMA KEHITYKSESI', 'OHJELMA 0', 'Näytä liikkeet']) {
+            assert.equal(await p.getByText(text).count(), 0, `${text} is gone`);
+          }
+          assert.equal(await p.locator('.home-programs > h2, .home-programs > .programs-heading').count(), 0);
+          const order = await p.evaluate(() => {
+            const top = (s) => document.querySelector(s).getBoundingClientRect();
+            return { title: top('h1').bottom <= top('.stats').top, stats: top('.stats').bottom <= top('.stats-links').top, links: top('.stats-links').bottom <= top('.routine').top };
+          });
+          assert.deepEqual(order, { title: true, stats: true, links: true }, 'title, stat tiles, link buttons, then programs');
+          const compact = await p.locator('.routine').first().evaluate((e) => e.getBoundingClientRect().height);
+          assert.ok(compact <= 90, `collapsed program is compact (${compact}px)`);
           assert.equal(await p.locator('.routine').count(), 2);
-          assert.equal(await p.locator('.routine h3').last().textContent(), state.routines[1].name);
+          assert.equal(await p.locator('.routine h2').last().textContent(), state.routines[1].name);
           assert.match(await p.locator('.routine-meta').last().innerText(), /1 liikettä\s+4 sarjaa/);
           for (const colorScheme of ['dark', 'light']) {
             await p.emulateMedia({ colorScheme });
@@ -128,21 +139,23 @@ try {
                   wider: rect(programs).width > rect(aside).width,
                   visible: rect(document.querySelector('.routine')).bottom < innerHeight,
                   noOverflow: document.documentElement.scrollWidth <= innerWidth,
-                  noOverlap: [...document.querySelectorAll('.routine')].every((r) =>
-                    rect(r.querySelector('h3')).right <= rect(r.querySelector('.quick-start')).left),
+                  noOverlap: [...document.querySelectorAll('.routine')].every((r) => {
+                    const start = rect(r.querySelector('.quick-start')).left;
+                    return rect(r.querySelector('h2')).right <= start && rect(r.querySelector('.routine-meta')).right <= start;
+                  }),
                 };
               });
               assert.equal(layout.first, true, 'reading order puts programs first');
               assert.equal(width <= 700 ? layout.stacked : layout.wider, true, `${colorScheme}/${width}: program priority`);
               assert.equal(layout.visible, true, 'first program is fully visible without scrolling');
               assert.equal(layout.noOverflow, true, `${colorScheme}/${width}: no overflow`);
-              assert.equal(layout.noOverlap, true, 'long names do not overlap the start button');
+              assert.equal(layout.noOverlap, true, `${colorScheme}/${width}: long names and counts do not overlap the start button`);
             }
           }
           const summary = p.locator('.routine-details > summary').last();
           await summary.focus(); await p.keyboard.press('Space');
           assert.equal(await p.locator('.routine-details').last().evaluate((d) => d.open), true);
-          assert.equal(await p.locator('.routine-hide').last().isVisible(), true);
+          assert.equal(await p.locator('.routine-details').last().locator('.routine-pills li').first().isVisible(), true);
           await p.keyboard.press('Enter');
           assert.equal(await p.locator('.routine-details').last().evaluate((d) => d.open), false);
           await p.reload();
