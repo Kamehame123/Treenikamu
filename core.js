@@ -15,6 +15,7 @@
 import { CATEGORIES, EQUIPMENT, EXERCISES, normalizeSearch } from './exercises.js';
 import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight } from './progression.js';
 import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking } from './statistics.js';
+import { sanitizeHr } from './heartrate.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
@@ -224,6 +225,7 @@ function normalizeState(raw) {
         ...(typeof h.routineId === 'string' ? { routineId: cleanText(h.routineId, 80) } : {}),
         ...(h.fatigued === true ? { fatigued: true } : {}),
         ...(timestamp(h.editedAt, 0) ? { editedAt: timestamp(h.editedAt, 0) } : {}),
+        ...(sanitizeHr(h.hr) ? { hr: sanitizeHr(h.hr) } : {}),
         ...(Array.isArray(h.exercises) && h.exercises.length ? { exercises: sanitizeSession({ ...h, exercises: h.exercises }).exercises } : {}),
       })),
     settings: {
@@ -596,14 +598,16 @@ export const exerciseDone = (e) => e.sets.length > 0 && e.sets.every((s) => s.do
 // Index of the first exercise that still has unchecked sets, or -1.
 export const currentExercise = (session) => session.exercises.findIndex((e) => !exerciseDone(e));
 
-export function summarize(session, now = Date.now()) {
+export function summarize(session, now = Date.now(), hr = null) {
   const { done, total } = progress(session);
   const snapshot = sanitizeSession(session);
+  const heart = sanitizeHr(hr);
   return {
     id: session.id, name: session.name, startedAt: session.startedAt, endedAt: now,
     setsDone: done, setsTotal: total, routineId: session.routineId,
     exercises: snapshot.exercises,
     ...(snapshot.fatigued ? { fatigued: true } : {}),
+    ...(heart ? { hr: heart } : {}),
   };
 }
 

@@ -215,6 +215,14 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .back { color: var(--text); margin-left: -10px; padding-inline: 10px; font-weight: 700; }
 .session-time { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--line-hi); padding: 6px 12px; border-radius: 99px; font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
 .session-time .icon { height: 16px; width: 16px; }
+.session-metrics { display: inline-flex; align-items: center; gap: 8px; }
+.session-hr { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--line-hi); padding: 6px 12px; border-radius: 99px; font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.session-hr .icon { height: 16px; width: 16px; fill: currentColor; }
+.session-hr small { font-size: 11px; font-weight: 700; }
+.session-hr.lost { opacity: .7; }
+.hr-setting { display: flex; align-items: center; gap: 10px; margin-block: 12px; }
+.hr-setting .hr-text { flex: 1 1 auto; min-width: 0; }
+.hr-setting p { margin: 4px 0 0; }
 .session-intro { margin-bottom: 12px; padding: 14px 16px; background: var(--card-hi); }
 .session-intro h1 { margin: 4px 0 10px; font-size: clamp(20px, 4.5vw, 26px); }
 .session-stat { font-size: 12px; font-weight: 750; color: var(--accent); font-variant-numeric: tabular-nums; }

@@ -3,6 +3,7 @@ import { progressionConfig, progressionRange, prescription, reviseRoutine, undoR
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
 import { pickCheer } from './cheers.js';
+import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from './heartrate.js';
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
 import { escapeHtml as esc, statisticsView, recordsView, statisticsSummary, trackingEditor } from './statistics-ui.js';
 
@@ -24,6 +25,7 @@ const paths = {
   settings: 'M4 7h16M4 17h16M8 4v6M16 14v6',
   edit: 'm15 5 4 4M5 15l10-10a3 3 0 0 1 4 4L9 19l-5 1 1-5',
   play: 'M8 5v14l11-7z',
+  heart: 'M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.weight}"/></svg>`;
 let announceId;
@@ -118,6 +120,69 @@ const openExerciseActions = new Set();
 const openRoutines = new Set();
 let logError = '';
 const byId = (id, source = state) => source.routines.find((r) => r.id === id);
+
+// Heart rate: the connection and the running totals live outside the saved state. Only the finished
+// workout's average/maximum is saved. Totals survive a reload through sessionStorage.
+const HR_KEY = 'gym-tracker-hr-v1';
+const HR_DEVICE_KEY = 'gym-tracker-hr-device';
+let hrAcc = emptyHr();
+try {
+  const saved = JSON.parse(sessionStorage.getItem(HR_KEY));
+  if (saved && typeof saved.id === 'string' && Number.isFinite(saved.sum) && Number.isInteger(saved.n) && Number.isInteger(saved.max) && saved.n >= 0) hrAcc = { id: saved.id, sum: saved.sum, n: saved.n, max: saved.max };
+} catch { /* Heart rate totals are optional. */ }
+let hrSavedAt = 0;
+function persistHr(force = false) {
+  if (!force && Date.now() - hrSavedAt < 10000) return;
+  hrSavedAt = Date.now();
+  try { sessionStorage.setItem(HR_KEY, JSON.stringify(hrAcc)); } catch { /* Optional. */ }
+}
+function resetHr() { hrAcc = emptyHr(); persistHr(true); }
+function recordHr(bpm) {
+  const id = state.session?.id;
+  if (!id) return;
+  if (hrAcc.id !== id) hrAcc = emptyHr(id);
+  hrAcc = addHrSample(hrAcc, bpm);
+  persistHr();
+}
+function onHrChange(info) {
+  const text = { connected: `Sykemittari yhdistetty: ${info.name}.`, reconnecting: 'Sykemittarin yhteys katkesi. Yritetään yhdistää uudelleen.', error: info.error }[info.status];
+  if (text) announce(text);
+  const hadFocus = document.activeElement?.dataset?.key?.startsWith('hr');
+  if (view === 'home' || view === 'workout') render();
+  if (hadFocus) document.querySelector('[data-key="hrconnect"], [data-key="hrdisconnect"]')?.focus({ preventScroll: true });
+}
+const hr = createMonitor({
+  onChange: onHrChange,
+  onSample: (bpm) => { recordHr(bpm); paintHr(); },
+  remember: (id) => { try { localStorage.setItem(HR_DEVICE_KEY, id); } catch { /* Optional. */ } },
+  recall: () => { try { return localStorage.getItem(HR_DEVICE_KEY); } catch { return null; } },
+});
+function paintHr() {
+  const bpm = hr.current();
+  for (const id of ['hr-value', 'hr-live']) {
+    const el = document.getElementById(id);
+    const text = bpm === null ? '--' : String(bpm);
+    if (el && el.textContent !== text) el.textContent = text;
+  }
+}
+function hrBadge() {
+  if (!['connected', 'reconnecting'].includes(hr.info.status)) return '';
+  return `<span class="session-hr${hr.info.status === 'reconnecting' ? ' lost' : ''}">${icon('heart')} <span id="hr-value">${hr.current() ?? '--'}</span> <small>bpm</small></span>`;
+}
+function hrSettings() {
+  const { status, name, error } = hr.info;
+  let text, button = '';
+  if (!hrSupported()) text = 'Selaimesi ei tue Bluetooth-sykemittareita. Käytä Chromea tai Edgeä Androidilla, Windowsilla tai Macilla. iPhonessa ei ole tukea.';
+  else if (status === 'connecting') { text = 'Yhdistetään sykemittariin…'; button = '<button class="btn secondary" data-action="hrdisconnect" data-key="hrdisconnect">Peruuta</button>'; }
+  else if (status === 'connected') { text = `Yhdistetty: ${esc(name)} · <strong id="hr-live">${hr.current() ?? '--'}</strong> bpm`; button = '<button class="btn secondary" data-action="hrdisconnect" data-key="hrdisconnect">Katkaise yhteys</button>'; }
+  else if (status === 'reconnecting') { text = 'Yhteys katkesi. Yritetään yhdistää uudelleen…'; button = '<button class="btn secondary" data-action="hrdisconnect" data-key="hrdisconnect">Katkaise yhteys</button>'; }
+  else {
+    text = status === 'error' ? esc(error) : 'Yhdistä Polar H10 tai muu Bluetooth-sykemittari ennen harjoituksen aloitusta. Syke näkyy harjoituksen aikana kellon vieressä, ja keskiarvo sekä huippu tallentuvat harjoitukseen.';
+    button = '<button class="btn secondary" data-action="hrconnect" data-key="hrconnect">Yhdistä sykemittari</button>';
+  }
+  return `<section class="hr-setting" aria-label="Sykemittari"><div class="hr-text"><strong>Sykemittari</strong><p class="small-copy muted" id="hr-status">${text}</p></div>${button}</section>`;
+}
+const hrText = (h) => h.hr ? ` · syke keskim. ${h.hr.avg}, enint. ${h.hr.max} bpm` : '';
 
 function rememberDraft() {
   try {
@@ -397,14 +462,14 @@ function historyEditor(h) {
 
 function historyItem(h) {
   const id = esc(h.id), editing = historyEditing === h.id;
-  return `<li data-hist="${id}"><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h3>${esc(h.name)}</h3><span class="muted">${historyDate(h.endedAt)} · ${core.formatDuration(h.endedAt - h.startedAt)}${h.editedAt ? ' · muokattu' : ''}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${editing ? historyEditor(h) : historyDetails(h)}<div class="history-actions"><button class="btn small" data-action="edithistory" data-id="${id}" data-key="hedit-${id}" aria-label="${editing ? 'Valmis' : 'Muokkaa'}: ${esc(h.name)}, ${historyDate(h.endedAt)}" aria-expanded="${editing}">${editing ? 'Valmis' : 'Muokkaa'}</button><button class="btn small delete" data-action="delhistory" data-id="${id}" data-key="hdel-${id}" aria-label="Poista: ${esc(h.name)}, ${historyDate(h.endedAt)}">Poista</button></div></li>`;
+  return `<li data-hist="${id}"><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h3>${esc(h.name)}</h3><span class="muted">${historyDate(h.endedAt)} · ${core.formatDuration(h.endedAt - h.startedAt)}${h.editedAt ? ' · muokattu' : ''}${hrText(h)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${editing ? historyEditor(h) : historyDetails(h)}<div class="history-actions"><button class="btn small" data-action="edithistory" data-id="${id}" data-key="hedit-${id}" aria-label="${editing ? 'Valmis' : 'Muokkaa'}: ${esc(h.name)}, ${historyDate(h.endedAt)}" aria-expanded="${editing}">${editing ? 'Valmis' : 'Muokkaa'}</button><button class="btn small delete" data-action="delhistory" data-id="${id}" data-key="hdel-${id}" aria-label="Poista: ${esc(h.name)}, ${historyDate(h.endedAt)}">Poista</button></div></li>`;
 }
 
 function savedCard() {
   const h = savedId && state.history.find((x) => x.id === savedId);
   if (!h) return '';
   const kg = knownVolume(h);
-  return `<section class="card saved-card" aria-label="Tallennettu harjoitus"><span class="eyebrow accent">TALLENNETTU</span><h2>${esc(h.name)}</h2><p class="muted">${h.setsDone}/${h.setsTotal} sarjaa · ${core.formatDuration(h.endedAt - h.startedAt)}${kg ? ` · ${kg.toLocaleString('fi-FI')} kg nostettu` : ''}</p><p class="muted small-copy">Unohditko kirjata sarjan tai painon? Korjaa tulos nyt.</p><div class="history-actions"><button class="btn small" data-action="fixsaved" data-key="fixsaved">Muokkaa tulosta</button><button class="btn small" data-action="closesaved" data-key="closesaved">Sulje</button></div></section>`;
+  return `<section class="card saved-card" aria-label="Tallennettu harjoitus"><span class="eyebrow accent">TALLENNETTU</span><h2>${esc(h.name)}</h2><p class="muted">${h.setsDone}/${h.setsTotal} sarjaa · ${core.formatDuration(h.endedAt - h.startedAt)}${kg ? ` · ${kg.toLocaleString('fi-FI')} kg nostettu` : ''}${hrText(h)}</p><p class="muted small-copy">Unohditko kirjata sarjan tai painon? Korjaa tulos nyt.</p><div class="history-actions"><button class="btn small" data-action="fixsaved" data-key="fixsaved">Muokkaa tulosta</button><button class="btn small" data-action="closesaved" data-key="closesaved">Sulje</button></div></section>`;
 }
 
 function coachingGuide() {
@@ -444,7 +509,7 @@ function homeView() {
     <div class="stats-links"><button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
     <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Uusi harjoitus</button><p class="coaching-note">Liikekirjastossa on ${EXERCISES.length} liikettä. Valitse liikkeet harjoituksen muokkauksessa tai lisää omasi. Esimerkkiohjelma ei ole henkilökohtainen suositus. Lämmittele, valitse sopivat painot ja lepää tarpeeksi. Lopeta, jos tunnet kipua.</p>${coachingGuide()}</section>
     <div class="home-aside">${statisticsSummary(state)}<section>${sectionHead('Historia', 'VIIMEISIMMÄT HARJOITUKSET')}${undoDelete}${historyError}${history ? `<ul class="list history-list">${history}</ul>${more}` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}</section>
-    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan, ellet aseta omaa aikaa</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label>${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}<label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label><p class="muted small-copy">Automaattinen lepoaika: moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p>${backupCompact()}<div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}<section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
+    <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary><div class="settings-body"><label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan, ellet aseta omaa aikaa</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label>${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}<label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>${hrSettings()}<p class="muted small-copy">Automaattinen lepoaika: moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p>${backupCompact()}<div class="settings-actions"><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div><p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}<section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section></div></details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
 }
 
 function stepper({ kind, cls, ei, si, e, value, unit, group, down, up, canDown, canUp }) {
@@ -554,7 +619,7 @@ function workoutView() {
     const restLabel = core.formatDuration(core.restFor(state.settings, e, nextSi >= 0 ? nextSi : 0) * 1000);
     return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div>${exerciseRir(e, ei)}<div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseActions(e, s.exercises.length)}${state.settings.advancedLogging ? exerciseLog(e, ei) : ''}</li>`;
   }).join('');
-  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<ul class="list exercise-list">${exercises}</ul><button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button>${recoveryControls(s)}<div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>${trackRail(s, cur)}`;
+  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-metrics">${hrBadge()}<span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<ul class="list exercise-list">${exercises}</ul><button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button>${recoveryControls(s)}<div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>${trackRail(s, cur)}`;
 }
 
 function progressionEditor(e, i) {
@@ -737,6 +802,7 @@ let cheer = null;
 let lastCheer = '';
 let actionAnchor = null;
 function tick() {
+  paintHr();
   const elapsed = document.getElementById('elapsed');
   if (elapsed && state.session) elapsed.textContent = core.formatDuration(Date.now() - state.session.startedAt);
   const rest = document.getElementById('rest');
@@ -1091,18 +1157,24 @@ const actions = {
       const p = core.progress(next.session);
       if (p.done < p.total && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
       routineId = next.session.routineId;
-      if (p.done) { const summary = core.summarize(next.session); newId = summary.id; next.history.unshift(summary); }
+      if (p.done) { const summary = core.summarize(next.session, Date.now(), hrAcc.id === next.session.id ? summarizeHr(hrAcc) : null); newId = summary.id; next.history.unshift(summary); }
       next.history = next.history.slice(0, core.MAX_HISTORY); next.session = null; next.restEnd = null;
       if (p.done && byId(routineId, next)?.autoProgress) revisionResult = reviseRoutine(next, routineId);
     }, { ...sessionOptions(), critical: true });
     if (ok) {
+      resetHr();
       if (revisionResult) { revisionMessages.set(routineId, revisionResult.message); openRoutines.add(routineId); }
       view = 'home'; savedId = newId; historyEditing = null; historyMessage = ''; render(); announce(`Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}`);
     }
   },
   async discard() {
     if (!await askConfirm('Hylätäänkö harjoitus? Suoritusmerkinnät menetetään.', 'Hylkää')) return;
-    if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { view = 'home'; render(); }
+    if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { resetHr(); view = 'home'; render(); }
+  },
+  hrconnect() { void hr.connect(); },
+  hrdisconnect() {
+    try { localStorage.removeItem(HR_DEVICE_KEY); } catch { /* Auto-reconnect is optional. */ }
+    void hr.disconnect();
   },
   new() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
   edit(t) { const r = byId(t.dataset.id); if (r) openDraft(r, false); },
@@ -1441,6 +1513,7 @@ window.addEventListener('storage', (e) => {
 });
 document.addEventListener('visibilitychange', () => {
   cancelExerciseScroll();
+  if (document.visibilityState === 'hidden') persistHr(true);
   if (document.visibilityState === 'visible') {
     readLatest(); if (view !== 'edit') render();
     updateDismissed = false; syncUpdateState(); void checkForUpdates();
@@ -1467,5 +1540,6 @@ if ('serviceWorker' in navigator) {
   void registerUpdates();
 }
 render();
+void hr.restore();
 if (state.history.length && !locked()) void requestPersistence();
 if (view === 'workout') showCurrentExercise({ instant: true });
