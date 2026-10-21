@@ -367,3 +367,9 @@ for real two-version lifecycle and data-preservation tests in Chromium and WebKi
 An installation still running an older release without this prompt must first
 receive this release through the existing close-all-windows/reopen update flow.
 Do not uninstall the app or clear browser/site data to force it.
+
+## License
+
+Copyright (c) 2026 Kamehame123. All rights reserved. This is proprietary
+software: copying, modification, redistribution, hosting and commercial use are
+not permitted without written permission. See [LICENSE](LICENSE).

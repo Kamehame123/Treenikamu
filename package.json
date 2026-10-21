@@ -1,6 +1,7 @@
 {
   "name": "gym-tracker",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "icons": "node tools/gen-icons.mjs",
