@@ -52,10 +52,6 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .status::before { content: ""; height: 6px; width: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 .home-hero { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0 12px; }
 .hero-title { margin-top: 2px; font-size: clamp(24px, 5vw, 32px); font-weight: 800; letter-spacing: -.04em; line-height: 1.1; }
-.hero-copy { margin-top: 4px; color: var(--muted); font-size: 13px; }
-.hero-art { display: grid; place-items: center; flex: 0 0 auto; }
-.art-weight { display: grid; place-items: center; background: var(--accent-soft); border: 1px solid var(--line-hi); border-radius: 16px; height: 48px; width: 48px; color: var(--accent); }
-.art-weight .icon { width: 26px; height: 26px; stroke-width: 1.8; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
 .stats > div { padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); min-width: 0; }
 .stats strong { display: block; font-size: 20px; font-weight: 800; line-height: 1.1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--text); }
@@ -133,6 +129,9 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .backup h2 { margin: 2px 0 0; font-size: 18px; }
 .backup p { margin: 10px 0 0; font-size: 13px; }
 .backup .btn { margin-top: 14px; width: 100%; }
+.backup.compact { display: flex; align-items: center; gap: 10px; margin-block: 12px; }
+.backup.compact p { flex: 1 1 auto; margin: 0; font-size: 12px; color: var(--muted); }
+.backup.compact .btn { flex: 0 0 auto; width: auto; margin-top: 0; }
 .backup.due { border: 2px solid var(--accent); background: var(--accent-soft); }
 .resume { margin-bottom: 16px; border: 2px solid var(--accent); background: var(--accent-soft); padding: 16px; }
 .resume h2 { margin: 6px 0 4px; font-size: 21px; }
@@ -227,6 +226,13 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .set { width: 100%; min-width: 0; min-height: 108px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1.5px solid var(--line-hi); border-radius: 20px; padding: 6px 4px; background: var(--input); color: var(--text); text-align: center; transition: transform .1s; }
 .set-planned { max-width: 100%; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .set-foot { display: inline-flex; align-items: center; gap: 4px; }
+.set-rir { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(48px, 1fr)); align-items: center; gap: 4px; min-width: 0; }
+.set-rir-label { grid-column: 1 / -1; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .06em; }
+@media (min-width: 400px) { .set-rir { grid-template-columns: repeat(6, minmax(48px, 1fr)); } }
+.rir-btn { min-width: 48px; min-height: 48px; padding: 0; border: 1.5px solid var(--line-hi); border-radius: 12px; background: var(--input); color: var(--text); font: inherit; font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; transition: transform .1s, background .15s, color .15s; }
+.rir-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.rir-btn:active { transform: scale(.94); }
+.rir-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .set-steppers { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: center; min-width: 0; }
 .stepper { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 2px; padding: 2px; border: 1.5px solid var(--line-hi); border-radius: 16px; background: var(--input); }
 .step-btn { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 13px; background: var(--surface); color: var(--accent); transition: transform .1s, background .15s, color .15s; }
@@ -392,7 +398,6 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 	#app { padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
 	.brand { gap: 6px; font-size: 12px; }
 	.status { font-size: 10px; gap: 4px; max-width: 118px; padding: 4px 8px; }
-	.hero-art { display: none; }
 	.stats { gap: 6px; }
 	.stats > div { padding: 8px 9px; }
 	.stats strong { font-size: 18px; }

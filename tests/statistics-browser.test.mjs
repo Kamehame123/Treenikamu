@@ -125,7 +125,7 @@ try {
           const log = page.locator('.exercise-log').first();
           await log.locator('summary').click();
           await log.locator('[data-log="actualReps"][data-s="0"]').fill('7'); await idle(page);
-          await log.locator('[data-log="setRir"][data-s="0"]').fill('2'); await idle(page);
+          await tap(page.locator('[data-action="setrir"][data-s="0"][data-value="2"]').first()); await idle(page);
           await log.locator('[data-log="kind"][data-s="0"][value="warmup"]').check(); await idle(page);
           let current = await saved(page);
           assert.equal(current.session.exercises[0].sets[0].actualReps, '7');
