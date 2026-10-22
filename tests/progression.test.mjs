@@ -240,7 +240,7 @@ test('partial sets and invalid log values block progression while inferred compl
     (e) => { e.rir = '-1'; },
     (e) => { e.sets[1].actualReps = ''; },
     (e) => { e.sets[1].actualReps = '9.5'; },
-    (e) => { e.sets[1].actualReps = '101'; },
+    (e) => { e.sets[1].actualReps = '10000'; },
     (e) => { e.sets[1].done = false; },
     (e) => { e.sets[1].actualWeight = '105 lbs'; },
   ]) {

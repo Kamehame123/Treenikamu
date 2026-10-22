@@ -110,6 +110,8 @@ export function progressionRange(exercise) {
   return { minReps: Math.max(1, Math.min(minReps, low)), maxReps, reason };
 }
 
+export const MAX_REPS = 9999;
+
 export function parseWeight(value) {
   const text = String(value ?? '').trim().replace(',', '.');
   if (!/^\d+(?:\.\d+)?(?:\s*kg)?$/i.test(text)) return null;
@@ -121,7 +123,7 @@ export function targetReps(value) {
   const match = /^(\d+)(?:\s*[-–]\s*(\d+))?$/.exec(String(value).trim());
   if (!match) return null;
   const low = Number(match[1]), high = Number(match[2] ?? match[1]);
-  return low > 0 && high >= low && high <= 100 ? { low, high } : null;
+  return low > 0 && high >= low && high <= MAX_REPS ? { low, high } : null;
 }
 
 export function prescription(exercise) {
@@ -148,7 +150,7 @@ function performance(exercise, logged) {
     if (set.actualReps === undefined) return targets[i].high;
     return /^\d+$/.test(String(set.actualReps)) ? Number(set.actualReps) : NaN;
   });
-  if (reps.some((n) => !Number.isInteger(n) || n < 0 || n > 100)) return null;
+  if (reps.some((n) => !Number.isInteger(n) || n < 0 || n > MAX_REPS)) return null;
   const rawRir = logged.rir === undefined ? '' : String(logged.rir).trim();
   if ('rir' in logged && !/^[0-5]$/.test(rawRir)) return null;
   const plannedWeight = parseWeight(exercise.weight);

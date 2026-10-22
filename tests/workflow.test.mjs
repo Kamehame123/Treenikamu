@@ -588,7 +588,7 @@ try {
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
           assert.equal((await saved(p)).session.exercises[0].sets[1].actualReps, '12');
           await p.locator('[data-key="reps-value-0-2"]').click();
-          await p.locator('input.step-input').fill('150');
+          await p.locator('input.step-input').fill('10000');
           await p.keyboard.press('Enter');
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') === 'false');
           assert.ok(await p.getByRole('alert').first().isVisible());
@@ -641,7 +641,7 @@ try {
 
           await tap(p.locator('[data-key="hedit-full"]'));
           const reps = p.locator('[data-key="hr-0-0"]');
-          await reps.fill('150'); await p.keyboard.press('Tab'); await idle();
+          await reps.fill('10000'); await p.keyboard.press('Tab'); await idle();
           assert.ok(await p.getByRole('alert').first().isVisible());
           assert.equal((await saved(p)).history[0].exercises[0].sets[0].actualReps, undefined);
           await p.locator('[data-key="hr-0-0"]').fill('9'); await p.keyboard.press('Tab'); await idle();

@@ -289,7 +289,7 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 - Use the **- / + buttons below each set** in training mode to adjust actual reps
   one at a time, before or after marking the set done. The first adjustment starts
   from that set's target (the upper end for a rep range). Further adjustments use
-  the recorded actual count, bounded to 0-100. The set shows the actual count and
+  the recorded actual count, bounded to 0-9999. Holding a - / + button for half a second repeats it, speeding up the longer it is held, until released. The set shows the actual count and
   its original target; adjustments never change the plan, mark the set done, or
   start a rest timer. Timed and nonnumeric targets have no rep-adjustment buttons.
 - A second **- / + stepper** on each set adjusts the weight by the exercise's weight
@@ -300,7 +300,7 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   only while it differs from the plan. Weights that are not plain kilograms (for
   example `2 x 10 kg`) cannot be stepped.
 - Tapping the number between the - and + buttons types an exact value instead
-  (reps 0-100, weight 0-10 000 kg, decimal comma or point). Enter or leaving the
+  (reps 0-9999, weight 0-10 000 kg, decimal comma or point). Enter or leaving the
   field saves it, Escape cancels, an empty weight returns to the planned weight,
   and invalid input is reported without changing the record.
 - Each movement shows the sets of its latest earlier workout ("Viimeksi ...").

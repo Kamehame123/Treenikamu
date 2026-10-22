@@ -1,5 +1,5 @@
 import { normalizeSearch, CATEGORIES, EQUIPMENT } from './exercises.js';
-import { parseWeight } from './progression.js';
+import { parseWeight, MAX_REPS } from './progression.js';
 
 export const LOAD_TYPES = Object.freeze({
   unknown: 'Kuorman merkitys ei tiedossa',
@@ -189,7 +189,7 @@ export function buildStatistics(history, options = {}) {
         row.sets++;
         if (set.kind === 'working') row.workingSets++;
         else if (set.kind !== 'warmup') row.unclassifiedSets++;
-        const reps = integer(set.actualReps, 0, 100);
+        const reps = integer(set.actualReps, 0, MAX_REPS);
         const seconds = number(set.actualSeconds, 0, 86400);
         if (reps !== null) { row.reps += reps; row.repSets++; row.bestReps = Math.max(row.bestReps ?? 0, reps); }
         else if (seconds === null) row.missingReps++;

@@ -13,7 +13,7 @@
 //   BACKUP_VERSION if the envelope itself changes; then keep reading the older envelopes.
 // - Files from a newer app version are refused, never guessed at.
 import { CATEGORIES, EQUIPMENT, EXERCISES, normalizeSearch } from './exercises.js';
-import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight, lightenRoutine } from './progression.js';
+import { MAX_REPS, progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight, lightenRoutine } from './progression.js';
 import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking, LOAD_TYPES } from './statistics.js';
 import { sanitizeHr } from './heartrate.js';
 import { sanitizeTimers, sanitizeDefaults } from './timer.js';
@@ -28,6 +28,7 @@ export const BACKUP_VERSION = 1;
 export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
 const MAX_ROUTINES = 100;
 export const MAX_HISTORY = 10000;
+export { MAX_REPS };
 
 // MIGRATIONS[n] upgrades schema n data to schema n + 1. Empty until the first breaking change.
 export const MIGRATIONS = {};
@@ -478,7 +479,7 @@ export function setRepCount(exercise, set) {
   if (!target) return null;
   if (set?.actualReps === undefined) return target.high;
   const value = String(set.actualReps);
-  return /^\d+$/.test(value) && Number(value) <= 100 ? Number(value) : null;
+  return /^\d+$/.test(value) && Number(value) <= MAX_REPS ? Number(value) : null;
 }
 
 export function adjustSetReps(session, ei, si, delta) {
@@ -489,7 +490,7 @@ export function adjustSetReps(session, ei, si, delta) {
     return { ok: false, error: 'Pikamuutos vaatii numeerisen toistotavoitteen ja kelvolliset toteutuneet toistot. Tarkista tulokset.' };
   }
   const reps = count + delta;
-  if (reps < 0 || reps > 100) return { ok: false, error: 'Toteutuneiden toistojen on oltava välillä 0–100.' };
+  if (reps < 0 || reps > MAX_REPS) return { ok: false, error: `Toteutuneiden toistojen on oltava välillä 0–${MAX_REPS}.` };
   set.actualReps = String(reps);
   return { ok: true, reps };
 }
@@ -540,12 +541,12 @@ export function setSetWeight(session, ei, si, text) {
   return { ok: true, weight };
 }
 
-// Typed rep count (0–100) for one set.
+// Typed rep count (0–9999) for one set.
 export function setSetReps(session, ei, si, text) {
   const exercise = session?.exercises[ei], set = exercise?.sets[si];
   if (!set) return { ok: false, error: 'Kirjattavaa sarjaa ei enää löytynyt. Tarkista harjoitus.' };
   const raw = String(text ?? '').trim();
-  if (!/^\d+$/.test(raw) || Number(raw) > 100) return { ok: false, error: 'Anna toistot kokonaislukuna väliltä 0–100.' };
+  if (!/^\d+$/.test(raw) || Number(raw) > MAX_REPS) return { ok: false, error: `Anna toistot kokonaislukuna väliltä 0–${MAX_REPS}.` };
   set.actualReps = String(Number(raw));
   return { ok: true, reps: Number(raw) };
 }
@@ -712,7 +713,7 @@ export function editHistorySet(state, id, ei, si, field, value, now = Date.now()
   if (field === 'done') set.done = raw === true;
   else if (field === 'actualReps') {
     if (raw === '') delete set.actualReps;
-    else if (!/^\d+$/.test(raw) || Number(raw) > 100) return { ok: false, error: 'Anna toistot kokonaislukuna väliltä 0–100.' };
+    else if (!/^\d+$/.test(raw) || Number(raw) > MAX_REPS) return { ok: false, error: `Anna toistot kokonaislukuna väliltä 0–${MAX_REPS}.` };
     else set.actualReps = String(Number(raw));
   } else if (field === 'actualWeight') {
     if (raw === '') delete set.actualWeight;

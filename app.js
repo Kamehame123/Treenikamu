@@ -846,7 +846,7 @@ function setEntry(e, ei, si, nextSi) {
   const status = set.done ? 'Tehty' : count === null || range ? 'Kirjaa' : `Kirjaa ${count} toistoa`;
   const weight = core.setWeightValue(e, set);
   const step = String(core.weightStepFor(e)).replace('.', ',');
-  const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < 100 })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: `Vähennä painoa ${step} kg`, up: `Lisää painoa ${step} kg`, canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
+  const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < core.MAX_REPS })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: `Vähennä painoa ${step} kg`, up: `Lisää painoa ${step} kg`, canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
   return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${showTarget ? ` Tavoite: ${esc(target)}` : ''} ${esc(status)}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${showTarget ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} ` : ''}${esc(status)}</span></button>${adjustment}</div>`;
 }
 
@@ -889,7 +889,7 @@ function loadPrompt(e, ei) {
 function exerciseLog(e, ei) {
   const rows = e.sets.map((set, si) => {
     const timed = /^\d+(?:[.,]\d+)?\s*(?:s\b|sek|min)/i.test(set.reps ?? e.reps);
-    return `<fieldset class="set-stat-log"><legend>Sarja ${si + 1}: tilastot</legend><div class="stat-filter-grid"><label class="field">${timed ? 'Toteutunut kesto (s)' : 'Toteutuneet toistot'}<input type="number" min="0" max="${timed ? 86400 : 100}" step="1" inputmode="numeric" value="${esc(timed ? set.actualSeconds ?? '' : set.actualReps ?? '')}" data-log="${timed ? 'actualSeconds' : 'actualReps'}" data-e="${ei}" data-s="${si}" data-key="stat-result-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: ${timed ? 'toteutunut kesto' : 'toteutuneet toistot'}"></label></div><fieldset class="set-kind-options"><legend>Sarjan tyyppi</legend>${[['', 'Luokittelematon'], ['working', 'Työsarja'], ['warmup', 'Lämmittely']].map(([value, label]) => `<label class="choice-option"><input type="radio" name="set-kind-${ei}-${si}" data-log="kind" data-e="${ei}" data-s="${si}" value="${value}" ${(set.kind ?? '') === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset></fieldset>`;
+    return `<fieldset class="set-stat-log"><legend>Sarja ${si + 1}: tilastot</legend><div class="stat-filter-grid"><label class="field">${timed ? 'Toteutunut kesto (s)' : 'Toteutuneet toistot'}<input type="number" min="0" max="${timed ? 86400 : core.MAX_REPS}" step="1" inputmode="numeric" value="${esc(timed ? set.actualSeconds ?? '' : set.actualReps ?? '')}" data-log="${timed ? 'actualSeconds' : 'actualReps'}" data-e="${ei}" data-s="${si}" data-key="stat-result-${ei}-${si}" aria-label="${esc(e.name)}, sarja ${si + 1}: ${timed ? 'toteutunut kesto' : 'toteutuneet toistot'}"></label></div><fieldset class="set-kind-options"><legend>Sarjan tyyppi</legend>${[['', 'Luokittelematon'], ['working', 'Työsarja'], ['warmup', 'Lämmittely']].map(([value, label]) => `<label class="choice-option"><input type="radio" name="set-kind-${ei}-${si}" data-log="kind" data-e="${ei}" data-s="${si}" value="${value}" ${(set.kind ?? '') === value ? 'checked' : ''}><span>${label}</span></label>`).join('')}</fieldset></fieldset>`;
   }).join('');
   return `<details class="exercise-log" data-log-panel="${esc(e.id)}" ${openLogs.has(e.id) ? 'open' : ''}><summary>Kuormittavuus (valinnainen)</summary><p class="muted small-copy">Toistot ja painot kirjataan myös sarjojen − / + -painikkeilla. Tilastojen suoritusarvio vaatii toteutuneet toistot, tunnetun kg-kuorman, työsarjamerkinnän ja liikkeen RIR:n, joka lasketaan viimeiselle työsarjalle. Tyhjä tulos on tuntematon.</p>${rows}<label class="check"><span>Tunsin kipua<small>Älä jatka kipua aiheuttavaa liikettä. Kuormaa ei nosteta.</small></span><input type="checkbox" data-log="pain" data-e="${ei}" data-key="pain-${ei}" aria-label="${esc(e.name)}: kipua" ${e.pain ? 'checked' : ''}></label></details>`;
 }
@@ -1220,12 +1220,12 @@ async function changeRevision(id, undo = false) {
 function logInput(t) {
   const field = t.dataset.log;
   const value = t.type === 'checkbox' ? t.checked : t.value.trim();
-  const numericLimit = ({ rir: 5, setRir: 5, actualReps: 100, actualSeconds: 86400 })[field];
+  const numericLimit = ({ rir: 5, setRir: 5, actualReps: core.MAX_REPS, actualSeconds: 86400 })[field];
   const valid = !t.validity.badInput && (numericLimit === undefined || value === '' ||
     (/^\d+$/.test(value) && Number(value) <= numericLimit)) &&
     (field !== 'kind' || ['', 'working', 'warmup'].includes(value));
   if (!valid) {
-    logError = 'Tarkista sarjan tiedot: toistot 0–100, RIR 0–5 ja kesto 0–86400 sekuntia kokonaislukuina. Tyhjä tarkoittaa tuntematonta.';
+    logError = 'Tarkista sarjan tiedot: toistot 0–9999, RIR 0–5 ja kesto 0–86400 sekuntia kokonaislukuina. Tyhjä tarkoittaa tuntematonta.';
     announce(logError); render(); return;
   }
   const options = sessionOptions(), ei = +t.dataset.e, si = +t.dataset.s;
@@ -1853,6 +1853,41 @@ document.addEventListener('click', (e) => {
     try { return await actions[t.dataset.action](t); } finally { actionAnchor = null; }
   });
 });
+// Holding a +/- stepper button repeats it until release. The first press still acts once on click, as before.
+const HOLD_DELAY_MS = 500;
+let holdTimer = null, holdRepeating = false, holdSuppressClick = false;
+function stopHold() {
+  clearTimeout(holdTimer); holdTimer = null;
+  if (holdRepeating) { holdRepeating = false; holdSuppressClick = true; setTimeout(() => { holdSuppressClick = false; }, 100); }
+}
+document.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || !e.isPrimary) return;
+  const button = e.target.closest('.step-btn[data-action]');
+  if (!button || button.disabled) return;
+  stopHold();
+  const key = button.dataset.key;
+  const heldFrom = Date.now() + HOLD_DELAY_MS;
+  // Repeats speed up the longer the button is held, so a large change (reps and kilos go up to 9999) stays reachable.
+  const repeat = () => {
+    // The view is redrawn after every step, so find the live button again and stop at its limit.
+    const live = key && document.querySelector(`.step-btn[data-key="${key}"]`);
+    if (!live || live.disabled) return;
+    if (pendingActions === 0 && !updateBusy) {
+      enqueueAction(async () => {
+        actionAnchor = key;
+        try { return await actions[live.dataset.action](live); } finally { actionAnchor = null; }
+      });
+    }
+    const held = Date.now() - heldFrom;
+    holdTimer = setTimeout(repeat, held > 4000 ? 30 : held > 2000 ? 60 : 120);
+  };
+  holdTimer = setTimeout(() => { holdRepeating = true; repeat(); }, HOLD_DELAY_MS);
+});
+for (const type of ['pointerup', 'pointercancel', 'blur']) (type === 'blur' ? window : document).addEventListener(type, stopHold);
+document.addEventListener('contextmenu', (e) => { if (e.target.closest?.('.step-btn')) e.preventDefault(); });
+document.addEventListener('click', (e) => {
+  if (holdSuppressClick && e.target.closest?.('.step-btn')) { e.stopImmediatePropagation(); e.preventDefault(); holdSuppressClick = false; }
+}, true);
 document.addEventListener('submit', (e) => {
   if (e.target.id !== 'custom-exercise-form') return;
   e.preventDefault(); enqueueAction(() => actions.createcustom());

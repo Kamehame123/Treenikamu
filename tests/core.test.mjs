@@ -42,7 +42,7 @@ test('new UI set taps capture the displayed reps without replacing overrides or 
 });
 
 test('UI completion never converts timed, free-text or invalid targets into actual reps', () => {
-  for (const target of ['45 s', '2 min', 'AMRAP', '0', '101', '12-8']) {
+  for (const target of ['45 s', '2 min', 'AMRAP', '0', '10000', '12-8']) {
     const s = c.startSession(routine()), e = s.exercises[0]; e.reps = target;
     c.toggleSet(s, 0, 0, { logReps: true });
     assert.equal(e.sets[0].actualReps, undefined, target);
@@ -141,7 +141,7 @@ test('quick reps use range ceilings and manual logs but never reinterpret timed 
   }
   set.actualReps = '4';
   assert.deepEqual(c.adjustSetReps(s, 0, 0, 1), { ok: true, reps: 5 });
-  for (const target of ['45 s', '2 min', 'AMRAP', '0', '101', '12-8']) {
+  for (const target of ['45 s', '2 min', 'AMRAP', '0', '10000', '12-8']) {
     set.reps = target;
     assert.equal(c.setRepCount(exercise, set), null);
     const before = structuredClone(s);
@@ -152,7 +152,7 @@ test('quick reps use range ceilings and manual logs but never reinterpret timed 
 
 test('quick rep bounds and invalid actions report errors without changing records', () => {
   const s = c.startSession(routine()), exercise = s.exercises[0], set = exercise.sets[0];
-  for (const [actual, delta] of [['0', -1], ['100', 1], ['-1', 1], ['1.5', 1], ['', 1], ['bad', -1]]) {
+  for (const [actual, delta] of [['0', -1], ['9999', 1], ['10000', -1], ['-1', 1], ['1.5', 1], ['', 1], ['bad', -1]]) {
     set.actualReps = actual;
     const before = structuredClone(s);
     const result = c.adjustSetReps(s, 0, 0, delta);
@@ -162,8 +162,10 @@ test('quick rep bounds and invalid actions report errors without changing record
   }
   set.actualReps = '0';
   assert.deepEqual(c.adjustSetReps(s, 0, 0, 1), { ok: true, reps: 1 });
-  set.actualReps = '100';
-  assert.deepEqual(c.adjustSetReps(s, 0, 0, -1), { ok: true, reps: 99 });
+  set.actualReps = '9999';
+  assert.deepEqual(c.adjustSetReps(s, 0, 0, -1), { ok: true, reps: 9998 });
+  set.actualReps = '9998';
+  assert.deepEqual(c.adjustSetReps(s, 0, 0, 1), { ok: true, reps: 9999 });
   for (const [session, ei, si, delta] of [[null, 0, 0, 1], [s, 99, 0, 1], [s, 0, 99, 1], [s, 0, 0, 0], [s, 0, 0, 2]]) {
     const before = structuredClone(s);
     const result = c.adjustSetReps(session, ei, si, delta);
@@ -224,14 +226,14 @@ test('typed weights accept decimal commas and units, and report bad input withou
   assert.equal(c.setSetWeight(null, 0, 0, '5').ok, false);
 });
 
-test('typed reps accept 0–100 and leave the target and other sets alone', () => {
+test('typed reps accept 0–9999 and leave the target and other sets alone', () => {
   const s = c.startSession(routine()), sets = s.exercises[0].sets;
   assert.deepEqual(c.setSetReps(s, 0, 0, '7'), { ok: true, reps: 7 });
   assert.deepEqual(c.setSetReps(s, 0, 1, ' 012 '), { ok: true, reps: 12 });
   assert.deepEqual(c.setSetReps(s, 0, 2, '0'), { ok: true, reps: 0 });
   assert.deepEqual(sets.map((x) => x.actualReps), ['7', '12', '0']);
   assert.equal(s.exercises[0].reps, '5');
-  for (const bad of ['', '101', '-1', '1,5', 'x']) {
+  for (const bad of ['', '10000', '-1', '1,5', 'x']) {
     const before = structuredClone(s);
     assert.equal(c.setSetReps(s, 0, 0, bad).ok, false, bad);
     assert.deepEqual(s, before);
@@ -857,7 +859,7 @@ test('editing a logged set corrects reps, weight and done state and recounts set
 
 test('invalid history edits are rejected and change nothing', () => {
   const st = finished(), id = st.history[0].id, before = JSON.stringify(st);
-  for (const [field, value] of [['actualReps', '101'], ['actualReps', '-1'], ['actualReps', '5x'], ['actualWeight', '105 lbs'], ['actualWeight', '-5'], ['actualWeight', '1e3'], ['nope', '1']]) {
+  for (const [field, value] of [['actualReps', '10000'], ['actualReps', '-1'], ['actualReps', '5x'], ['actualWeight', '105 lbs'], ['actualWeight', '-5'], ['actualWeight', '1e3'], ['nope', '1']]) {
     assert.equal(c.editHistorySet(st, id, 0, 0, field, value).ok, false, `${field} ${value}`);
   }
   assert.equal(c.editHistorySet(st, id, 5, 0, 'done', true).ok, false);
