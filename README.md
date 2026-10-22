@@ -484,6 +484,36 @@ are linked to that copy; repeating that import reuses the same copy.
   on static hosts; `serve.mjs` additionally sends it as a header.
 - A maskable icon (`icon-maskable-512.png`) is included for Android adaptive icons.
 
+## Automatic folder backup
+
+**Asetukset > Varmuuskopio > Automaattinen varmuuskopio kansioon** is an optional
+switch (off by default). Turning it on opens the system folder picker; while the
+app is open it then writes `gym-tracker-auto-uusin.json` (replaced on every
+change, written about 10 seconds after the last change or when the app goes to the
+background) and one `gym-tracker-auto-YYYY-MM-DD.json` per local day, created once
+and never overwritten. Only the newest 14 daily files are kept. Pruning touches
+only files with that exact name pattern and happens only after the new copy has been
+written, read back and verified. The files are normal backups: import or replace
+them with the existing Tuo/Palauta buttons.
+
+- Needs the File System Access API: desktop Chrome and Edge, and Chrome on Android
+  132 or newer. Firefox, Safari and every iPhone/iPad browser lack it; the switch is
+  then disabled with an explanation and manual export remains.
+- The folder handle and the on/off flag live in the separate IndexedDB database
+  `gym-tracker-autobackup`, never in `gym-tracker-v1` or in backups. Enabling,
+  disabling or failing to write never changes, migrates or blocks saving training
+  data, and disabling leaves existing files in the folder.
+- Browsers may drop folder permission when the app was closed or backgrounded. The
+  app then shows "Anna lupa kansioon" (a user gesture is required) and a flag on the
+  Asetukset row; nothing is written until permission returns.
+- Nothing is written while saved data is unreadable, from a newer version, in a
+  save conflict or has unsaved changes, and an empty history never replaces the
+  latest copy.
+- Copies stay on the same device: pick a synced or external folder if you want
+  protection from losing the device. They are written only while the app is open.
+- The automatic time counts toward the 7-day backup reminder, but the manual
+  "Viimeisin varmuuskopio" time is only set by manual exports.
+
 ## Installed-app updates
 
 Opening from the installed desktop/home-screen icon checks for a new version.

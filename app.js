@@ -1,4 +1,5 @@
 import * as core from './core.js';
+import * as autobackup from './autobackup.js';
 import { progressionConfig, progressionRange, prescription, reviseRoutine, undoRevision, canUndoRevision } from './progression.js';
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
@@ -276,6 +277,7 @@ async function mutate(change, { critical = false, sessionId = null, patch = null
       : critical ? 'Muutosta ei voitu tallentaa. Harjoitus on yhä tallessa tässä välilehdessä. Yritä uudelleen ennen sulkemista.' : 'Muutokset ovat vain tässä välilehdessä. Tallennus ei onnistu. Älä sulje välilehteä ennen tallentamista.';
     if (saved || !critical) { state = next; dirty = !saved; }
     if (saved && state.history.length) requestPersistence();
+    if (saved) { autoBackup.pending = true; scheduleAutoBackup(); }
     if (patch && saved && wasHealthy && view === renderedView) patch(); else render();
     return saved || !critical;
   };
@@ -317,10 +319,104 @@ function storageNote() {
 function lastBackupAt() {
   try { const t = Number(localStorage.getItem(BACKUP_KEY)); return Number.isFinite(t) && t > 0 ? t : 0; } catch { return 0; }
 }
+// Automatic folder backup. Its settings live in IndexedDB (autobackup.js), never in the training data.
+const autoBackup = { supported: autobackup.supported(), enabled: false, handle: null, permission: 'granted', lastAt: 0, error: '', busy: false, pending: false };
+let autoTimer = 0;
+const autoNeedsGrant = () => autoBackup.enabled && autoBackup.permission !== 'granted';
+function autoBackupText() {
+  const ab = autoBackup;
+  if (!ab.supported) return 'Tämä selain ei voi tallentaa kansioon (esimerkiksi iPhone). Käytä "Vie varmuuskopio" -painiketta. Toimii tietokoneen Chromessa ja Edgessä sekä uusimmassa Androidin Chromessa.';
+  if (!ab.enabled) return `Tallentaa tiedot itsestään valitsemaasi kansioon, kun sovellus on auki: viimeisin kopio sekä yksi kopio päivässä (${autobackup.KEEP_DAYS} viimeisintä päivää). Kopiot pysyvät vain tällä laitteella.`;
+  const where = `Kansio: ${ab.handle?.name ?? ''}.`;
+  if (ab.error) return `${where} ${ab.error}`;
+  if (ab.permission !== 'granted') return `${where} Selain tarvitsee luvan kansioon. Paina "Anna lupa kansioon".`;
+  if (ab.lastAt) return `${where} Viimeisin kopio: ${new Date(ab.lastAt).toLocaleString('fi-FI', { dateStyle: 'short', timeStyle: 'short' })}.`;
+  return `${where} ${state.history.length ? 'Ensimmäinen kopio tehdään pian.' : 'Kopio tehdään, kun ensimmäinen harjoitus on kirjattu.'}`;
+}
+function autoBackupHtml() {
+  const ab = autoBackup;
+  const grant = ab.permission !== 'granted' ? '<button class="btn secondary" data-action="autobackupgrant" data-key="autobackup-grant">Anna lupa kansioon</button>' : '';
+  const buttons = ab.enabled ? `<div class="settings-actions">${grant}<button class="btn secondary" data-action="autobackupfolder" data-key="autobackup-folder">Vaihda kansio</button></div>` : '';
+  return `<label class="check"><span>Automaattinen varmuuskopio kansioon<small id="autobackup-status">${esc(autoBackupText())}</small></span><input type="checkbox" role="switch" data-autobackup="toggle" data-key="autobackup" ${ab.enabled ? 'checked' : ''} ${ab.supported ? '' : 'disabled'} aria-label="Automaattinen varmuuskopio kansioon"></label>${buttons}`;
+}
+// Updates in place so a focused control and the open settings survive.
+function paintAutoBackup() {
+  const box = document.getElementById('autobackup');
+  if (!box) return;
+  const focus = box.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  box.innerHTML = autoBackupHtml();
+  if (focus) (box.querySelector(`[data-key="${focus}"]`) ?? box.querySelector('input'))?.focus({ preventScroll: true });
+}
+function autoBackupError(error) {
+  if (error?.name === 'NotFoundError') return 'Kansiota ei löydy. Valitse kansio uudelleen.';
+  if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') return 'Selaimella ei ole lupaa kansioon.';
+  if (error?.name === 'QuotaExceededError') return 'Levy on täynnä, kopiota ei voitu kirjoittaa.';
+  return 'Kopiota ei voitu kirjoittaa kansioon.';
+}
+async function writeAutoBackup() {
+  const ab = autoBackup;
+  readLatest();
+  if (locked() || !storageOk || dirty) { ab.pending = true; return; }
+  // An empty state must never replace the latest copy.
+  if (!state.history.length) return;
+  const text = JSON.stringify(core.buildBackup(state), null, 2);
+  try {
+    await autobackup.writeBackup(ab.handle, text, localDateKey(Date.now()), (copy) => copy === text && core.parseBackup(copy).ok);
+    ab.lastAt = Date.now(); ab.error = '';
+    autobackup.saveConfig({ handle: ab.handle, enabled: true, lastAt: ab.lastAt }).catch(() => { /* The time is only shown. */ });
+  } catch (error) {
+    ab.pending = true; ab.error = autoBackupError(error);
+    ab.permission = await autobackup.permission(ab.handle);
+  }
+}
+// Failures here never block or delay saving the training data.
+async function runAutoBackup() {
+  const ab = autoBackup;
+  if (!ab.enabled || !ab.handle || ab.busy) return;
+  if (locked() || !storageOk || dirty || saveConflict) return;
+  ab.busy = true; ab.pending = false;
+  try {
+    ab.permission = await autobackup.permission(ab.handle);
+    if (ab.permission !== 'granted') { ab.pending = true; return; }
+    await (navigator.locks ? navigator.locks.request('gym-tracker-autobackup', { ifAvailable: true }, (lock) => lock && writeAutoBackup()) : writeAutoBackup());
+  } catch { ab.pending = true; } finally { ab.busy = false; paintAutoBackup(); }
+}
+function scheduleAutoBackup(delay = 10000) {
+  if (!autoBackup.enabled) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(() => void runAutoBackup(), delay);
+}
+const autoBackupDue = () => autoBackup.enabled && (autoBackup.pending || !autoBackup.lastAt || localDateKey(autoBackup.lastAt) !== localDateKey(Date.now()));
+// Needs a user gesture: call before the first await.
+async function chooseAutoFolder() {
+  const ab = autoBackup;
+  let handle;
+  try { handle = await autobackup.pickFolder(); } catch (error) {
+    if (error?.name !== 'AbortError') ab.error = 'Kansion valinta ei onnistunut.';
+    paintAutoBackup(); return;
+  }
+  try { await autobackup.saveConfig({ handle, enabled: true, lastAt: 0 }); } catch {
+    ab.error = 'Valintaa ei voitu tallentaa tälle selaimelle.'; paintAutoBackup(); return;
+  }
+  Object.assign(ab, { handle, enabled: true, permission: 'granted', error: '', lastAt: 0, pending: true });
+  paintAutoBackup();
+  announce(`Automaattinen varmuuskopio on päällä kansioon ${handle.name}.`);
+  void runAutoBackup();
+}
+async function disableAutoBackup() {
+  const ab = autoBackup;
+  clearTimeout(autoTimer);
+  try { await autobackup.clearConfig(); } catch { ab.error = 'Asetusta ei voitu tallentaa. Yritä uudelleen.'; paintAutoBackup(); return; }
+  Object.assign(ab, { enabled: false, handle: null, error: '', pending: false, permission: 'granted' });
+  paintAutoBackup();
+  announce('Automaattinen varmuuskopio on pois päältä. Kansion tiedostot jätettiin paikalleen.');
+}
 function backupInfo() {
   const last = lastBackupAt();
   const days = last ? Math.max(0, Math.floor((Date.now() - last) / 86400000)) : null;
-  const due = state.history.length > 0 && (days === null || days >= BACKUP_REMIND_DAYS);
+  const newest = Math.max(last, autoBackup.enabled ? autoBackup.lastAt : 0);
+  const newestDays = newest ? Math.max(0, Math.floor((Date.now() - newest) / 86400000)) : null;
+  const due = state.history.length > 0 && (newestDays === null || newestDays >= BACKUP_REMIND_DAYS);
   const status = days === null ? 'Et ole vielä tehnyt varmuuskopiota.'
     : `Viimeisin varmuuskopio: ${new Date(last).toLocaleDateString('fi-FI')} (${days === 0 ? 'tänään' : days === 1 ? 'eilen' : `${days} päivää sitten`}).`;
   return { due, status };
@@ -330,9 +426,10 @@ function backupCompact() {
   const { due, status } = backupInfo();
   const advice = due ? '<p class="backup-status" id="backup-advice">Tietosi ovat vain tällä laitteella ja katoavat, jos selaintiedot tyhjennetään tai sovellus poistetaan.</p>' : '';
   return `<details class="backup-group" ${backupOpen || importMessage ? 'open' : ''}>
-    <summary>Varmuuskopio${due ? ' <span class="settings-flag">Tee varmuuskopio</span>' : ''}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
+    <summary>Varmuuskopio${due ? ' <span class="settings-flag">Tee varmuuskopio</span>' : autoNeedsGrant() ? ' <span class="settings-flag">Anna lupa</span>' : ''}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
     <section class="backup compact" aria-label="Varmuuskopio">
       <div class="backup-text"><p class="backup-status" id="backup-status">${status}</p>${advice}<p class="backup-status" id="persist-status">${esc(storageNote())}</p></div>
+      <div class="autobackup" id="autobackup">${autoBackupHtml()}</div>
       <div class="settings-actions"><button class="btn secondary" data-action="export" data-key="export">Vie varmuuskopio</button><button class="btn secondary" data-action="import" data-key="import">Tuo varmuuskopio</button><button class="btn secondary" data-action="restore" data-key="restore">Palauta varmuuskopio</button></div>
       <p class="muted small-copy">Tuonti yhdistää varmuuskopion nykyisiin tietoihin. Palautus korvaa ne. Keskeneräinen harjoitus säilyy aina.</p>
       ${importMessage ? `<p class="small-copy" id="import-status" role="status">${esc(importMessage)}</p>` : ''}
@@ -340,7 +437,7 @@ function backupCompact() {
   </details>`;
 }
 function backupFlag() {
-  return backupInfo().due ? '<span class="settings-flag">Varmuuskopioi</span>' : '';
+  return backupInfo().due || autoNeedsGrant() ? '<span class="settings-flag">Varmuuskopioi</span>' : '';
 }
 const progressBar = (p) => `<progress class="progress" max="${Math.max(1, p.total)}" value="${p.done}" aria-label="Harjoituksen edistyminen">${p.pct}%</progress>`;
 
@@ -1240,6 +1337,14 @@ function addPresetInterval(kind) {
 }
 
 const actions = {
+  async autobackupgrant() {
+    const ab = autoBackup;
+    if (!ab.handle) return;
+    ab.permission = await autobackup.permission(ab.handle, true);
+    paintAutoBackup();
+    if (ab.permission === 'granted') void runAutoBackup();
+  },
+  autobackupfolder() { return chooseAutoFolder(); },
   statistics() { readLatest(); view = 'statistics'; render(); },
   showhistory() { readLatest(); view = 'history'; render(); },
   timer() { readLatest(); timerDraft = null; timerError = ''; view = 'timer'; render(); },
@@ -1855,6 +1960,7 @@ async function commitHistoryEdit(t) {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.autobackup) { void (t.checked ? chooseAutoFolder() : disableAutoBackup()); return; }
   if (t.dataset.appearance) {
     window.TrackerAppearance?.set(t.dataset.appearance);
     appearanceMessage = 'Ulkoasu tallennettu tälle laitteelle.';
@@ -1968,8 +2074,9 @@ window.addEventListener('storage', (e) => {
 });
 document.addEventListener('visibilitychange', () => {
   cancelExerciseScroll();
-  if (document.visibilityState === 'hidden') persistHr(true);
+  if (document.visibilityState === 'hidden') { persistHr(true); if (autoBackup.pending) scheduleAutoBackup(0); }
   if (document.visibilityState === 'visible') {
+    if (autoBackupDue()) scheduleAutoBackup(1500);
     readLatest(); if (view !== 'edit') render();
     updateDismissed = false; syncUpdateState(); void checkForUpdates();
   }
@@ -1992,4 +2099,12 @@ if ('serviceWorker' in navigator) {
 render();
 void hr.restore();
 if (state.history.length && !locked()) void requestPersistence();
+if (autoBackup.supported) {
+  void autobackup.loadConfig().then(async (config) => {
+    if (!config?.enabled || !config.handle) return;
+    Object.assign(autoBackup, { enabled: true, handle: config.handle, lastAt: Number(config.lastAt) || 0, permission: await autobackup.permission(config.handle) });
+    if (view === 'home') render(); else paintAutoBackup();
+    if (autoBackupDue()) scheduleAutoBackup(1500);
+  });
+}
 if (view === 'workout') showCurrentExercise({ instant: true });

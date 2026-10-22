@@ -1,4 +1,7 @@
 [
+  { "version": 60, "date": "2026-10-22", "changes": [
+    "Asetukset > Varmuuskopio -kohtaan on lisätty valinnainen Automaattinen varmuuskopio kansioon. Kun kytket sen päälle ja valitset kansion, sovellus tallentaa tiedot itsestään kansioon sen ollessa auki: viimeisin kopio sekä yksi kopio päivässä, 14 viimeisintä päivää. Toimii tietokoneen Chromessa ja Edgessä sekä uusimmassa Androidin Chromessa, ei iPhonessa. Selain voi pyytää lupaa kansioon uudelleen, ja sen voi antaa Anna lupa kansioon -painikkeella. Kopiot ovat vain tällä laitteella. Tallennetut treenit, historia ja aiemmat varmuuskopiot säilyvät ennallaan."
+  ] },
   { "version": 59, "date": "2026-10-22", "changes": [
     "Ajastinsarjaan voi nyt halutessaan liittää liikkeen, painon ja toistot kierrosta kohti. Kun ajastin valmistuu tai lopetat sen kesken, valmiit kierrokset tallentuvat harjoitushistoriaan yhtenä sarjana kierrosta kohti, ja ne näkyvät tilastoissa sekä ennätyksissä painon mukaan. Ilman liikettä ajastin toimii kuten ennen. Aiemmat tiedot ja varmuuskopiot säilyvät ennallaan."
   ] },
