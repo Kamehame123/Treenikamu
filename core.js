@@ -656,30 +656,6 @@ export function summarize(session, now = Date.now(), hr = null) {
   };
 }
 
-// A timer run with an attached exercise becomes a history entry: one done set per completed round
-// (at most MAX_SETS). The id is fixed per run, so logging the same run twice cannot duplicate it.
-export function timerHistoryEntry(timer, run, now = Date.now(), tracking = null) {
-  const workout = timer?.workout;
-  if (!workout) return null;
-  const roundMs = timer.intervals.reduce((sum, i) => sum + i.seconds, 0) * 1000;
-  const elapsed = Math.max(0, (run.pausedAt ?? now) - run.startedAt - run.pausedMs);
-  const rounds = Math.min(timer.repeats, Math.floor(elapsed / roundMs));
-  if (rounds < 1) return null;
-  const finished = rounds === timer.repeats;
-  const endedAt = Math.min(now, finished ? run.startedAt + run.pausedMs + roundMs * rounds : run.pausedAt ?? now);
-  const sets = Math.min(rounds, MAX_SETS);
-  const target = workout.reps ? String(workout.reps) : `${roundMs / 1000} s`;
-  const set = { done: true, kind: 'working', reps: target,
-    ...(workout.reps ? { actualReps: String(workout.reps) } : { actualSeconds: String(roundMs / 1000) }),
-    ...(workout.weight ? { actualWeight: workout.weight } : {}) };
-  const exercises = sanitizeSession({ exercises: [{ id: timer.id, name: workout.name, reps: target, weight: workout.weight,
-    ...(tracking ? { tracking } : {}), sets: Array.from({ length: sets }, () => ({ ...set })) }] }).exercises;
-  return {
-    id: `timer-${timer.id}-${run.startedAt}`, name: timer.name, startedAt: Math.min(run.startedAt, endedAt), endedAt,
-    setsDone: sets, setsTotal: Math.min(timer.repeats, MAX_SETS), routineId: `timer-${timer.id}`, exercises,
-  };
-}
-
 // ---- Completed workouts: delete and correct (always on a transaction copy of the state) ----
 
 const NOT_FOUND = { ok: false, error: 'Harjoitusta ei löytynyt. Näkymä on päivitetty.' };

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as core from '../core.js';
-import { buildRecords, buildStatistics } from '../statistics.js';
 import { defaultTimerName, sanitizeTimers, buildTimer, phaseAt, runElapsed, sanitizeRun, totalSeconds, formatClock, formatLength, draftFrom, newInterval, presetKind, presetSeconds, sanitizeDefaults, intervalSeconds, TIMER_PRESETS } from '../timer.js';
 
 const seq = (over = {}) => ({ id: 'a', name: 'Intervallit', repeats: 3, intervals: [{ id: 'i1', label: 'Juoksu', seconds: 60 }, { id: 'i2', label: 'Kävely', seconds: 30 }], ...over });
@@ -31,7 +30,7 @@ test('buildTimer validates durations, repeats and interval count', () => {
   assert.match(buildTimer(draft({ intervals: [{ id: 'x', label: '', min: '0', sec: '75' }] }), []).error, /ei kelpaa/);
   assert.match(buildTimer(draft({ intervals: [{ id: 'x', label: '', min: '1.5', sec: '0' }] }), []).error, /ei kelpaa/);
   assert.match(buildTimer(draft({ intervals: [] }), []).error, /vähintään yksi/);
-  for (const repeats of ['0', '100', '', 'x', '1.5']) assert.match(buildTimer(draft({ repeats }), []).error, /Toistojen määrä/, repeats);
+  for (const repeats of ['0', '100', '', 'x', '1.5']) assert.match(buildTimer(draft({ repeats }), []).error, /Kierrosten määrä/, repeats);
   const ok = buildTimer(draft({ intervals: [{ id: 'x', label: '  Hölkkä  ', min: '', sec: '45' }, { id: 'y', label: '', min: '2', sec: '5' }] }), []).timer;
   assert.deepEqual(ok.intervals.map((i) => [i.label, i.seconds]), [['Hölkkä', 45], ['', 125]]);
   assert.equal(totalSeconds(ok), 2 * 170);
@@ -168,38 +167,10 @@ test('timers travel in backups, merge by id and survive an old backup being rest
   assert.deepEqual(core.replaceState(local, oldBackup.state).state.timers, timers, 'a backup without timers does not erase them');
 });
 
-test('a timer workout is stored additively, validated, and logged as one done set per completed round', () => {
+test('a stored timer exercise is ignored and never added to a saved sequence', () => {
   const base = { id: 't', name: 'Heitot', repeats: 4, intervals: [{ id: 'a', label: 'Työ', seconds: 30 }, { id: 'b', label: 'Lepo', seconds: 30 }] };
-  assert.equal(sanitizeTimers([base])[0].workout, undefined, 'old sequences stay unchanged');
-  const built = buildTimer({ ...draftFrom(sanitizeTimers([base])[0]), wName: ' Kahvakuulaheitto ', wWeight: '20 kg', wReps: '' }, []);
-  assert.deepEqual(built.timer.workout, { name: 'Kahvakuulaheitto', weight: '20', reps: 0 });
-  assert.deepEqual(draftFrom(built.timer).wWeight, '20');
-  assert.equal(buildTimer({ ...draftFrom(sanitizeTimers([base])[0]), wName: '', wWeight: 'abc' }, []).timer.workout, undefined, 'no exercise, no workout');
-  assert.equal(buildTimer({ ...draftFrom(sanitizeTimers([base])[0]), wName: 'X', wWeight: 'abc' }, []).field, 'wWeight');
-  assert.equal(buildTimer({ ...draftFrom(sanitizeTimers([base])[0]), wName: 'X', wReps: '1.5' }, []).field, 'wReps');
-  assert.deepEqual(sanitizeTimers([{ ...base, workout: { name: 'Soutu', weight: '-3', reps: 500 } }])[0].workout, { name: 'Soutu', weight: '', reps: 100 });
-
-  const timer = { ...base, workout: { name: 'Kahvakuulaheitto', weight: '22,5', reps: 10 } };
-  const run = { id: 't', startedAt: 1_000_000, pausedAt: null, pausedMs: 5000 };
-  const now = run.startedAt + 5000 + 4 * 60_000 + 90_000;
-  const done = core.timerHistoryEntry(timer, run, now);
-  assert.equal(done.id, `timer-t-${run.startedAt}`);
-  assert.equal(done.endedAt, run.startedAt + 5000 + 4 * 60_000, 'a finished run ends when the last round ended');
-  assert.deepEqual([done.setsDone, done.setsTotal], [4, 4]);
-  assert.deepEqual(done.exercises[0].sets[0], { done: true, reps: '10', actualReps: '10', actualWeight: '22,5', kind: 'working' });
-  const partial = core.timerHistoryEntry(timer, { ...run, pausedAt: run.startedAt + 5000 + 150_000 }, now);
-  assert.equal(partial.setsDone, 2, 'only completed rounds count');
-  assert.equal(core.timerHistoryEntry(timer, run, run.startedAt + 5000 + 59_000), null, 'no completed round, nothing to log');
-  assert.equal(core.timerHistoryEntry(base, run, now), null, 'sequences without a workout log nothing');
-  const timed = core.timerHistoryEntry({ ...timer, workout: { name: 'Lankku', weight: '', reps: 0 } }, run, now);
-  assert.deepEqual(timed.exercises[0].sets[0], { done: true, reps: '60 s', actualSeconds: '60', kind: 'working' });
-  assert.equal(core.timerHistoryEntry({ ...timer, repeats: 30 }, run, run.startedAt + 5000 + 30 * 60_000).setsDone, 20, 'capped at the set limit');
-
-  const state = core.sanitizeState({ v: 1, routines: core.defaultState().routines, history: [done], timers: [timer] });
-  assert.deepEqual(state.timers[0].workout, timer.workout);
-  const records = buildRecords(state.history, now + 1);
-  assert.deepEqual(records.map((r) => [r.name, r.weight]), [['Kahvakuulaheitto', 22.5]], 'the timer workout counts toward the maximum record');
-  const stats = buildStatistics(state.history, { now: now + 1, range: 'all' });
-  assert.equal(stats.totals.workouts, 1);
-  assert.equal(stats.totals.sets, 4);
+  const legacy = sanitizeTimers([{ ...base, workout: { name: 'Kahvakuulaheitto', weight: '20', reps: 10 } }])[0];
+  assert.equal(legacy.workout, undefined);
+  assert.deepEqual(buildTimer(draftFrom(legacy), []).timer, base);
 });
+

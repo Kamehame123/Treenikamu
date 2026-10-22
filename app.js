@@ -119,7 +119,6 @@ const statisticsFilters = { range: '12w', from: localDateKey(shiftDays(Date.now(
 let timerDraft = null;
 let timerError = '';
 let timerCue = null;
-let timerLogError = '';
 let audioContext = null;
 // mode 'draft' picks for the program editor; mode 'session' swaps or adds an exercise in the active workout only.
 let picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target: null, adding: true, keepOpen: false, added: [], mode: 'draft' };
@@ -668,12 +667,12 @@ function timerListView(timers) {
   const items = timers.map((t) => {
     const id = esc(t.id);
     const steps = t.intervals.map((i, n) => `<li>${esc(intervalLabel(t, n))} · ${formatLength(i.seconds)}</li>`).join('');
-    return `<li class="card timer-item"><div><h2>${esc(t.name)}</h2><p class="muted small-copy">${t.intervals.length} ${t.intervals.length === 1 ? 'intervalli' : 'intervallia'} · ${t.repeats} ${t.repeats === 1 ? 'kierros' : 'kierrosta'} · yhteensä ${formatLength(totalSeconds(t))}</p>${t.workout ? `<p class="small-copy timer-workout">${icon('weight')} Kirjataan historiaan: ${esc(t.workout.name)}${t.workout.weight ? ` · ${esc(t.workout.weight)} kg` : ''}${t.workout.reps ? ` · ${t.workout.reps} toistoa` : ''}</p>` : ''}</div><ol class="timer-steps" aria-label="Intervallit: ${esc(t.name)}">${steps}</ol><div class="timer-item-actions"><button class="btn primary" data-action="timerstart" data-id="${id}" data-key="tstart-${id}" aria-label="Käynnistä: ${esc(t.name)}">${icon('play')} Käynnistä</button><button class="btn small" data-action="timeredit" data-id="${id}" data-key="tedit-${id}" aria-label="Muokkaa: ${esc(t.name)}">Muokkaa</button><button class="btn small delete" data-action="timerdelete" data-id="${id}" data-key="tdel-${id}" aria-label="Poista: ${esc(t.name)}">Poista</button></div></li>`;
+    return `<li class="card timer-item"><div><h2>${esc(t.name)}</h2><p class="muted small-copy">${t.intervals.length} ${t.intervals.length === 1 ? 'intervalli' : 'intervallia'} · ${t.repeats} ${t.repeats === 1 ? 'kierros' : 'kierrosta'} · yhteensä ${formatLength(totalSeconds(t))}</p></div><ol class="timer-steps" aria-label="Intervallit: ${esc(t.name)}">${steps}</ol><div class="timer-item-actions"><button class="btn primary" data-action="timerstart" data-id="${id}" data-key="tstart-${id}" aria-label="Käynnistä: ${esc(t.name)}">${icon('play')} Käynnistä</button><button class="btn small" data-action="timeredit" data-id="${id}" data-key="tedit-${id}" aria-label="Muokkaa: ${esc(t.name)}">Muokkaa</button><button class="btn small delete" data-action="timerdelete" data-id="${id}" data-key="tdel-${id}" aria-label="Poista: ${esc(t.name)}">Poista</button></div></li>`;
   }).join('');
-  const empty = `<div class="empty-state">${icon('clock')}<h3>Ei vielä ajastinsarjoja</h3><p>Luo sarja, jossa on intervalleja, selitykset ja toistojen määrä.</p></div>`;
+  const empty = `<div class="empty-state">${icon('clock')}<h3>Ei vielä ajastinsarjoja</h3><p>Luo sarja, jossa on intervalleja, selitykset ja kierrosten määrä.</p></div>`;
   const add = timers.length >= TIMER_MAX_SEQUENCES ? '' : `<button class="btn ${timers.length ? 'secondary' : 'primary'}" data-action="timernew" data-key="timernew">${icon('plus')} Uusi sarja</button>`;
   return timerChrome(`<button class="btn ghost back" data-action="home" data-key="timer-back">${icon('back')} Harjoituksiin</button>`,
-    `<div class="stat-heading"><h1 tabindex="-1">Ajastin</h1><p class="muted">Intervalliajastin: määritä jaksot selityksineen ja toistojen määrä.</p></div>${timers.length ? `<ul class="list timer-list">${items}</ul>` : empty}${add}`);
+    `<div class="stat-heading"><h1 tabindex="-1">Ajastin</h1><p class="muted">Intervalliajastin: määritä jaksot selityksineen ja kierrosten määrä.</p></div>${timers.length ? `<ul class="list timer-list">${items}</ul>` : empty}${add}`);
 }
 
 function timerEditorView(timers) {
@@ -685,20 +684,13 @@ function timerEditorView(timers) {
     <div class="timer-fieldset-actions"><button class="btn small delete" data-action="timerdelint" data-i="${n}" data-key="tdelint-${n}" aria-label="Poista intervalli ${n + 1}" ${d.intervals.length < 2 ? 'disabled' : ''}>Poista intervalli</button><button class="btn small timer-default" data-action="timerdefault" data-i="${n}" data-key="tdef-${n}" aria-label="Tee oletus intervalli ${n + 1}" ${presetKind(i.label) ? '' : 'hidden'}>Tee oletus</button></div></fieldset>`).join('');
   const error = timerError ? `<div class="banner" role="alert" id="timer-err" tabindex="-1"><div>${esc(timerError)}</div></div>` : '';
   const full = d.intervals.length >= TIMER_MAX_INTERVALS ? 'disabled' : '';
-  const exerciseNames = [...new Set([...state.customExercises, ...EXERCISES].map((e) => e.name))].map((n) => `<option value="${esc(n)}"></option>`).join('');
   const preset = (kind) => `<button class="btn secondary timer-preset" data-action="timeradd${kind}" data-key="timer-${kind}" ${full}>${TIMER_PRESETS[kind].label} <span class="timer-preset-time">${formatClock(presetSeconds(state.timerDefaults, kind) * 1000)}</span></button>`;
   return timerChrome(`<button class="btn ghost back" data-action="timercancel" data-key="timer-cancel-top">${icon('back')} Ajastimiin</button>`,
     `<div class="stat-heading"><h1 tabindex="-1">${d.id ? 'Muokkaa sarjaa' : 'Uusi sarja'}</h1><p class="muted">Intervallit suoritetaan järjestyksessä ja koko sarja toistetaan valitun kierrosmäärän verran.</p></div>
     <div class="card timer-editor"><label class="field">Sarjan nimi<input type="text" maxlength="60" placeholder="${esc(placeholder)}" value="${esc(d.name)}" data-tf="name" data-key="tf-name"><small class="muted">Jos nimeä ei anneta, käytetään nimeä ${esc(placeholder)}.</small></label>
-    <label class="field">Toistojen määrä (kierrosta)<input type="number" inputmode="numeric" min="1" max="99" step="1" value="${esc(d.repeats)}" data-tf="repeats" data-key="tf-repeats"></label></div>
+    <label class="field">Kierrosten määrä<input type="number" inputmode="numeric" min="1" max="99" step="1" value="${esc(d.repeats)}" data-tf="repeats" data-key="tf-repeats"></label></div>
     ${intervals}
     <div class="timer-add-row">${preset('work')}<button class="btn secondary" data-action="timeraddint" data-key="timer-add" ${full}>${icon('plus')} Lisää intervalli</button>${preset('rest')}</div>
-    <fieldset class="card timer-workout-fieldset"><legend>Kirjaa historiaan (valinnainen)</legend>
-      <p class="muted small-copy">Kun liike on valittu, valmistuneet kierrokset tallentuvat harjoitushistoriaan ja tilastoihin yhtenä sarjana kierrosta kohti (enintään 20 sarjaa). Paino huomioidaan ennätyksissä.</p>
-      <label class="field">Liike<input type="text" maxlength="60" list="timer-exercises" autocomplete="off" placeholder="esim. Kahvakuulaheitto" value="${esc(d.wName)}" data-tf="wName" data-key="tw-name"></label>
-      <datalist id="timer-exercises">${exerciseNames}</datalist>
-      <div class="timer-duration"><label class="field">Paino (kg)<input type="text" inputmode="decimal" maxlength="20" placeholder="esim. 20" value="${esc(d.wWeight)}" data-tf="wWeight" data-key="tw-weight"></label><label class="field">Toistot / kierros<input type="number" inputmode="numeric" min="1" max="100" step="1" placeholder="kesto" value="${esc(d.wReps)}" data-tf="wReps" data-key="tw-reps"></label></div>
-    </fieldset>
     ${error}
     <div class="timer-controls"><button class="btn" data-action="timercancel" data-key="timer-cancel">Peruuta</button><button class="btn primary" data-action="timersave" data-key="timer-save">Tallenna sarja</button></div>`);
 }
@@ -713,19 +705,11 @@ function timerRunSnapshot(timer) {
   };
 }
 
-function timerLogNote(timer) {
-  if (!timer.workout) return '';
-  const saved = `${esc(timer.workout.name)}${timer.workout.weight ? ` · ${esc(timer.workout.weight)} kg` : ''} · ${Math.min(timer.repeats, 20)} ${timer.repeats === 1 ? 'sarja' : 'sarjaa'}`;
-  if (timerRun.logged) return `<p class="muted" id="timer-log-note" role="status">${icon('check')} Tallennettu historiaan: ${saved}.</p>`;
-  if (timerLogError) return `<div class="banner" role="alert" id="timer-log-note"><div>${esc(timerLogError)}</div></div><button class="btn secondary" data-action="timerlog" data-key="timer-log">Tallenna historiaan</button>`;
-  return `<p class="muted" id="timer-log-note" role="status">Tallennetaan historiaan…</p>`;
-}
-
 function timerRunView(timer) {
   const snap = timerRunSnapshot(timer);
   const done = snap.phase.done;
   const body = done
-    ? `<section class="card timer-card" aria-label="Ajastin valmis"><span class="eyebrow accent">${icon('check')} Valmis</span><p class="timer-label">${timer.repeats} ${timer.repeats === 1 ? 'kierros' : 'kierrosta'} tehty</p><p class="muted">${esc(timer.name)} · yhteensä ${formatLength(totalSeconds(timer))}</p>${timerLogNote(timer)}</section>
+    ? `<section class="card timer-card" aria-label="Ajastin valmis"><span class="eyebrow accent">${icon('check')} Valmis</span><p class="timer-label">${timer.repeats} ${timer.repeats === 1 ? 'kierros' : 'kierrosta'} tehty</p><p class="muted">${esc(timer.name)} · yhteensä ${formatLength(totalSeconds(timer))}</p></section>
       <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-close">Sulje</button><button class="btn primary" data-action="timerstart" data-id="${esc(timer.id)}" data-key="timer-again">Aloita alusta</button></div>`
     : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="timer-round" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label" id="trun-label">${esc(snap.label)}</p></section>
       <div class="timer-controls timer-run-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">${icon('stop')}Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')}Jatka</button>` : `<button class="btn primary" data-action="timerpause" data-key="timer-pause">${icon('pause')}Tauko</button>`}</div>`;
@@ -744,43 +728,9 @@ function timerView() {
 
 function rememberTimerRun() {
   try {
-    if (timerRun) sessionStorage.setItem(TIMER_RUN_KEY, JSON.stringify({ id: timerRun.id, startedAt: timerRun.startedAt, pausedAt: timerRun.pausedAt, pausedMs: timerRun.pausedMs, logged: timerRun.logged === true }));
+    if (timerRun) sessionStorage.setItem(TIMER_RUN_KEY, JSON.stringify({ id: timerRun.id, startedAt: timerRun.startedAt, pausedAt: timerRun.pausedAt, pausedMs: timerRun.pausedMs }));
     else sessionStorage.removeItem(TIMER_RUN_KEY);
   } catch { /* The run still works until the tab closes. */ }
-}
-
-// Saves the run's completed rounds to the workout history once; true when saved or nothing to save.
-async function logTimerRun(timer) {
-  if (!timerRun || timerRun.logged || !timer.workout) return true;
-  const run = { ...timerRun };
-  const match = [...EXERCISES, ...state.customExercises].find((e) => normalizeSearch(e.name) === normalizeSearch(timer.workout.name));
-  const entry = core.timerHistoryEntry(timer, run, Date.now(), match ? libraryTracking(match) : null);
-  if (!entry) return true;
-  timerRun.logged = true; rememberTimerRun();
-  timerLogError = '';
-  const ok = await mutate((next) => {
-    if (next.history.some((h) => h.id === entry.id)) return true;
-    if (next.history.length >= core.MAX_HISTORY) { timerLogError = 'Historia on täynnä. Poista vanhoja harjoituksia ensin.'; return false; }
-    next.history.unshift(entry);
-  }, { critical: true });
-  if (!ok) {
-    timerLogError ||= 'Tallennus ei onnistunut. Tarkista tallennuksen tila ja yritä uudelleen.';
-    if (timerRun?.startedAt === run.startedAt) { timerRun.logged = false; rememberTimerRun(); }
-    render();
-  }
-  return ok;
-}
-
-// Resolves to true when the user may stop: confirmed, and any completed rounds were saved or declined.
-async function confirmStopTimer(question, accept) {
-  const timer = (state.timers ?? []).find((t) => t.id === timerRun.id);
-  const entry = timer && !timerRun.logged ? core.timerHistoryEntry(timer, timerRun) : null;
-  const message = entry ? `${question} ${entry.setsDone} valmista kierrosta tallennetaan historiaan liikkeenä ${timer.workout.name}.` : question;
-  if (!await askConfirm(message, accept)) return false;
-  if (entry && !await logTimerRun(timer)) {
-    return askConfirm(`Kierroksia ei voitu tallentaa historiaan. ${timerLogError} Lopetetaanko silti tallentamatta?`, 'Lopeta tallentamatta');
-  }
-  return true;
 }
 
 // Browsers only allow sound after a tap, so the audio context is created from the start/resume tap.
@@ -811,7 +761,6 @@ function paintTimer() {
   const snap = timerRunSnapshot(timer);
   if (snap.phase.done !== !!timerRun.done) {
     timerRun.done = snap.phase.done; render();
-    if (snap.phase.done) void logTimerRun(timer);
     return;
   }
   if (!snap.phase.done) {
@@ -850,7 +799,7 @@ function homeView() {
         <summary><h2>${esc(r.name)}</h2>
           <span class="routine-meta"><span><b>${r.exercises.length}</b> liikettä</span> <span><b>${r.exercises.reduce((n, e) => n + e.sets, 0)}</b> sarjaa</span> <span class="settings-chevron" aria-hidden="true">⌄</span></span>
         </summary>
-        <div class="routine-body"><ul class="routine-pills" aria-label="Liikkeet: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div><div class="routine-variants"><button class="btn secondary" data-action="start" data-mode="light" data-key="start-light-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Kevennetty treeni: ${esc(r.name)}">Kevennetty</button><button class="btn secondary" data-action="start" data-mode="super" data-key="start-super-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Super treeni: ${esc(r.name)}">Super</button></div><p class="muted small-copy">Kevennetty heikkoon palautumiseen: toistot ja painot noin 15 % pienemmät, samat sarjat. Super: yksi lisäsarja jokaiseen liikkeeseen. Ohjelma ei muutu.</p>${progressionControls(r)}</div>
+        <div class="routine-body"><ul class="routine-pills" aria-label="Liikkeet: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div><div class="routine-variants"><button class="btn secondary" data-action="start" data-mode="light" data-key="start-light-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Kevennetty treeni: ${esc(r.name)}"><span class="variant-title">Kevennetty</span><span class="variant-note">Toistot ja painot -15 %</span></button><button class="btn secondary" data-action="start" data-mode="super" data-key="start-super-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Super treeni: ${esc(r.name)}"><span class="variant-title">Super</span><span class="variant-note">Lisäsarja liikkeisiin</span></button></div><p class="muted small-copy">Ohjelma ei muutu.</p>${progressionControls(r)}</div>
       </details></li>`;
   }).join('');
   const ios = (/iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) && !navigator.standalone;
@@ -1349,7 +1298,7 @@ const actions = {
   showhistory() { readLatest(); view = 'history'; render(); },
   timer() { readLatest(); timerDraft = null; timerError = ''; view = 'timer'; render(); },
   timernew() {
-    timerDraft = { id: null, name: '', repeats: '1', wName: '', wWeight: '', wReps: '', intervals: [newInterval()] }; timerError = '';
+    timerDraft = { id: null, name: '', repeats: '1', intervals: [newInterval()] }; timerError = '';
     render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
   },
   timeredit(t) {
@@ -1427,7 +1376,7 @@ const actions = {
     if (!timer) { render(); announce('Sarjaa ei löytynyt. Näkymä on päivitetty.'); return; }
     prepareAudio();
     timerRun = { id: timer.id, startedAt: Date.now(), pausedAt: null, pausedMs: 0, done: false };
-    timerCue = ''; timerLogError = ''; rememberTimerRun();
+    timerCue = ''; rememberTimerRun();
     render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
   },
   timerpause() {
@@ -1440,16 +1389,9 @@ const actions = {
     timerRun.pausedMs += Date.now() - timerRun.pausedAt; timerRun.pausedAt = null; rememberTimerRun(); render(); announce('Ajastin jatkuu.');
   },
   async timerstop() {
-    if (timerRun && !timerRun.done && !await confirmStopTimer('Lopetetaanko ajastin?', 'Lopeta')) return;
+    if (timerRun && !timerRun.done && !await askConfirm('Lopetetaanko ajastin?', 'Lopeta')) return;
     timerRun = null; rememberTimerRun(); render();
     window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
-  },
-  async timerlog() {
-    const timer = timerRun && (state.timers ?? []).find((t) => t.id === timerRun.id);
-    if (!timer) return;
-    const ok = await logTimerRun(timer);
-    if (ok) announce('Harjoitus tallennettu historiaan.');
-    else { render(); document.querySelector('[data-key="timer-log"]')?.focus(); }
   },
   records() { readLatest(); view = 'records'; render(); },
   homeperiod() {
@@ -1576,7 +1518,7 @@ const actions = {
     render();
   },
   async home() {
-    if (timerRun && !timerRun.done && !await confirmStopTimer('Pysäytetäänkö ajastin?', 'Pysäytä')) return;
+    if (timerRun && !timerRun.done && !await askConfirm('Pysäytetäänkö ajastin?', 'Pysäytä')) return;
     timerRun = null; timerDraft = null; timerError = ''; rememberTimerRun();
     if (draft && JSON.stringify({ name: draft.name, exercises: draft.exercises }) !== draft.initial && !await askConfirm('Hylätäänkö harjoituksen tallentamattomat muutokset?', 'Hylkää')) return;
     clearDraft(); view = 'home'; render();
@@ -1898,7 +1840,7 @@ document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.dataset.tf && timerDraft) {
     const field = t.dataset.tf;
-    if (['name', 'repeats', 'wName', 'wWeight', 'wReps'].includes(field)) timerDraft[field] = t.value;
+    if (['name', 'repeats'].includes(field)) timerDraft[field] = t.value;
     else if (['label', 'min', 'sec'].includes(field) && timerDraft.intervals[+t.dataset.ti]) {
       timerDraft.intervals[+t.dataset.ti][field] = t.value;
       if (field === 'label') t.closest('fieldset')?.querySelector('[data-action="timerdefault"]')?.toggleAttribute('hidden', !presetKind(t.value));

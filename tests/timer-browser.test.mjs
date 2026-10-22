@@ -12,7 +12,7 @@ async function openTimer(page) {
   await page.getByRole('heading', { name: 'Ajastin', exact: true }).waitFor();
 }
 // Creates a sequence; each interval is [label, minutes, seconds].
-async function createSequence(page, { name = '', repeats = '1', intervals, workout = null }) {
+async function createSequence(page, { name = '', repeats = '1', intervals }) {
   await tap(page.locator('[data-key="timernew"]'));
   if (name) await page.locator('[data-key="tf-name"]').fill(name);
   await page.locator('[data-key="tf-repeats"]').fill(repeats);
@@ -21,11 +21,6 @@ async function createSequence(page, { name = '', repeats = '1', intervals, worko
     await page.locator(`[data-key="tl-${n}"]`).fill(label);
     await page.locator(`[data-key="tm-${n}"]`).fill(min);
     await page.locator(`[data-key="ts-${n}"]`).fill(sec);
-  }
-  if (workout) {
-    await page.locator('[data-key="tw-name"]').fill(workout.name);
-    await page.locator('[data-key="tw-weight"]').fill(workout.weight ?? '');
-    await page.locator('[data-key="tw-reps"]').fill(workout.reps ?? '');
   }
   await tap(page.locator('[data-key="timer-save"]'));
 }
@@ -89,7 +84,7 @@ try {
           await page.locator('[data-key="ts-0"]').fill('20');
           await page.locator('[data-key="tf-repeats"]').fill('0');
           await tap(page.locator('[data-key="timer-save"]'));
-          await page.getByRole('alert').filter({ hasText: 'Toistojen määrä' }).waitFor();
+          await page.getByRole('alert').filter({ hasText: 'Kierrosten määrä' }).waitFor();
           assert.equal(await page.locator('[data-key="ts-0"]').inputValue(), '20');
           assert.equal((await saved(page))?.timers, undefined);
         });
@@ -114,32 +109,6 @@ try {
           assert.match(await text(page, 'trun-round'), /Kierros 1\/2/i);
           await tapConfirm(button(page, 'Lopeta'));
           await page.getByRole('heading', { name: 'Ajastin', exact: true }).waitFor();
-        });
-
-        await run('a sequence with an exercise logs the finished run to history and records; stopping early logs completed rounds', async (page) => {
-          await openTimer(page);
-          await createSequence(page, { name: 'Heitot', repeats: '2', intervals: [['Työ', '', '1']], workout: { name: 'Kahvakuulaheitto', weight: '20', reps: '10' } });
-          assert.match(await page.locator('.timer-workout').innerText(), /Kahvakuulaheitto · 20 kg · 10 toistoa/);
-          await tap(button(page, 'Käynnistä: Heitot'));
-          await page.locator('.timer-label', { hasText: '2 kierrosta tehty' }).waitFor({ timeout: 8000 });
-          await page.locator('#timer-log-note', { hasText: 'Tallennettu historiaan' }).waitFor();
-          let data = await saved(page);
-          assert.equal(data.history.length, 1);
-          assert.equal(data.history[0].name, 'Heitot');
-          assert.equal(data.history[0].setsDone, 2);
-          assert.deepEqual(data.history[0].exercises[0].sets.map((s) => [s.done, s.actualReps, s.actualWeight]), [[true, '10', '20'], [true, '10', '20']]);
-          await page.reload(); await page.locator('h1').waitFor();
-          assert.equal((await saved(page)).history.length, 1, 'reloading the finished run does not log it twice');
-          await tap(button(page, 'Aloita alusta'));
-          await page.waitForTimeout(1300);
-          await tapConfirm(button(page, 'Lopeta'));
-          await page.getByRole('heading', { name: 'Ajastin', exact: true }).waitFor();
-          data = await saved(page);
-          assert.equal(data.history.length, 2);
-          assert.equal(data.history[0].setsDone, 1, 'only the completed round of the stopped run is logged');
-          await tap(button(page, 'Harjoituksiin'));
-          await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('main, #app').first().innerText(), /Kahvakuulaheitto/);
         });
 
         await run('pause freezes the clock, stop asks first, reload restores the run', async (page) => {

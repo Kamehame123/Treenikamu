@@ -44,15 +44,10 @@ announced to screen readers, and the screen wake lock stays on while the timer i
 open. Elapsed time is timestamp based and a running timer survives a reload, but
 iOS pauses page JavaScript when the screen locks, so cues cannot fire then.
 Sequences and the Työ/Lepo defaults are saved locally and included in backups.
-A sequence can optionally have an **exercise** (name suggested from the library,
-optional kg weight and optional reps per round) in the editor's "Kirjaa historiaan"
-section. When such a run finishes, or is stopped with at least one completed round,
-it is saved to the workout history as one done working set per completed round (at
-most 20), so it appears in history, statistics and the maximum-weight records. With
-reps the sets log reps, otherwise the round duration. A run is logged once (fixed
-history id per run, remembered in the tab session), a failed save offers retry, and
-sequences without an exercise are never logged. This is an additive change (`timers` and
-`timerDefaults` are written only once they exist; `workout` on a sequence is optional): existing browser data, history, imports and old backups load and restore
+The timer holds only intervals and a round count (**Kierrosten määrä**); it never
+writes to the workout history. This is an additive change (`timers` and
+`timerDefaults` are written only once they exist; an exercise stored on a sequence
+by an earlier version is ignored): existing browser data, history, imports and old backups load and restore
 unchanged, so no migration is needed. **Tilastot** moved from home to the top of
 **Historia**. Run `npm run test:timer` for the Chromium/WebKit timer tests.
 

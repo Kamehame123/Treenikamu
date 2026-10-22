@@ -91,7 +91,8 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .exercise-actions-row .btn { flex: 1 1 140px; }
 .exercise-log > .field, .exercise-log > .check, .progression-editor > .check { margin-top: 12px; }
 .routine-variants { display: flex; gap: var(--control-gap); margin-top: var(--control-gap); }
-.routine-variants .btn { flex: 1; width: auto; }
+.routine-variants .btn { flex: 1; width: auto; flex-direction: column; gap: 2px; padding-block: 8px; line-height: 1.2; }
+.variant-note { font-size: 12px; font-weight: 500; color: var(--muted); }
 .history-log { padding-inline: 12px; font-size: 12px; overflow-wrap: anywhere; }
 .history-log li { margin-block: 8px; }
 .routine-details > summary { display: grid; align-content: center; gap: 6px; min-height: 56px; padding-right: 76px; list-style: none; cursor: pointer; }
@@ -484,9 +485,7 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .timer-item-actions .delete { color: var(--danger); }
 .timer-editor { display: grid; gap: var(--control-gap); }
 .timer-fieldset { display: grid; gap: var(--control-gap); min-width: 0; margin: 0; padding: var(--card-padding); border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
-.timer-fieldset legend, .timer-workout-fieldset legend { padding-inline: var(--space-2); font-size: 13px; font-weight: 700; }
-.timer-workout-fieldset { display: grid; gap: var(--control-gap); min-width: 0; margin: 0; }
-.timer-workout { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.timer-fieldset legend { padding-inline: var(--space-2); font-size: 13px; font-weight: 700; }
 .timer-fieldset .delete { justify-self: start; color: var(--danger); }
 .timer-fieldset-actions { display: flex; align-items: center; gap: var(--control-gap); }
 .timer-fieldset-actions .timer-default { margin-left: auto; }

@@ -1,4 +1,7 @@
 [
+  { "version": 61, "date": "2026-10-22", "changes": [
+    "Ajastin on yksinkertaistettu: ajastinsarjaan ei enää liitetä liikettä, painoa tai toistoja, eikä ajastin tallenna mitään harjoitushistoriaan. Kenttä Toistojen määrä on nimetty uudelleen Kierrosten määräksi. Aiemmat tiedot ja varmuuskopiot säilyvät ennallaan."
+  ] },
   { "version": 60, "date": "2026-10-22", "changes": [
     "Asetukset > Varmuuskopio -kohtaan on lisätty valinnainen Automaattinen varmuuskopio kansioon. Kun kytket sen päälle ja valitset kansion, sovellus tallentaa tiedot itsestään kansioon sen ollessa auki: viimeisin kopio sekä yksi kopio päivässä, 14 viimeisintä päivää. Toimii tietokoneen Chromessa ja Edgessä sekä uusimmassa Androidin Chromessa, ei iPhonessa. Selain voi pyytää lupaa kansioon uudelleen, ja sen voi antaa Anna lupa kansioon -painikkeella. Kopiot ovat vain tällä laitteella. Tallennetut treenit, historia ja aiemmat varmuuskopiot säilyvät ennallaan."
   ] },

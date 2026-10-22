@@ -118,8 +118,10 @@ try {
           const normal = p.getByRole('button', { name: 'Aloita harjoitus', exact: true });
           const light = p.getByRole('button', { name: 'Kevennetty treeni: Kasvu', exact: true });
           const boosted = p.getByRole('button', { name: 'Super treeni: Kasvu', exact: true });
-          assert.equal(await light.innerText(), 'Kevennetty');
-          assert.equal(await boosted.innerText(), 'Super');
+          assert.match(await light.innerText(), /^Kevennetty\n/);
+          assert.match(await boosted.innerText(), /^Super\n/);
+          assert.match(await light.innerText(), /Toistot ja painot -15 %/);
+          assert.match(await boosted.innerText(), /Lisäsarja liikkeisiin/);
           const [n, l, s] = await Promise.all([normal, light, boosted].map((b) => b.boundingBox()));
           assert.ok(l.y >= n.y + n.height && s.y >= n.y + n.height, 'variant starts sit below the normal start');
           await tap(light);
