@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
 import * as stats from '../statistics.js';
-import { statisticsView, recordsView, escapeHtml } from '../statistics-ui.js';
+import { statisticsView, recordsView, historySets, escapeHtml } from '../statistics-ui.js';
 import { DAY, NOW, workout, baselineHistory, configuredState, statisticsRoutine } from './statistics-fixtures.mjs';
 
 const dataFor = (history, extra = {}) => stats.buildStatistics(history, { now: NOW, range: 'all', ...extra });
@@ -458,11 +458,11 @@ test('records render compact approximate values, independent dates and escaped c
   heavier.exercises[0].weight = '60'; delete heavier.exercises[0].sets[0].actualReps;
   state.history = [h, heavier];
   const html = recordsView(state);
-  assert.match(html, /1RM <strong>~63,3 kg\/käsipaino<\/strong>/);
+  assert.match(html, /Teoreettinen maksimi <strong>~63,3 kg\/käsipaino<\/strong>/);
   assert.ok(html.includes(new Date(h.endedAt).toLocaleDateString('fi-FI')));
   assert.ok(html.includes(new Date(heavier.endedAt).toLocaleDateString('fi-FI')));
   assert.match(html, /&lt;img/);
-  assert.doesNotMatch(html, /<img|NaN|Infinity|Epley|RIR|epätark/);
+  assert.doesNotMatch(html, /<img|NaN|Infinity|Epley|epätark|\b1RM\b/);
   const weightOnly = recordsView({ history: [heavier] });
   assert.match(weightOnly, /<strong>60 kg<\/strong>/);
   assert.doesNotMatch(weightOnly, /1RM|Täydennä|editrecord/);
@@ -491,7 +491,7 @@ test('one completed 5 x 20 kg set establishes a record regardless of other sets 
   assert.equal(record.weight, 20);
   assert.deepEqual(record.estimates, expected);
   const html = recordsView({ history });
-  assert.match(html, /1RM <strong>~23,3 kg<\/strong>/);
+  assert.match(html, /Teoreettinen maksimi <strong>~23,3 kg<\/strong>/);
   assert.doesNotMatch(html, /Täydennä|editrecord|1RM —/);
   assert.deepEqual(history, before);
 });
@@ -508,4 +508,49 @@ test('weight-only records never ask to complete other sets or manufacture missin
     assert.doesNotMatch(html, /Täydennä|editrecord|1RM/);
     assert.deepEqual(h, before);
   }
+});
+
+test('record disclosures reference the latest weight session and the independent estimate session without mutating data', () => {
+  const best = recordWorkout('best', NOW - 2 * DAY), heavier = recordWorkout('heavier', NOW - DAY);
+  best.name = 'Arvion <paras> treeni';
+  heavier.name = 'Painoennätyksen treeni';
+  heavier.exercises[0].weight = '60'; heavier.exercises[0].sets[0].actualReps = '1';
+  const other = workout('other', NOW - DAY).exercises[1];
+  other.sets[0].done = false; other.sets[1].actualReps = '3';
+  best.exercises.push(other);
+  const duplicate = structuredClone(heavier);
+  duplicate.name = 'Duplicate must not be used'; duplicate.exercises[0].sets[0].actualReps = '10';
+  const history = [heavier, duplicate, best], before = structuredClone(history);
+  const html = recordsView({ history });
+  assert.match(html, /data-session-id="heavier"><summary[^>]*>Näytä ennätyspainon treeni<\/summary>/);
+  assert.match(html, /data-session-id="best"><summary[^>]*>Näytä maksimiarvion treeni<\/summary>/);
+  assert.match(html, /Arvion &lt;paras&gt; treeni/);
+  assert.match(html, /Painoennätyksen treeni/);
+  assert.match(html, /Kulmasoutu tangolla<\/strong>: tekemättä \/ 3 toistoa @ 100/);
+  assert.match(html, /1:00:00 · 2\/3 sarjaa/);
+  assert.doesNotMatch(html, /Duplicate must not be used|<paras>|<details[^>]*\bopen\b/);
+  assert.deepEqual(history, before);
+});
+
+test('shared history sets render actual reps, durations, explicit zeros and missing results without inventing targets', () => {
+  const h = recordWorkout(), e = h.exercises[0];
+  e.name = '<img src=x onerror=alert(1)>'; e.reps = '8'; e.rir = '0'; e.pain = true; e.deload = true;
+  h.fatigued = true;
+  e.sets = [
+    { done: true, actualReps: '5', actualWeight: '20 kg', setRir: '0' },
+    { done: true, actualReps: '0', actualWeight: '0' },
+    { done: true, actualSeconds: '45', reps: '60 s' },
+    { done: true, reps: '8' },
+    { done: false, actualReps: '10', actualWeight: '100' },
+  ];
+  const before = structuredClone(h), html = historySets(h);
+  assert.match(html, /5 toistoa @ 20 kg · RIR 0/);
+  assert.match(html, /0 toistoa @ 0/);
+  assert.match(html, /45 s @ 50/);
+  assert.match(html, /toistot kirjaamatta @ 50/);
+  assert.match(html, /tekemättä · RIR 0 · kipua · kevennetty/);
+  assert.match(html, /Palautuminen oli heikkoa/);
+  assert.match(html, /&lt;img/);
+  assert.doesNotMatch(html, /<img|8 toistoa|10 toistoa|60 s|arvioitu/);
+  assert.deepEqual(h, before);
 });

@@ -1,4 +1,5 @@
 import { buildStatistics, buildRecords, calculateIndex, indexCandidate, indexTimeline, localDateKey, LOAD_TYPES } from './statistics.js';
+import { formatDuration, progress } from './core.js';
 
 export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const esc = escapeHtml;
@@ -72,14 +73,36 @@ export function trackingEditor(exercise, i) {
     <p class="muted small-copy">Pidä kuormakäytäntö samana. Vaihda tunniste, jos laite, liikerata tai suoritustapa muuttuu. Käsipainon kg-lukua ei tuplata.</p></details>`;
 }
 
+export function historySets(h) {
+  const exercises = (h.exercises ?? []).map((e) => {
+    const sets = (e.sets ?? []).map((set) => {
+      if (!set.done) return 'tekemättä';
+      const result = set.actualSeconds !== undefined ? `${esc(set.actualSeconds)} s` :
+        set.actualReps !== undefined ? `${esc(set.actualReps)} toistoa` : 'toistot kirjaamatta';
+      const weight = set.actualWeight || e.weight;
+      return `${result}${weight ? ` @ ${esc(weight)}` : ''}${set.setRir !== undefined ? ` · RIR ${esc(set.setRir)}` : ''}`;
+    }).join(' / ');
+    return `<li><strong>${esc(e.name)}</strong>: ${sets} · RIR ${esc(e.rir ?? 'ei kirjattu')}${e.pain ? ' · kipua' : ''}${e.deload ? ' · kevennetty' : ''}</li>`;
+  }).join('');
+  return `<ul>${exercises}</ul>${h.fatigued ? '<p>Palautuminen oli heikkoa.</p>' : ''}`;
+}
+
+function recordSession(h, key, label) {
+  const { done, total } = progress(h);
+  const metadata = [date(h.endedAt), Number.isFinite(h.startedAt) ? formatDuration(h.endedAt - h.startedAt) : '', `${done}/${total} sarjaa`].filter(Boolean).join(' · ');
+  return `<details class="history-log record-session" data-session-id="${esc(h.id)}"><summary data-key="${esc(key)}">${esc(label)}</summary><div class="record-session-content"><p><strong>${esc(h.name)}</strong></p><p class="muted">${esc(metadata)}</p>${historySets(h)}</div></details>`;
+}
+
 export function recordsView(state) {
   const records = buildRecords(state.history);
+  const sessions = new Map();
+  for (const h of state.history ?? []) if (h && !sessions.has(h.id)) sessions.set(h.id, h);
   const rows = records.map((r) => {
     const estimates = r.estimates.map((estimate) => {
       const context = [estimate.equipment || (r.estimates.length > 1 ? 'Laite ei tiedossa' : ''), estimate.variant].filter(Boolean).join(' · ');
-      return `<div class="record-estimate"><span>1RM <strong>~${esc(fmt(estimate.value, 1))} ${estimate.loadType === 'per-hand' ? 'kg/käsipaino' : 'kg'}</strong></span> <span class="muted record-date">${esc(date(estimate.at))}</span>${context ? ` <span class="muted record-context">${esc(context)}</span>` : ''}</div>`;
+      return `<div class="record-entry"><div class="record-estimate"><span>Teoreettinen maksimi <strong>~${esc(fmt(estimate.value, 1))} ${estimate.loadType === 'per-hand' ? 'kg/käsipaino' : 'kg'}</strong></span> <span class="muted record-date">${esc(date(estimate.at))}</span>${context ? ` <span class="muted record-context">${esc(context)}</span>` : ''}</div>${recordSession(sessions.get(estimate.sessionId), `record-estimate-${estimate.key}`, 'Näytä maksimiarvion treeni')}</div>`;
     }).join('');
-    return `<li class="record-row"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${estimates}</li>`;
+    return `<li class="record-row"><div class="record-entry"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${recordSession(sessions.get(r.sessionId), `record-weight-${r.key}`, 'Näytä ennätyspainon treeni')}</div>${estimates}</li>`;
   }).join('');
   return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin viimeksi. Yksi tehty sarja riittää ennätykseen.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
 }

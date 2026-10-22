@@ -112,12 +112,21 @@ compared with only part of today; custom past ranges include their whole last da
 
 Open **Ennätykset** from home for all-time movement records. The existing heaviest
 logged kg and its latest achievement date remain unchanged. Each movement also
-shows its best estimated single-repetition maximum as **1RM ~63,3 kg**, with the
+shows its best estimated single-repetition maximum as **Teoreettinen maksimi ~63,3 kg**, with the
 estimate's own date. The best estimate can come from a lighter, higher-rep set,
 not necessarily the heaviest logged weight. One completed set is sufficient:
 for example, a recorded 5 x 20 kg set supplies its estimate regardless of missing,
 unfinished or weaker results in other sets or sessions. Records never request
 completion of the remaining sets.
+
+Expand **Näytä ennätyspainon treeni** to see the saved session where the heaviest
+weight was last achieved. Each theoretical maximum has its own **Näytä maksimiarvion
+treeni** disclosure, since its best set may come from a different session. Both
+show the original workout name, date, duration, completed/total set counts and all
+exercises with their recorded reps or seconds, weights, RIR and pain/recovery flags,
+including unfinished sets. Missing actual reps are labelled **toistot kirjaamatta**,
+not inferred from targets. The same set rendering is used in **Historia**.
+Opening and closing these disclosures never edits training data, and works offline.
 
 Estimates use completed sets with explicitly recorded **1–10 actual reps** and
 a positive kg load whose saved historical convention is external total load or

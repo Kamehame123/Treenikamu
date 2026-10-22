@@ -5,7 +5,7 @@ import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from
 import { pickCheer } from './cheers.js';
 import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from './heartrate.js';
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
-import { escapeHtml as esc, statisticsView, recordsView, trackingEditor } from './statistics-ui.js';
+import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
@@ -479,7 +479,7 @@ function progressionControls(r) {
 
 function historyDetails(h) {
   if (!h.exercises?.length) return '';
-  return `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary><ul>${h.exercises.map((e) => `<li><strong>${esc(e.name)}</strong>: ${e.sets.map((set) => set.done ? `${esc(set.actualReps ?? core.setRepCount(e, set) ?? e.reps)} toistoa${set.actualWeight || e.weight ? ` @ ${esc(set.actualWeight || e.weight)}` : ''}` : 'tekemättä').join(' / ')} · RIR ${esc(e.rir ?? 'arvioitu')}${e.pain ? ' · kipua' : ''}</li>`).join('')}</ul>${h.fatigued ? '<p>Palautuminen oli heikkoa.</p>' : ''}</details>`;
+  return `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary>${historySets(h)}</details>`;
 }
 
 const historyDate = (ts) => new Date(ts).toLocaleDateString('fi-FI', { ...(new Date(ts).getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }), month: 'short', day: 'numeric' });

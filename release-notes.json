@@ -1,4 +1,8 @@
 [
+  { "version": 57, "date": "2026-10-22", "changes": [
+    "Ennätyspainon ja teoreettisen maksimin alta voi nyt avata treenin, jossa tulos saavutettiin. Näet alkuperäisen treenin liikkeet, sarjat, kirjatut toistot tai kestot, painot ja tekemättömät sarjat. Painoennätys ja maksimiarvio avaavat kumpikin oman treeninsä.",
+    "Laskettu yhden toiston maksimipaino näkyy nyt nimellä Teoreettinen maksimi, esimerkiksi Teoreettinen maksimi ~50 kg. Ennätykset ja historia käyttävät samaa sarjanäkymää: puuttuvia toteutuneita toistoja ei arvata tavoitteista. Tallennettuja treenejä ja varmuuskopioita ei muuteta."
+  ] },
   { "version": 56, "date": "2026-10-22", "changes": [
     "Etusivun kolmen tilastokortin numerot ja tekstit on keskitetty. Myös painettava viikko- tai kuukausikortti käyttää samaa keskitystä. Tallennetut treenit ja historia säilyvät ennallaan."
   ] },

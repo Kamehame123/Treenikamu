@@ -274,11 +274,12 @@ try {
             assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow at ${width}`);
           }
           await tap(button(p, 'Ennätykset'));
-          const rows = (await p.locator('.record-row').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+          const rows = (await p.locator('.record-result').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
           assert.equal(rows.length, 2);
           assert.match(rows[0], /^Kyykky 100 kg /);
           assert.match(rows[1], /^Penkkipunnerrus 70 kg /);
-          assert.deepEqual(await p.locator('.record-estimate > span').allInnerTexts(), ['1RM —', '1RM —']);
+          assert.equal(await p.locator('.record-estimate').count(), 0);
+          assert.equal(await p.locator('.record-session').count(), 2);
           await tap(button(p, 'Harjoituksiin'));
           assert.deepEqual(await saved(p), state);
         });
@@ -298,25 +299,29 @@ try {
           await p.goto(url);
           await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
           await p.reload();
-          const showRecord = async (pattern) => {
+          const showRecord = async (pattern, sessionId) => {
             await tap(button(p, 'Ennätykset'));
             assert.match(await p.locator('.record-estimate').innerText(), pattern);
+            const disclosure = p.locator('.record-estimate').locator('..').locator('.record-session');
+            assert.equal(await disclosure.getAttribute('data-session-id'), sessionId);
+            await tap(disclosure.locator('summary'));
+            assert.match(await disclosure.innerText(), /Penkkipunnerrus/);
             await tap(button(p, 'Harjoituksiin'));
           };
-          await showRecord(/1RM ~63,3 kg/);
+          await showRecord(/Teoreettinen maksimi ~63,3 kg/, 'record-best');
           await tap(button(p, 'Historia')); await tap(p.locator('[data-key="hedit-record-best"]'));
           await p.locator('[data-key="hr-0-0"]').fill('1'); await p.keyboard.press('Tab');
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
           await tap(button(p, 'Harjoituksiin'));
-          await showRecord(/1RM ~50,7 kg/);
+          await showRecord(/Teoreettinen maksimi ~50,7 kg/, 'record-previous');
           await tap(button(p, 'Historia'));
           const beforeDelete = (await saved(p)).history;
           await tapConfirm(p.locator('[data-key="hdel-record-previous"]'));
-          await tap(button(p, 'Harjoituksiin')); await showRecord(/1RM ~50 kg/);
+          await tap(button(p, 'Harjoituksiin')); await showRecord(/Teoreettinen maksimi ~50 kg/, 'record-best');
           await tap(button(p, 'Historia')); await tap(p.locator('[data-key="undodelete"]'));
           assert.deepEqual((await saved(p)).history, beforeDelete);
-          await tap(button(p, 'Harjoituksiin')); await showRecord(/1RM ~50,7 kg/);
-          await p.reload(); await showRecord(/1RM ~50,7 kg/);
+          await tap(button(p, 'Harjoituksiin')); await showRecord(/Teoreettinen maksimi ~50,7 kg/, 'record-previous');
+          await p.reload(); await showRecord(/Teoreettinen maksimi ~50,7 kg/, 'record-previous');
           assert.deepEqual((await saved(p)).history, beforeDelete);
           assert.deepEqual((await saved(p)).routines, state.routines);
         });
