@@ -244,9 +244,12 @@ scope, storage keys and user data; no data migration or reset is required.
 
 ## Changing exercises during a workout
 
-The compact **- Sarja** / **+ Sarja** buttons sit directly below the RIR choices,
-aligned to the right. The redundant per-exercise "0/3 kirjattu" counter is omitted;
-workout progress and set completion indicators remain unchanged.
+The RIR choices and compact **- Sarja** / **+ Sarja** buttons share one row,
+separated by a short vertical divider. At widths up to 380 px the set buttons show
+only **-** / **+**, retaining their full accessible names. All eight buttons stay
+44 px tall and at least 24 px wide, fitting even a 320 px screen with the exercise
+rail. The redundant per-exercise "0/3 kirjattu" counter is omitted; workout progress
+and set completion indicators remain unchanged.
 
 During a workout, each exercise has "Vaihda tai poista liike" (swap or remove), and
 "Lisää liike tähän treeniin" adds an exercise after the current one. Swapping opens

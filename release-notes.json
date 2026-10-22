@@ -1,4 +1,7 @@
 [
+  { "version": 64, "date": "2026-10-22", "changes": [
+    "RIR-valinnat ja sarjojen − / + -painikkeet ovat nyt samalla rivillä. Ryhmien välissä on pieni pystysuora erotin. Kapeimmilla näytöillä sarjapainikkeissa näkyvät vain − ja +, jotta kaikki painikkeet mahtuvat korttiin. Sarjojen kirjaus, RIR sekä tallennetut treenit ja historia säilyvät ennallaan."
+  ] },
   { "version": 63, "date": "2026-10-22", "changes": [
     "Liikkeen turha 0/3 kirjattu -laskuri on poistettu. Pienemmät − Sarja ja + Sarja -painikkeet ovat tasattuina oikealle heti RIR-valintojen alla. Vaihda tai poista liike -osiosta on poistettu Ohjelma ei muutu -teksti. Sarjojen lisääminen ja poistaminen, RIR sekä tallennetut harjoitukset ja historia toimivat ennallaan."
   ] },

@@ -326,34 +326,40 @@ try {
           assert.deepEqual((await saved(p)).routines, state.routines);
         });
 
-        await run('compact set controls follow RIR without a logged counter and preserve workout edits', async (p) => {
+        await run('RIR and compact set controls share one divided row and preserve workout edits', async (p) => {
           const state = await seedWorkout(p, { autoRest: false, weight: '25 kg' });
           const raw = await p.evaluate(() => localStorage.getItem('gym-tracker-v1'));
           for (const appearance of ['dark', 'aurora']) {
             await p.evaluate((value) => window.TrackerAppearance.set(value), appearance);
-            for (const width of [320, 390, 844, 1280]) {
+            for (const width of [320, 360, 380, 390, 480, 700, 844, 1280]) {
               await p.setViewportSize({ width, height: 844 });
               const layout = await p.locator('.ex').first().evaluate((exercise) => {
                 const rir = exercise.querySelector('.exercise-rir');
                 const controls = exercise.querySelector('.exercise-footer');
                 const buttons = [...controls.querySelectorAll('button')].map((button) => button.getBoundingClientRect());
                 const row = rir.querySelector('.rir-row').getBoundingClientRect();
+                const divider = getComputedStyle(controls, '::before');
+                const choices = [...rir.querySelectorAll('.rir-btn')].map((button) => button.getBoundingClientRect());
                 return {
-                  direct: rir.nextElementSibling === controls,
-                  gap: controls.getBoundingClientRect().top - row.bottom,
+                  direct: rir.querySelector('.rir-row').nextElementSibling === controls,
+                  gap: controls.getBoundingClientRect().left - row.right,
                   aligned: buttons[0].top === buttons[1].top && buttons[0].width === buttons[1].width,
-                  right: Math.abs(buttons[1].right - row.right) < 0.6,
-                  compact: buttons.every((box) => box.height === 44 && box.width === 64),
+                  right: Math.abs(buttons[1].right - rir.getBoundingClientRect().right) < 0.6,
+                  compact: buttons.every((box) => box.height === 44 && box.width === (innerWidth <= 380 ? 24 : 48)),
+                  oneRow: choices.length === 6 && [...choices, ...buttons].every((box) => box.top === choices[0].top && box.height === 44 && box.width >= 24),
+                  divider: divider.width === '1px' && divider.height === '24px' && divider.backgroundColor !== 'rgba(0, 0, 0, 0)',
+                  labels: [...controls.querySelectorAll('.set-control-label')].every((label) => (getComputedStyle(label).display === 'none') === (innerWidth <= 380)),
                   counter: /\d+\/\d+ kirjattu/.test(exercise.textContent),
                   overflow: document.documentElement.scrollWidth > innerWidth,
                 };
               });
-              assert.deepEqual(layout, { direct: true, gap: 8, aligned: true, right: true, compact: true, counter: false, overflow: false }, `${appearance}/${width}: compact controls directly under RIR`);
+              assert.deepEqual(layout, { direct: true, gap: 4, aligned: true, right: true, compact: true, oneRow: true, divider: true, labels: true, counter: false, overflow: false }, `${appearance}/${width}: all eight buttons share one divided row`);
             }
           }
           assert.equal(await p.evaluate(() => localStorage.getItem('gym-tracker-v1')), raw, 'presentation changes preserve all saved data');
           assert.doesNotMatch(await p.locator('#exercise-0 .exercise-actions > p').textContent(), /Ohjelma ei muutu/);
           await tap(p.locator('[data-key="rir-btn-0-2"]'));
+          assert.equal(await p.locator('#exercise-0 .exercise-rir-controls button').count(), 8, 'patching RIR retains exactly six choices and two set controls');
           await tap(p.locator('[data-key="a0"]'));
           assert.equal(await p.locator('#exercise-0 .set').count(), 4);
           assert.equal((await saved(p)).session.exercises[0].rir, '2', 'adding a set preserves RIR');
