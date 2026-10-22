@@ -112,6 +112,18 @@ try {
           assert.ok(remaining > 40000 && remaining <= 46000, `rest ${remaining} ms`);
         });
 
+        await run('the rest-over notice shows when the rest ends and dismisses itself after 5 seconds', async (p) => {
+          const state = await seedWorkout(p);
+          state.restEnd = Date.now() + 1000;
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          await p.locator('#rest[data-state="run"]').waitFor();
+          await p.locator('#rest[data-state="over"]').waitFor();
+          assert.match(await p.locator('#rest').innerText(), /Lepoaika päättyi/);
+          await p.locator('#rest').waitFor({ state: 'hidden', timeout: 7000 });
+          assert.equal(await p.locator('#rest').getAttribute('data-state'), 'gone');
+        });
+
         await run('an opened program offers Kevennetty and Super starts below the normal start, and the Kevennetty workout is lightened and flagged', async (p) => {
           await seedProgram(p);
           await expandRoutines(p);

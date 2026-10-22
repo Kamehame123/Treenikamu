@@ -1132,6 +1132,7 @@ let lastRestBeep = 0;
 let cheer = null;
 let lastCheer = '';
 let actionAnchor = null;
+const REST_NOTICE_MS = 5000;
 function tick() {
   paintHr();
   paintTimer();
@@ -1141,6 +1142,8 @@ function tick() {
   if (!rest) return;
   if (!state.restEnd) { rest.hidden = true; rest.dataset.state = ''; return; }
   const left = state.restEnd - Date.now();
+  // The "rest is over" notice dismisses itself after 5 seconds.
+  if (left <= -REST_NOTICE_MS) { rest.hidden = true; rest.dataset.state = 'gone'; return; }
   const mode = left > 0 ? 'run' : 'over';
   rest.hidden = false;
   if (rest.dataset.state !== mode) {
