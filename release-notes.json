@@ -1,4 +1,7 @@
 [
+  { "version": 56, "date": "2026-10-22", "changes": [
+    "Etusivun kolmen tilastokortin numerot ja tekstit on keskitetty. Myös painettava viikko- tai kuukausikortti käyttää samaa keskitystä. Tallennetut treenit ja historia säilyvät ennallaan."
+  ] },
   { "version": 55, "date": "2026-10-22", "changes": [
     "Etusivu pysyy nyt samanlaisena puhelimella, tabletilla ja tietokoneella: ohjelmat, Luo treeniohjelma ja Asetukset ovat samassa keskitetyssä sarakkeessa. Tilastoluvut ja Historia-, Ajastin- ja Ennätykset-painikkeet pysyvät kolmen sarakkeen riveillä. Tallennetut treenit ja historia säilyvät ennallaan."
   ] },

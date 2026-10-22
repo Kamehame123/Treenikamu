@@ -11,6 +11,7 @@ Program details still expand on demand; an unfinished workout keeps its resume
 shortcut above the list. Home always uses one centered column, at most 540 px wide,
 on phones, tablets and desktop: programs, **Luo treeniohjelma**, then **Asetukset**.
 Stat tiles and the three navigation buttons retain their three-column rows.
+Each stat tile centers both its number and label.
 History opens on its own page, with **Tilastot** at the top.
 Backup reminders and export remain inside
 **Asetukset**, with the same weekly schedule. This is a presentation-only update:

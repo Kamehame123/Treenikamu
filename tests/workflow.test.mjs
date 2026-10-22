@@ -154,6 +154,14 @@ try {
                     const boxes = [...document.querySelectorAll(selector)].map(rect);
                     return boxes.length === 3 && boxes.every((box) => box.top === boxes[0].top && Math.abs(box.width - boxes[0].width) < 0.6);
                   }),
+                  statsCentered: [...document.querySelectorAll('.stats > *')].every((tile) => {
+                    const box = rect(tile);
+                    return [...tile.querySelectorAll('strong, span')].every((text) => {
+                      const range = document.createRange();
+                      range.selectNodeContents(text);
+                      return [...range.getClientRects()].every((line) => Math.abs(line.left + line.width / 2 - box.left - box.width / 2) < 1);
+                    });
+                  }),
                   visible: rect(document.querySelector('.routine')).bottom < innerHeight,
                   noOverflow: document.documentElement.scrollWidth <= innerWidth,
                   noOverlap: [...document.querySelectorAll('.routine')].every((r) => {
@@ -169,6 +177,7 @@ try {
               assert.equal(layout.width, Math.min(width, 540), `${appearance}/${width}: compact home width`);
               assert.equal(layout.centered, true, `${appearance}/${width}: home column is centered`);
               assert.equal(layout.threeAcross, true, `${appearance}/${width}: stats and navigation stay in three-column rows`);
+              assert.equal(layout.statsCentered, true, `${appearance}/${width}: every stat number and label line is centered in its tile`);
               assert.equal(layout.visible, true, 'first program is fully visible without scrolling');
               assert.equal(layout.noOverflow, true, `${appearance}/${width}: no overflow`);
               assert.equal(layout.noOverlap, true, `${appearance}/${width}: long names and counts do not overlap the start button`);
