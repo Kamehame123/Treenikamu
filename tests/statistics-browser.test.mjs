@@ -15,6 +15,7 @@ async function seed(page, state) {
   await page.locator('h1').waitFor();
 }
 async function openStatistics(page) {
+  await tap(button(page, 'Historia'));
   await tap(button(page, 'Tilastot'));
   await page.getByRole('heading', { name: 'Tilastot', exact: true }).waitFor();
 }
@@ -48,6 +49,8 @@ try {
           await page.getByRole('alert').filter({ hasText: 'Valitse kelvollinen' }).waitFor();
           await tap(button(page, '4 viikkoa'));
           assert.equal(await page.getByRole('alert').count(), 0);
+          await tap(button(page, 'Historiaan'));
+          await page.getByRole('heading', { name: 'Historia', exact: true }).waitFor();
           await tap(button(page, 'Harjoituksiin'));
           await page.getByRole('heading', { name: 'Treenipäiväkirja', exact: true }).waitFor();
         });
@@ -328,7 +331,7 @@ try {
           await tap(button(page, '4 viikkoa'));
           await page.getByRole('heading', { name: 'Viikoittainen harjoitusmäärä', exact: true }).waitFor();
           const before = await saved(page);
-          await tap(button(page, 'Harjoituksiin')); await tap(button(page, 'Ennätykset'));
+          await tap(button(page, 'Historiaan')); await tap(button(page, 'Harjoituksiin')); await tap(button(page, 'Ennätykset'));
           assert.equal(await page.locator('.record-estimate').count(), 2);
           assert.match(await page.locator('.record-list').innerText(), /1RM ~120 kg/);
           assert.deepEqual(await saved(page), before);

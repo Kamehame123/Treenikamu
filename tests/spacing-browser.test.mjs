@@ -88,11 +88,13 @@ try {
             await fits(page, 'library');
             await page.locator('[data-action="backedit"]').click();
             await page.locator('[data-key="cancel"]').click();
+            await page.getByRole('button', { name: 'Historia', exact: true }).click();
             await page.getByRole('button', { name: 'Tilastot', exact: true }).click();
             await gaps(page, '.statistics-content > *', 16, 'statistics sections');
             await cardPadding(page, '.stat-filters, .stat-metric', padding);
             await fits(page, 'statistics');
             await page.locator('[data-key="statistics-back"]').click();
+            await page.locator('[data-key="history-back"]').click();
             assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-v1')), raw, 'layout and navigation preserve saved data byte-for-byte');
             await tap(page.locator('.quick-start').first());
             await page.locator('.session-end').waitFor();

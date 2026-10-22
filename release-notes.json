@@ -1,4 +1,8 @@
 [
+  { "version": 50, "date": "2026-10-22", "changes": [
+    "Etusivulle tuli Ajastin-painike Tilastot-painikkeen tilalle. Ajastimessa määrität sarjan intervallit selityksineen ja toistojen määrän. Käynnistyksen jälkeen näkyy kierrosnumero, nykyinen intervalli ja aika. Intervallin vaihtuessa ajastin tärisee ja piippaa, ja näyttö pysyy päällä. Jos sarjalle ei anna nimeä, se nimetään Sarja 1, Sarja 2 jne.",
+    "Tilastot löytyy nyt Historia-sivulta. Ajastinsarjat tallentuvat laitteelle ja kuuluvat varmuuskopioon; aiemmat tiedot ja varmuuskopiot toimivat ennallaan."
+  ] },
   { "version": 49, "date": "2026-10-22", "changes": [
     "Liikkeelle, jonka painon merkitystä ei ole valittu, kysytään nyt treenin aikana kerran, onko paino kokonaiskuorma, paino per käsipaino tai muu. Valinta tallentuu treeniin ja ohjelmaan, jotta 1RM-arvio voidaan laskea myös käsin kirjatuista liikkeistä. Vanhoja treenejä ei muuteta.",
     "Toistoalueen (esim. 8–12) sarjan painallus ei enää kirjaa alueen ylärajaa toteutuneeksi, eikä se voi ylimitoittaa 1RM-arviota. Kirjaa toistot +/- -painikkeilla.",

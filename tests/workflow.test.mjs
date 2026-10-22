@@ -120,7 +120,7 @@ try {
             return { brand: top('.brand-row').bottom <= top('.stats').top, stats: top('.stats').bottom <= top('.stats-links').top, links: top('.stats-links').bottom <= top('.routine').top };
           });
           assert.deepEqual(order, { brand: true, stats: true, links: true }, 'brand row, stat tiles, link buttons, then programs');
-          assert.deepEqual(await p.locator('.stats-links button').allInnerTexts(), ['Historia', 'Tilastot', 'Ennätykset']);
+          assert.deepEqual(await p.locator('.stats-links button').allInnerTexts(), ['Historia', 'Ajastin', 'Ennätykset']);
           assert.equal(await p.locator('.index-card, .hist').count(), 0, 'index card and history live on their own pages');
           for (const width of [320, 390]) {
             await p.setViewportSize({ width, height: 800 });

@@ -5,7 +5,7 @@ Run `npm test` for pure logic and asset tests; `npm run test:progression` exerci
 the progression UI in Chromium and WebKit. Browser tests use isolated storage.
 
 The home screen shows only the **Treenipäiväkirja** title, then the stat tiles and
-the **Tilastot**/**Ennätykset** buttons, then the training programs as compact
+the **Ajastin**/**Ennätykset** buttons, then the training programs as compact
 green-accented cards (name, exercise/set counts and a one-tap **Aloita** button).
 Program details still expand on demand; an unfinished workout keeps its resume
 shortcut above the list. History and the statistics summary sit beside programs on
@@ -26,9 +26,25 @@ Run `node --test tests/spacing-browser.test.mjs` for measured layout regressions
 across Chromium/WebKit and narrow phone through desktop widths. These tests
 also verify that navigating the updated layouts leaves existing data unchanged.
 
+## Interval timer
+
+**Ajastin** on the home screen opens an in-app timer view. Create sequences of
+intervals (explanation plus minutes/seconds) and a repeat count; a sequence with
+no name becomes **Sarja 1**, **Sarja 2**, and so on (lowest unused number). While
+running it shows **Kierros x/y**, the current and next interval and the remaining
+time, with pause/resume/stop. Each interval change vibrates, beeps and is
+announced to screen readers, and the screen wake lock stays on while the timer is
+open. Elapsed time is timestamp based and a running timer survives a reload, but
+iOS pauses page JavaScript when the screen locks, so cues cannot fire then.
+Sequences are saved locally and included in backups; timer runs are not logged to
+history. This is an additive change (`timers` is written only once a sequence
+exists): existing browser data, history, imports and old backups load and restore
+unchanged, so no migration is needed. **Tilastot** moved from home to the top of
+**Historia**. Run `npm run test:timer` for the Chromium/WebKit timer tests.
+
 ## Training statistics
 
-Open **Tilastot** from home. All calculations and charts run locally,
+Open **Tilastot** from **Historia**. All calculations and charts run locally,
 including offline; no account, analytics service, CDN or external chart library
 is needed. Statistics are derived from saved history, not separately accumulated
 counters. A running or discarded workout is not counted.

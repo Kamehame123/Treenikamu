@@ -6,6 +6,7 @@ import { pickCheer } from './cheers.js';
 import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from './heartrate.js';
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor } from './statistics-ui.js';
+import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, totalSeconds, formatClock, formatLength } from './timer.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -75,7 +76,11 @@ try {
     draft.exercises = draft.exercises.slice(0, 60).filter((e) => e && typeof e === 'object');
   }
 } catch { /* Session storage is optional; the workout still works. */ }
-let view = draft ? 'edit' : state.session ? 'workout' : 'home';
+// A running interval timer survives a reload (sessionStorage); saved sequences live in state.timers.
+const TIMER_RUN_KEY = 'gym-tracker-timer-run-v1';
+let timerRun = null;
+try { timerRun = sanitizeRun(JSON.parse(sessionStorage.getItem(TIMER_RUN_KEY)), state.timers ?? []); } catch { /* A timer run is optional. */ }
+let view = draft ? 'edit' : timerRun ? 'timer' : state.session ? 'workout' : 'home';
 const HOME_PERIODS = ['week', 'month', 'year'];
 const HOME_PERIOD_KEY = 'gym-tracker-home-period';
 let homePeriod = 'week';
@@ -85,6 +90,11 @@ let editError = '';
 let settingsOpen = false;
 let backupOpen = false;
 const statisticsFilters = { range: '12w', from: localDateKey(shiftDays(Date.now(), -83)), to: localDateKey(Date.now()), routineId: '', exerciseKey: '', page: 0 };
+// Interval timer editor draft and cue state: in memory only. null cue = a restored run, which must not beep on reload.
+let timerDraft = null;
+let timerError = '';
+let timerCue = null;
+let audioContext = null;
 // mode 'draft' picks for the program editor; mode 'session' swaps or adds an exercise in the active workout only.
 let picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target: null, adding: true, keepOpen: false, added: [], mode: 'draft' };
 let customError = '';
@@ -495,7 +505,128 @@ function historyView() {
   const more = remaining > 0 ? `<button class="btn secondary" data-action="morehistory" data-key="morehistory">Näytä lisää (${remaining} vanhempaa)</button>` : '';
   const undoDelete = lastDeleted ? `<div class="notice" role="status">Harjoitus "${esc(lastDeleted.entry.name)}" poistettiin. <button class="btn small" data-action="undodelete" data-key="undodelete">Peru poisto</button></div>` : '';
   const historyError = historyMessage ? `<div class="banner" role="alert"><div>${esc(historyMessage)}</div></div>` : '';
-  return `<div class="stat-heading"><h1 tabindex="-1">Historia</h1><p class="muted">Viimeisimmät harjoitukset. Voit korjata tai poistaa tuloksia.</p></div>${undoDelete}${historyError}${history ? `<ul class="list history-list">${history}</ul>${more}` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}`;
+  return `<div class="stat-heading"><h1 tabindex="-1">Historia</h1><p class="muted">Viimeisimmät harjoitukset. Voit korjata tai poistaa tuloksia.</p><div class="history-links"><button class="btn secondary" data-action="statistics" data-key="statistics-top">Tilastot</button></div></div>${undoDelete}${historyError}${history ? `<ul class="list history-list">${history}</ul>${more}` : `<div class="empty-state">${icon('clock')}<h3>Kehitys alkaa tästä</h3><p>Tallenna ensimmäinen harjoituksesi. Jokainen tehty sarja merkitsee.</p></div>`}`;
+}
+
+function timerChrome(back, body) {
+  return `${brand()}${warn()}${back}<div class="statistics-content">${body}</div>`;
+}
+
+function timerListView(timers) {
+  const items = timers.map((t) => {
+    const id = esc(t.id);
+    const steps = t.intervals.map((i, n) => `<li>${esc(intervalLabel(t, n))} · ${formatLength(i.seconds)}</li>`).join('');
+    return `<li class="card timer-item"><div><h2>${esc(t.name)}</h2><p class="muted small-copy">${t.intervals.length} ${t.intervals.length === 1 ? 'intervalli' : 'intervallia'} · ${t.repeats} ${t.repeats === 1 ? 'kierros' : 'kierrosta'} · yhteensä ${formatLength(totalSeconds(t))}</p></div><ol class="timer-steps" aria-label="Intervallit: ${esc(t.name)}">${steps}</ol><div class="timer-item-actions"><button class="btn primary" data-action="timerstart" data-id="${id}" data-key="tstart-${id}" aria-label="Käynnistä: ${esc(t.name)}">${icon('play')} Käynnistä</button><button class="btn small" data-action="timeredit" data-id="${id}" data-key="tedit-${id}" aria-label="Muokkaa: ${esc(t.name)}">Muokkaa</button><button class="btn small delete" data-action="timerdelete" data-id="${id}" data-key="tdel-${id}" aria-label="Poista: ${esc(t.name)}">Poista</button></div></li>`;
+  }).join('');
+  const empty = `<div class="empty-state">${icon('clock')}<h3>Ei vielä ajastinsarjoja</h3><p>Luo sarja, jossa on intervalleja, selitykset ja toistojen määrä.</p></div>`;
+  const add = timers.length >= TIMER_MAX_SEQUENCES ? '' : `<button class="btn ${timers.length ? 'secondary' : 'primary'}" data-action="timernew" data-key="timernew">${icon('plus')} Uusi sarja</button>`;
+  return timerChrome(`<button class="btn ghost back" data-action="home" data-key="timer-back">${icon('back')} Harjoituksiin</button>`,
+    `<div class="stat-heading"><h1 tabindex="-1">Ajastin</h1><p class="muted">Intervalliajastin: määritä jaksot selityksineen ja toistojen määrä.</p></div>${timers.length ? `<ul class="list timer-list">${items}</ul>` : empty}${add}`);
+}
+
+function timerEditorView(timers) {
+  const d = timerDraft;
+  const placeholder = defaultTimerName(timers.filter((t) => t.id !== d.id));
+  const intervals = d.intervals.map((i, n) => `<fieldset class="timer-fieldset"><legend>Intervalli ${n + 1}</legend>
+    <label class="field">Selitys<input type="text" maxlength="60" placeholder="esim. Juoksu" value="${esc(i.label)}" data-tf="label" data-ti="${n}" data-key="tl-${n}"></label>
+    <div class="timer-duration"><label class="field">Minuutit<input type="number" inputmode="numeric" min="0" max="180" step="1" placeholder="0" value="${esc(i.min)}" data-tf="min" data-ti="${n}" data-key="tm-${n}"></label><label class="field">Sekunnit<input type="number" inputmode="numeric" min="0" max="59" step="1" placeholder="0" value="${esc(i.sec)}" data-tf="sec" data-ti="${n}" data-key="ts-${n}"></label></div>
+    <button class="btn small delete" data-action="timerdelint" data-i="${n}" data-key="tdelint-${n}" aria-label="Poista intervalli ${n + 1}" ${d.intervals.length < 2 ? 'disabled' : ''}>Poista intervalli</button></fieldset>`).join('');
+  const error = timerError ? `<div class="banner" role="alert" id="timer-err" tabindex="-1"><div>${esc(timerError)}</div></div>` : '';
+  return timerChrome(`<button class="btn ghost back" data-action="timercancel" data-key="timer-cancel-top">${icon('back')} Ajastimiin</button>`,
+    `<div class="stat-heading"><h1 tabindex="-1">${d.id ? 'Muokkaa sarjaa' : 'Uusi sarja'}</h1><p class="muted">Intervallit suoritetaan järjestyksessä ja koko sarja toistetaan valitun kierrosmäärän verran.</p></div>
+    <div class="card timer-editor"><label class="field">Sarjan nimi<input type="text" maxlength="60" placeholder="${esc(placeholder)}" value="${esc(d.name)}" data-tf="name" data-key="tf-name"><small class="muted">Jos nimeä ei anneta, käytetään nimeä ${esc(placeholder)}.</small></label>
+    <label class="field">Toistojen määrä (kierrosta)<input type="number" inputmode="numeric" min="1" max="99" step="1" value="${esc(d.repeats)}" data-tf="repeats" data-key="tf-repeats"></label></div>
+    ${intervals}
+    <button class="btn secondary" data-action="timeraddint" data-key="timer-add" ${d.intervals.length >= TIMER_MAX_INTERVALS ? 'disabled' : ''}>${icon('plus')} Lisää intervalli</button>
+    ${error}
+    <div class="timer-controls"><button class="btn" data-action="timercancel" data-key="timer-cancel">Peruuta</button><button class="btn primary" data-action="timersave" data-key="timer-save">Tallenna sarja</button></div>`);
+}
+
+function timerRunSnapshot(timer) {
+  const phase = phaseAt(timer, runElapsed(timerRun, Date.now()));
+  const next = phase.index + 1 < timer.intervals.length ? intervalLabel(timer, phase.index + 1)
+    : phase.round < timer.repeats ? intervalLabel(timer, 0) : '';
+  return {
+    phase,
+    round: `Kierros ${phase.round}/${timer.repeats}`,
+    time: formatClock(phase.remainingMs),
+    label: intervalLabel(timer, phase.index),
+    index: `Intervalli ${phase.index + 1}/${timer.intervals.length}`,
+    next: next ? `Seuraavaksi: ${next}` : 'Viimeinen intervalli',
+  };
+}
+
+function timerRunView(timer) {
+  const snap = timerRunSnapshot(timer);
+  const done = snap.phase.done;
+  const body = done
+    ? `<section class="card timer-card" aria-label="Ajastin valmis"><span class="eyebrow accent">${icon('check')} Valmis</span><p class="timer-label">${timer.repeats} ${timer.repeats === 1 ? 'kierros' : 'kierrosta'} tehty</p><p class="muted">${esc(timer.name)} · yhteensä ${formatLength(totalSeconds(timer))}</p></section>
+      <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-close">Sulje</button><button class="btn primary" data-action="timerstart" data-id="${esc(timer.id)}" data-key="timer-again">Aloita alusta</button></div>`
+    : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="eyebrow accent" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label" id="trun-label">${esc(snap.label)}</p><p class="muted" id="trun-index">${snap.index}</p><p class="muted" id="trun-next">${esc(snap.next)}</p></section>
+      <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')} Jatka</button>` : '<button class="btn primary" data-action="timerpause" data-key="timer-pause">Tauko</button>'}</div>`;
+  return timerChrome('', `<div class="stat-heading"><h1 tabindex="-1">${esc(timer.name)}</h1></div>${body}`);
+}
+
+function timerView() {
+  const timers = state.timers ?? [];
+  if (timerRun) {
+    const timer = timers.find((t) => t.id === timerRun.id);
+    if (timer) return timerRunView(timer);
+    timerRun = null; rememberTimerRun();
+  }
+  return timerDraft ? timerEditorView(timers) : timerListView(timers);
+}
+
+function rememberTimerRun() {
+  try {
+    if (timerRun) sessionStorage.setItem(TIMER_RUN_KEY, JSON.stringify({ id: timerRun.id, startedAt: timerRun.startedAt, pausedAt: timerRun.pausedAt, pausedMs: timerRun.pausedMs }));
+    else sessionStorage.removeItem(TIMER_RUN_KEY);
+  } catch { /* The run still works until the tab closes. */ }
+}
+
+// Browsers only allow sound after a tap, so the audio context is created from the start/resume tap.
+function prepareAudio() {
+  try { audioContext ??= new (window.AudioContext || window.webkitAudioContext)(); void audioContext.resume(); } catch { audioContext = null; }
+}
+function beep(count) {
+  if (!audioContext) return;
+  try {
+    const t0 = audioContext.currentTime + 0.02;
+    for (let n = 0; n < count; n++) {
+      const osc = audioContext.createOscillator(), gain = audioContext.createGain(), at = t0 + n * 0.3;
+      osc.frequency.value = count > 1 ? 1175 : 880;
+      osc.connect(gain); gain.connect(audioContext.destination);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.4, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      osc.start(at); osc.stop(at + 0.25);
+    }
+  } catch { /* Vibration and the announcement still happen. */ }
+}
+
+// Called every tick: updates the running timer in place and cues each interval change once.
+function paintTimer() {
+  if (view !== 'timer' || !timerRun) return;
+  const timer = (state.timers ?? []).find((t) => t.id === timerRun.id);
+  if (!timer) return;
+  const snap = timerRunSnapshot(timer);
+  if (snap.phase.done !== !!timerRun.done) { timerRun.done = snap.phase.done; render(); return; }
+  if (!snap.phase.done) {
+    for (const [id, value] of [['trun-round', snap.round], ['trun-time', snap.time], ['trun-label', snap.label], ['trun-index', snap.index], ['trun-next', snap.next]]) {
+      const el = document.getElementById(id);
+      if (el && el.textContent !== value) el.textContent = value;
+    }
+  }
+  const key = snap.phase.done ? 'done' : `${snap.phase.round}:${snap.phase.index}`;
+  if (timerCue === key) return;
+  const restored = timerCue === null;
+  timerCue = key;
+  if (restored) return;
+  if (snap.phase.done) { navigator.vibrate?.([300, 100, 300, 100, 300]); beep(3); announce(`Ajastin valmis. ${timer.repeats} kierrosta tehty.`); }
+  else {
+    navigator.vibrate?.([200, 100, 200]); beep(1);
+    announce(`${snap.round.replace('/', ' / ')}. ${snap.label}, ${formatLength(timer.intervals[snap.phase.index].seconds)}.`);
+  }
 }
 
 function homeView() {
@@ -523,7 +654,7 @@ function homeView() {
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${savedCard()}${resume}<h1 class="sr-only" tabindex="-1">Treenipäiväkirja</h1>
     <div class="stats"><button type="button" class="stat-tile" data-action="homeperiod" data-key="homeperiod"><strong>${thisWeek}</strong> <span>${periodLabel}</span></button><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
-    <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="statistics" data-key="statistics-top">Tilastot</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
+    <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="timer" data-key="timer-top">Ajastin</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
     <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Luo treeniohjelma</button></section>
     <div class="home-aside">
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
@@ -787,7 +918,7 @@ function render() {
   if (view === 'library' && !(picker.mode === 'session' ? state.session : draft)) view = 'home';
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
-  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="statistics-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
+  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -849,6 +980,7 @@ let lastCheer = '';
 let actionAnchor = null;
 function tick() {
   paintHr();
+  paintTimer();
   const elapsed = document.getElementById('elapsed');
   if (elapsed && state.session) elapsed.textContent = core.formatDuration(Date.now() - state.session.startedAt);
   const rest = document.getElementById('rest');
@@ -867,7 +999,7 @@ function tick() {
 setInterval(tick, 500);
 
 async function syncWakeLock() {
-  const want = () => view === 'workout' && state.session && document.visibilityState === 'visible';
+  const want = () => document.visibilityState === 'visible' && (view === 'workout' && state.session || view === 'timer' && timerRun && !timerRun.done);
   try {
     if (want() && !wakeLock && !wakePending && 'wakeLock' in navigator) {
       wakePending = true;
@@ -992,6 +1124,86 @@ async function shareBackup(text) {
 const actions = {
   statistics() { readLatest(); view = 'statistics'; render(); },
   showhistory() { readLatest(); view = 'history'; render(); },
+  timer() { readLatest(); timerDraft = null; timerError = ''; view = 'timer'; render(); },
+  timernew() {
+    timerDraft = { id: null, name: '', repeats: '1', intervals: [newInterval()] }; timerError = '';
+    render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
+  },
+  timeredit(t) {
+    readLatest();
+    const timer = (state.timers ?? []).find((x) => x.id === t.dataset.id);
+    if (!timer) { render(); announce('Sarjaa ei löytynyt. Näkymä on päivitetty.'); return; }
+    timerDraft = draftFrom(timer); timerError = '';
+    render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
+  },
+  timeraddint() {
+    if (!timerDraft || timerDraft.intervals.length >= TIMER_MAX_INTERVALS) return;
+    timerDraft.intervals.push(newInterval()); render();
+    document.querySelector(`[data-key="tl-${timerDraft.intervals.length - 1}"]`)?.focus();
+  },
+  timerdelint(t) {
+    if (!timerDraft || timerDraft.intervals.length < 2) return;
+    timerDraft.intervals.splice(+t.dataset.i, 1); render();
+    document.querySelector('[data-key="timer-add"]')?.focus({ preventScroll: true });
+    announce('Intervalli poistettu.');
+  },
+  timercancel() {
+    timerDraft = null; timerError = ''; render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
+  },
+  async timersave() {
+    if (!timerDraft) return;
+    timerError = '';
+    let saved = null;
+    const ok = await mutate((next) => {
+      const list = next.timers ?? [];
+      const result = buildTimer(timerDraft, list);
+      if (result.error) { timerError = result.error; return false; }
+      const index = list.findIndex((x) => x.id === result.timer.id);
+      if (index >= 0) list[index] = result.timer;
+      else if (list.length >= TIMER_MAX_SEQUENCES) { timerError = `Sarjoja voi olla enintään ${TIMER_MAX_SEQUENCES}. Poista ensin jokin sarja.`; return false; }
+      else list.push(result.timer);
+      next.timers = list; saved = result.timer;
+    }, { critical: true });
+    if (ok && saved) {
+      timerDraft = null; render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
+      announce(`Sarja ${saved.name} tallennettu.`);
+    } else {
+      timerError ||= 'Sarjaa ei voitu tallentaa. Tarkista tallennuksen tila ja yritä uudelleen.';
+      render(); document.getElementById('timer-err')?.focus();
+    }
+  },
+  async timerdelete(t) {
+    readLatest();
+    const timer = (state.timers ?? []).find((x) => x.id === t.dataset.id);
+    if (!timer) { render(); return; }
+    if (!await askConfirm(`Poistetaanko ajastinsarja "${timer.name}"?`, 'Poista')) return;
+    const ok = await mutate((next) => { next.timers = (next.timers ?? []).filter((x) => x.id !== timer.id); }, { critical: true });
+    render();
+    if (ok) { announce(`Sarja ${timer.name} poistettu.`); document.querySelector('[data-key="timernew"]')?.focus({ preventScroll: true }); }
+  },
+  timerstart(t) {
+    readLatest();
+    const timer = (state.timers ?? []).find((x) => x.id === t.dataset.id);
+    if (!timer) { render(); announce('Sarjaa ei löytynyt. Näkymä on päivitetty.'); return; }
+    prepareAudio();
+    timerRun = { id: timer.id, startedAt: Date.now(), pausedAt: null, pausedMs: 0, done: false };
+    timerCue = ''; rememberTimerRun();
+    render(); window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
+  },
+  timerpause() {
+    if (!timerRun || timerRun.pausedAt) return;
+    timerRun.pausedAt = Date.now(); rememberTimerRun(); render(); announce('Ajastin tauolla.');
+  },
+  timerresume() {
+    if (!timerRun?.pausedAt) return;
+    prepareAudio();
+    timerRun.pausedMs += Date.now() - timerRun.pausedAt; timerRun.pausedAt = null; rememberTimerRun(); render(); announce('Ajastin jatkuu.');
+  },
+  async timerstop() {
+    if (timerRun && !timerRun.done && !await askConfirm('Lopetetaanko ajastin?', 'Lopeta')) return;
+    timerRun = null; rememberTimerRun(); render();
+    window.scrollTo(0, 0); document.querySelector('h1')?.focus({ preventScroll: true });
+  },
   records() { readLatest(); view = 'records'; render(); },
   homeperiod() {
     homePeriod = HOME_PERIODS[(HOME_PERIODS.indexOf(homePeriod) + 1) % HOME_PERIODS.length];
@@ -1126,6 +1338,8 @@ const actions = {
     render();
   },
   async home() {
+    if (timerRun && !timerRun.done && !await askConfirm('Pysäytetäänkö ajastin?', 'Pysäytä')) return;
+    timerRun = null; timerDraft = null; timerError = ''; rememberTimerRun();
     if (draft && JSON.stringify({ name: draft.name, exercises: draft.exercises }) !== draft.initial && !await askConfirm('Hylätäänkö harjoituksen tallentamattomat muutokset?', 'Hylkää')) return;
     clearDraft(); view = 'home'; render();
   },
@@ -1440,6 +1654,12 @@ document.addEventListener('submit', (e) => {
 });
 document.addEventListener('input', (e) => {
   const t = e.target;
+  if (t.dataset.tf && timerDraft) {
+    const field = t.dataset.tf;
+    if (field === 'name' || field === 'repeats') timerDraft[field] = t.value;
+    else if (['label', 'min', 'sec'].includes(field) && timerDraft.intervals[+t.dataset.ti]) timerDraft.intervals[+t.dataset.ti][field] = t.value;
+    return;
+  }
   if (t.dataset.tracking && draft && t.type !== 'radio') {
     const exercise = draft.exercises[+t.dataset.i];
     exercise.tracking = sanitizeTracking({ ...exercise.tracking, [t.dataset.tracking]: t.value });
