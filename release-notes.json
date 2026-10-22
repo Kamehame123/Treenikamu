@@ -1,4 +1,9 @@
 [
+  { "version": 51, "date": "2026-10-22", "changes": [
+    "Ajastin-painikkeessa on nyt sekuntikellon kuvake. Käynnissä olevassa ajastimessa Kierros-teksti on paljon isompi, intervallin nimen alla olevat toistuvat tekstit on poistettu ja Tauko- ja Lopeta-painikkeet ovat isoja pyöristettyjä neliöitä.",
+    "Sarjaa luodessa Lisää intervalli -painikkeen vasemmalla puolella on Työ ja oikealla Lepo. Ne lisäävät nimetyn intervallin kiinteällä kestolla (aluksi Työ 30 s ja Lepo 15 s). Työ- tai Lepo-intervallin laatikon oikean alakulman Tee oletus -painike tallentaa sen keston uudeksi oletukseksi. Oletukset tallentuvat laitteelle ja kuuluvat varmuuskopioon; aiemmat tiedot toimivat ennallaan.",
+    "Yli 3 tuntia pitkä intervalli hylätään nyt tallennettaessa, eikä se enää katoa hiljaa sivun latauksessa."
+  ] },
   { "version": 50, "date": "2026-10-22", "changes": [
     "Etusivulle tuli Ajastin-painike Tilastot-painikkeen tilalle. Ajastimessa määrität sarjan intervallit selityksineen ja toistojen määrän. Käynnistyksen jälkeen näkyy kierrosnumero, nykyinen intervalli ja aika. Intervallin vaihtuessa ajastin tärisee ja piippaa, ja näyttö pysyy päällä. Jos sarjalle ei anna nimeä, se nimetään Sarja 1, Sarja 2 jne.",
     "Tilastot löytyy nyt Historia-sivulta. Ajastinsarjat tallentuvat laitteelle ja kuuluvat varmuuskopioon; aiemmat tiedot ja varmuuskopiot toimivat ennallaan."

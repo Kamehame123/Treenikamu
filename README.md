@@ -31,14 +31,17 @@ also verify that navigating the updated layouts leaves existing data unchanged.
 **Ajastin** on the home screen opens an in-app timer view. Create sequences of
 intervals (explanation plus minutes/seconds) and a repeat count; a sequence with
 no name becomes **Sarja 1**, **Sarja 2**, and so on (lowest unused number). While
-running it shows **Kierros x/y**, the current and next interval and the remaining
-time, with pause/resume/stop. Each interval change vibrates, beeps and is
+running it shows a large **Kierros x/y**, the current interval name and the
+remaining time, with big square pause/resume/stop buttons. **Työ** and **Lepo**
+beside **Lisää intervalli** add named intervals with a fixed duration (30 s and
+15 s at first); **Tee oletus** in the lower right of an interval labelled Työ or
+Lepo saves its duration as the new default. Each interval change vibrates, beeps and is
 announced to screen readers, and the screen wake lock stays on while the timer is
 open. Elapsed time is timestamp based and a running timer survives a reload, but
 iOS pauses page JavaScript when the screen locks, so cues cannot fire then.
-Sequences are saved locally and included in backups; timer runs are not logged to
-history. This is an additive change (`timers` is written only once a sequence
-exists): existing browser data, history, imports and old backups load and restore
+Sequences and the Työ/Lepo defaults are saved locally and included in backups;
+timer runs are not logged to history. This is an additive change (`timers` and
+`timerDefaults` are written only once they exist): existing browser data, history, imports and old backups load and restore
 unchanged, so no migration is needed. **Tilastot** moved from home to the top of
 **Historia**. Run `npm run test:timer` for the Chromium/WebKit timer tests.
 

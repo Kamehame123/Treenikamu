@@ -43,6 +43,7 @@ try {
 
         await run('Ajastin replaces Tilastot on home, Tilastot lives under Historia and returns there', async (page) => {
           assert.equal(await button(page, 'Tilastot').count(), 0);
+          assert.equal(await page.locator('[data-key="timer-top"] svg.icon').count(), 1, 'the Ajastin button has an icon');
           await openTimer(page);
           await tap(button(page, 'Harjoituksiin'));
           await tap(button(page, 'Historia'));
@@ -94,7 +95,13 @@ try {
           await tap(button(page, 'Käynnistä: Sarja 1'));
           assert.match(await text(page, 'trun-round'), /Kierros 1\/2/i);
           assert.equal(await text(page, 'trun-label'), 'Sprintti');
-          assert.match(await text(page, 'trun-next'), /Seuraavaksi: Lepo/);
+          assert.equal(await page.locator('#trun-index, #trun-next').count(), 0, 'no repeated texts under the interval name');
+          assert.ok(await page.locator('#trun-round').evaluate((el) => parseFloat(getComputedStyle(el).fontSize)) >= 36, 'the round text is large');
+          const [stop, pause] = await Promise.all([button(page, 'Lopeta'), button(page, 'Tauko')].map(async (b) => ({ box: await b.boundingBox(), radius: await b.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius)) })));
+          for (const { box, radius } of [stop, pause]) {
+            assert.ok(Math.abs(box.width - box.height) <= 2 && box.width >= 120, `big square button, got ${box.width}x${box.height}`);
+            assert.ok(radius >= 16 && radius < box.width / 2, `rounded square, radius ${radius}`);
+          }
           await page.waitForFunction(() => /Kierros 2\/2/i.test(document.getElementById('trun-round')?.textContent ?? ''), null, { timeout: 6000 });
           await page.locator('.timer-label', { hasText: '2 kierrosta tehty' }).waitFor({ timeout: 8000 });
           assert.match(await page.locator('#live').innerText(), /Ajastin valmis/);
@@ -126,6 +133,50 @@ try {
           assert.equal((await saved(page)).history.length, 0, 'runs are not logged to history');
         });
 
+        await run('Työ and Lepo add named intervals; Tee oletus changes and persists their durations', async (page) => {
+          const flat = async (key) => (await page.locator(`[data-key="${key}"]`).innerText()).replace(/\s+/g, ' ');
+          await openTimer(page);
+          await tap(page.locator('[data-key="timernew"]'));
+          assert.equal(await flat('timer-work'), 'Työ 0:30');
+          assert.equal(await flat('timer-rest'), 'Lepo 0:15');
+          const xs = await Promise.all(['timer-work', 'timer-add', 'timer-rest'].map(async (k) => (await page.locator(`[data-key="${k}"]`).boundingBox()).x));
+          assert.deepEqual([...xs].sort((a, b) => a - b), xs, 'Työ, Lisää intervalli, Lepo from left to right');
+          assert.equal(await page.locator('[data-key="tdef-0"]').isVisible(), false, 'Tee oletus only shows for Työ/Lepo intervals');
+          await tap(page.locator('[data-key="timer-work"]'));
+          await tap(page.locator('[data-key="timer-rest"]'));
+          assert.deepEqual(await Promise.all(['tl-1', 'tm-1', 'ts-1', 'tl-2', 'tm-2', 'ts-2'].map((k) => page.locator(`[data-key="${k}"]`).inputValue())), ['Työ', '', '30', 'Lepo', '', '15']);
+          // Tee oletus sits in the lower right corner of the interval box.
+          const box = await page.locator('fieldset.timer-fieldset').nth(1).boundingBox(), def = await page.locator('[data-key="tdef-1"]').boundingBox();
+          assert.ok(def.x + def.width > box.x + box.width / 2 && def.y > box.y + box.height / 2, 'lower right corner');
+          await page.locator('[data-key="ts-1"]').fill('45');
+          await tap(page.locator('[data-key="tdef-1"]'));
+          assert.equal(await flat('timer-work'), 'Työ 0:45');
+          await page.locator('[data-key="tm-2"]').fill('1');
+          await page.locator('[data-key="ts-2"]').fill('30');
+          await tap(page.locator('[data-key="tdef-2"]'));
+          assert.equal(await flat('timer-rest'), 'Lepo 1:30');
+          assert.deepEqual((await saved(page)).timerDefaults, { work: 45, rest: 90 });
+          await tap(page.locator('[data-key="timer-work"]'));
+          assert.equal(await page.locator('[data-key="ts-3"]').inputValue(), '45', 'new Työ intervals use the new default');
+          // A blank duration is explained and never saved as a default.
+          await page.locator('[data-key="tl-0"]').fill('työ');
+          await tap(page.locator('[data-key="tdef-0"]'));
+          await page.getByRole('alert').filter({ hasText: 'kesto on 0 sekuntia' }).waitFor();
+          assert.deepEqual((await saved(page)).timerDefaults, { work: 45, rest: 90 });
+          await page.locator('[data-key="tl-0"]').fill('Juoksu');
+          assert.equal(await page.locator('[data-key="tdef-0"]').isVisible(), false, 'renaming hides Tee oletus again');
+          // The defaults survive a reload and the sequence itself saves normally.
+          await page.locator('[data-key="ts-0"]').fill('20');
+          await tap(page.locator('[data-key="timer-save"]'));
+          const after = await saved(page);
+          assert.deepEqual(after.timers[0].intervals.map((i) => [i.label, i.seconds]), [['Juoksu', 20], ['Työ', 45], ['Lepo', 90], ['Työ', 45]]);
+          await page.reload();
+          await openTimer(page);
+          await tap(page.locator('[data-key="timernew"]'));
+          assert.equal(await flat('timer-work'), 'Työ 0:45');
+          assert.equal(await flat('timer-rest'), 'Lepo 1:30');
+        });
+
         await run('sequences survive a reload and travel in a backup', async (page) => {
           await openTimer(page);
           await createSequence(page, { name: 'Pysyvä', intervals: [['A', '', '15']] });
@@ -142,7 +193,7 @@ try {
         await run('timer views have no axe violations or overflow at 320px', async (page) => {
           await page.setViewportSize({ width: 320, height: 640 });
           await openTimer(page);
-          await createSequence(page, { name: 'Pitkä nimi '.repeat(5), repeats: '2', intervals: [['Selitys '.repeat(8), '1', '5'], ['', '', '30']] });
+          await createSequence(page, { name: 'Pitkä nimi '.repeat(5), repeats: '2', intervals: [['Selitys '.repeat(8), '1', '5'], ['Työ', '', '30']] });
           for (const scheme of ['dark', 'light']) {
             await page.emulateMedia({ colorScheme: scheme });
             for (const step of ['list', 'editor', 'run']) {

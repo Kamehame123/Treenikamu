@@ -46,6 +46,27 @@ export function sanitizeTimers(raw) {
   return timers;
 }
 
+// Työ / Lepo quick-add intervals. The factory durations can be replaced per device with "Tee oletus".
+export const TIMER_PRESETS = { work: { label: 'Työ', seconds: 30 }, rest: { label: 'Lepo', seconds: 15 } };
+
+// Which preset an interval label stands for (case-insensitive), or null.
+export function presetKind(label) {
+  const l = text(label, 60).toLowerCase();
+  return l === TIMER_PRESETS.work.label.toLowerCase() ? 'work' : l === TIMER_PRESETS.rest.label.toLowerCase() ? 'rest' : null;
+}
+
+// Stored preset durations; anything unusable is dropped so the factory value applies.
+export function sanitizeDefaults(raw) {
+  const out = {};
+  for (const kind of Object.keys(TIMER_PRESETS)) {
+    const n = raw?.[kind];
+    if (Number.isInteger(n) && n >= 1 && n <= TIMER_MAX_SECONDS) out[kind] = n;
+  }
+  return out;
+}
+
+export const presetSeconds = (defaults, kind) => sanitizeDefaults(defaults)[kind] ?? TIMER_PRESETS[kind].seconds;
+
 export const intervalLabel = (timer, index) => timer.intervals[index].label || `Intervalli ${index + 1}`;
 export const totalSeconds = (timer) => timer.repeats * timer.intervals.reduce((sum, i) => sum + i.seconds, 0);
 
@@ -79,15 +100,23 @@ export function sanitizeRun(raw, timers) {
   return { id: raw.id, startedAt, pausedAt, pausedMs };
 }
 
+// One editor interval (min/sec strings) -> { seconds }, or { error, interval } explaining the first problem.
+export function intervalSeconds(i, n) {
+  const min = String(i.min).trim() === '' ? 0 : Number(i.min), sec = String(i.sec).trim() === '' ? 0 : Number(i.sec);
+  if (!Number.isInteger(min) || !Number.isInteger(sec) || min < 0 || min > 180 || sec < 0 || sec > 59) return { error: `Intervallin ${n + 1} kesto ei kelpaa. Minuutit 0–180 ja sekunnit 0–59.`, interval: n };
+  const seconds = min * 60 + sec;
+  if (seconds < 1) return { error: `Intervallin ${n + 1} kesto on 0 sekuntia. Anna kesto, esimerkiksi 1 min tai 30 s.`, interval: n };
+  if (seconds > TIMER_MAX_SECONDS) return { error: `Intervallin ${n + 1} kesto on liian pitkä. Enintään 3 tuntia (180 min).`, interval: n };
+  return { seconds };
+}
+
 // Editor draft -> sequence. Returns { error } for the first problem so the form can explain it.
 export function buildTimer(draft, timers) {
   const intervals = [];
   for (const [n, i] of draft.intervals.entries()) {
-    const min = String(i.min).trim() === '' ? 0 : Number(i.min), sec = String(i.sec).trim() === '' ? 0 : Number(i.sec);
-    if (!Number.isInteger(min) || !Number.isInteger(sec) || min < 0 || min > 180 || sec < 0 || sec > 59) return { error: `Intervallin ${n + 1} kesto ei kelpaa. Minuutit 0–180 ja sekunnit 0–59.`, interval: n };
-    const seconds = min * 60 + sec;
-    if (seconds < 1) return { error: `Intervallin ${n + 1} kesto on 0 sekuntia. Anna kesto, esimerkiksi 1 min tai 30 s.`, interval: n };
-    intervals.push({ id: i.id, label: text(i.label, 60), seconds });
+    const parsed = intervalSeconds(i, n);
+    if (parsed.error) return parsed;
+    intervals.push({ id: i.id, label: text(i.label, 60), seconds: parsed.seconds });
   }
   if (!intervals.length) return { error: 'Lisää vähintään yksi intervalli.' };
   const repeats = Number(String(draft.repeats).trim() || NaN);
@@ -96,7 +125,7 @@ export function buildTimer(draft, timers) {
   return { timer: { id: draft.id || newId(), name: text(draft.name, 60) || defaultTimerName(others), repeats, intervals } };
 }
 
-export const newInterval = () => ({ id: newId(), label: '', min: '', sec: '' });
+export const newInterval = (label = '', seconds = 0) => ({ id: newId(), label, min: String(Math.floor(seconds / 60) || ''), sec: String(seconds % 60 || '') });
 
 export function draftFrom(timer) {
   return {

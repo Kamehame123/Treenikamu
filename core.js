@@ -16,7 +16,7 @@ import { CATEGORIES, EQUIPMENT, EXERCISES, normalizeSearch } from './exercises.j
 import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight, lightenRoutine } from './progression.js';
 import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking, LOAD_TYPES } from './statistics.js';
 import { sanitizeHr } from './heartrate.js';
-import { sanitizeTimers } from './timer.js';
+import { sanitizeTimers, sanitizeDefaults } from './timer.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
@@ -208,12 +208,14 @@ function normalizeState(raw) {
   const routines = uniqueIds((Array.isArray(raw.routines) ? raw.routines : []).slice(0, MAX_ROUTINES).map(sanitizeRoutine));
   const session = sanitizeSession(raw.session);
   const timers = sanitizeTimers(raw.timers);
+  const timerDefaults = sanitizeDefaults(raw.timerDefaults);
   return {
     v: SCHEMA,
     routines,
     session,
     customExercises: sanitizeCustomExercises(raw.customExercises),
     ...(timers.length ? { timers } : {}),
+    ...(Object.keys(timerDefaults).length ? { timerDefaults } : {}),
     ...(sanitizeIndex(raw.statistics) ? { statistics: sanitizeIndex(raw.statistics) } : {}),
     history: (Array.isArray(raw.history) ? raw.history : [])
       .filter((h) => h && typeof h === 'object')
@@ -335,6 +337,7 @@ export function mergeState(local, incoming) {
     const have = new Set((next[key] ?? []).map((x) => x?.id));
     next[key] = [...(next[key] ?? []), ...incoming[key].filter((x) => !have.has(x?.id))];
   }
+  if (!next.timerDefaults && incoming.timerDefaults) next.timerDefaults = structuredClone(incoming.timerDefaults);
   if (!next.session && incoming.session) {
     next.session = structuredClone(incoming.session);
     if (routineLinks.has(next.session.routineId)) next.session.routineId = routineLinks.get(next.session.routineId);

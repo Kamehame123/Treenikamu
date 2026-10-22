@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as core from '../core.js';
-import { defaultTimerName, sanitizeTimers, buildTimer, phaseAt, runElapsed, sanitizeRun, totalSeconds, formatClock, formatLength, draftFrom, newInterval } from '../timer.js';
+import { defaultTimerName, sanitizeTimers, buildTimer, phaseAt, runElapsed, sanitizeRun, totalSeconds, formatClock, formatLength, draftFrom, newInterval, presetKind, presetSeconds, sanitizeDefaults, intervalSeconds, TIMER_PRESETS } from '../timer.js';
 
 const seq = (over = {}) => ({ id: 'a', name: 'Intervallit', repeats: 3, intervals: [{ id: 'i1', label: 'Juoksu', seconds: 60 }, { id: 'i2', label: 'Kävely', seconds: 30 }], ...over });
 const draft = (over = {}) => ({ id: null, name: '', repeats: '2', intervals: [{ id: 'x', label: 'Juoksu', min: '1', sec: '' }], ...over });
@@ -34,6 +34,43 @@ test('buildTimer validates durations, repeats and interval count', () => {
   const ok = buildTimer(draft({ intervals: [{ id: 'x', label: '  Hölkkä  ', min: '', sec: '45' }, { id: 'y', label: '', min: '2', sec: '5' }] }), []).timer;
   assert.deepEqual(ok.intervals.map((i) => [i.label, i.seconds]), [['Hölkkä', 45], ['', 125]]);
   assert.equal(totalSeconds(ok), 2 * 170);
+});
+
+test('Työ and Lepo presets: label matching, durations, and defaults that ignore unusable values', () => {
+  assert.deepEqual([presetKind('Työ'), presetKind('  lepo '), presetKind('TYÖ'), presetKind('Juoksu'), presetKind(''), presetKind(undefined)], ['work', 'rest', 'work', null, null, null]);
+  assert.equal(presetSeconds(undefined, 'work'), TIMER_PRESETS.work.seconds);
+  assert.equal(presetSeconds({ work: 45 }, 'work'), 45);
+  assert.equal(presetSeconds({ work: 45 }, 'rest'), TIMER_PRESETS.rest.seconds);
+  assert.deepEqual(sanitizeDefaults({ work: 0, rest: 10801 }), {});
+  assert.deepEqual(sanitizeDefaults({ work: '45', rest: 1.5 }), {}, 'strings and fractions are not coerced');
+  assert.deepEqual(sanitizeDefaults({ work: 45, rest: 90, extra: 1 }), { work: 45, rest: 90 });
+  assert.deepEqual(sanitizeDefaults(null), {});
+  const work = newInterval('Työ', 90), rest = newInterval(TIMER_PRESETS.rest.label, 15);
+  assert.deepEqual([work.label, work.min, work.sec, rest.min, rest.sec], ['Työ', '1', '30', '', '15']);
+  assert.deepEqual(intervalSeconds(work, 0), { seconds: 90 });
+  assert.match(intervalSeconds(newInterval('Työ'), 2).error, /Intervallin 3 kesto on 0 sekuntia/);
+});
+
+test('a duration above the stored maximum is refused instead of being silently dropped on reload', () => {
+  const long = { id: 'x', label: '', min: '180', sec: '59' };
+  assert.match(buildTimer(draft({ intervals: [long] }), []).error, /liian pitkä/);
+  assert.equal(buildTimer(draft({ intervals: [{ ...long, sec: '0' }] }), []).timer.intervals[0].seconds, 10800);
+});
+
+test('timerDefaults persist additively, travel in backups and fill gaps when merging', () => {
+  const old = core.sanitizeState(JSON.parse(JSON.stringify(core.defaultState())));
+  assert.equal('timerDefaults' in old, false, 'old data gains no field');
+  const local = { ...core.defaultState(), timerDefaults: { work: 45 } };
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  assert.equal(core.saveStateResult(storage, local).ok, true);
+  assert.deepEqual(core.loadState(storage).timerDefaults, { work: 45 });
+  const parsed = core.parseBackup(JSON.stringify(core.buildBackup(local)));
+  assert.deepEqual(parsed.state.timerDefaults, { work: 45 });
+  assert.deepEqual(core.mergeState(core.defaultState(), parsed.state).state.timerDefaults, { work: 45 });
+  assert.deepEqual(core.mergeState({ ...core.defaultState(), timerDefaults: { work: 20 } }, parsed.state).state.timerDefaults, { work: 20 }, 'local defaults win');
+  assert.deepEqual(core.replaceState(core.defaultState(), parsed.state).state.timerDefaults, { work: 45 });
+  assert.equal('timerDefaults' in core.sanitizeState({ ...core.defaultState(), timerDefaults: { work: 'x' } }), false, 'unusable defaults are dropped');
 });
 
 test('draftFrom and newInterval round-trip through buildTimer', () => {

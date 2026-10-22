@@ -6,7 +6,7 @@ import { pickCheer } from './cheers.js';
 import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from './heartrate.js';
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor } from './statistics-ui.js';
-import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, totalSeconds, formatClock, formatLength } from './timer.js';
+import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -26,6 +26,9 @@ const paths = {
   settings: 'M4 7h16M4 17h16M8 4v6M16 14v6',
   edit: 'm15 5 4 4M5 15l10-10a3 3 0 0 1 4 4L9 19l-5 1 1-5',
   play: 'M8 5v14l11-7z',
+  pause: 'M8 5h3v14H8zM13 5h3v14h-3z',
+  stop: 'M6 6h12v12H6z',
+  stopwatch: 'M9.5 2.5h5M12 2.5V6M12 10v3.5l2.5 1.5M19.5 13.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0M18.5 6.5l1.5-1.5',
   heart: 'M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.weight}"/></svg>`;
@@ -530,29 +533,27 @@ function timerEditorView(timers) {
   const intervals = d.intervals.map((i, n) => `<fieldset class="timer-fieldset"><legend>Intervalli ${n + 1}</legend>
     <label class="field">Selitys<input type="text" maxlength="60" placeholder="esim. Juoksu" value="${esc(i.label)}" data-tf="label" data-ti="${n}" data-key="tl-${n}"></label>
     <div class="timer-duration"><label class="field">Minuutit<input type="number" inputmode="numeric" min="0" max="180" step="1" placeholder="0" value="${esc(i.min)}" data-tf="min" data-ti="${n}" data-key="tm-${n}"></label><label class="field">Sekunnit<input type="number" inputmode="numeric" min="0" max="59" step="1" placeholder="0" value="${esc(i.sec)}" data-tf="sec" data-ti="${n}" data-key="ts-${n}"></label></div>
-    <button class="btn small delete" data-action="timerdelint" data-i="${n}" data-key="tdelint-${n}" aria-label="Poista intervalli ${n + 1}" ${d.intervals.length < 2 ? 'disabled' : ''}>Poista intervalli</button></fieldset>`).join('');
+    <div class="timer-fieldset-actions"><button class="btn small delete" data-action="timerdelint" data-i="${n}" data-key="tdelint-${n}" aria-label="Poista intervalli ${n + 1}" ${d.intervals.length < 2 ? 'disabled' : ''}>Poista intervalli</button><button class="btn small timer-default" data-action="timerdefault" data-i="${n}" data-key="tdef-${n}" aria-label="Tee oletus intervalli ${n + 1}" ${presetKind(i.label) ? '' : 'hidden'}>Tee oletus</button></div></fieldset>`).join('');
   const error = timerError ? `<div class="banner" role="alert" id="timer-err" tabindex="-1"><div>${esc(timerError)}</div></div>` : '';
+  const full = d.intervals.length >= TIMER_MAX_INTERVALS ? 'disabled' : '';
+  const preset = (kind) => `<button class="btn secondary timer-preset" data-action="timeradd${kind}" data-key="timer-${kind}" ${full}>${TIMER_PRESETS[kind].label} <span class="timer-preset-time">${formatClock(presetSeconds(state.timerDefaults, kind) * 1000)}</span></button>`;
   return timerChrome(`<button class="btn ghost back" data-action="timercancel" data-key="timer-cancel-top">${icon('back')} Ajastimiin</button>`,
     `<div class="stat-heading"><h1 tabindex="-1">${d.id ? 'Muokkaa sarjaa' : 'Uusi sarja'}</h1><p class="muted">Intervallit suoritetaan järjestyksessä ja koko sarja toistetaan valitun kierrosmäärän verran.</p></div>
     <div class="card timer-editor"><label class="field">Sarjan nimi<input type="text" maxlength="60" placeholder="${esc(placeholder)}" value="${esc(d.name)}" data-tf="name" data-key="tf-name"><small class="muted">Jos nimeä ei anneta, käytetään nimeä ${esc(placeholder)}.</small></label>
     <label class="field">Toistojen määrä (kierrosta)<input type="number" inputmode="numeric" min="1" max="99" step="1" value="${esc(d.repeats)}" data-tf="repeats" data-key="tf-repeats"></label></div>
     ${intervals}
-    <button class="btn secondary" data-action="timeraddint" data-key="timer-add" ${d.intervals.length >= TIMER_MAX_INTERVALS ? 'disabled' : ''}>${icon('plus')} Lisää intervalli</button>
+    <div class="timer-add-row">${preset('work')}<button class="btn secondary" data-action="timeraddint" data-key="timer-add" ${full}>${icon('plus')} Lisää intervalli</button>${preset('rest')}</div>
     ${error}
     <div class="timer-controls"><button class="btn" data-action="timercancel" data-key="timer-cancel">Peruuta</button><button class="btn primary" data-action="timersave" data-key="timer-save">Tallenna sarja</button></div>`);
 }
 
 function timerRunSnapshot(timer) {
   const phase = phaseAt(timer, runElapsed(timerRun, Date.now()));
-  const next = phase.index + 1 < timer.intervals.length ? intervalLabel(timer, phase.index + 1)
-    : phase.round < timer.repeats ? intervalLabel(timer, 0) : '';
   return {
     phase,
     round: `Kierros ${phase.round}/${timer.repeats}`,
     time: formatClock(phase.remainingMs),
     label: intervalLabel(timer, phase.index),
-    index: `Intervalli ${phase.index + 1}/${timer.intervals.length}`,
-    next: next ? `Seuraavaksi: ${next}` : 'Viimeinen intervalli',
   };
 }
 
@@ -562,8 +563,8 @@ function timerRunView(timer) {
   const body = done
     ? `<section class="card timer-card" aria-label="Ajastin valmis"><span class="eyebrow accent">${icon('check')} Valmis</span><p class="timer-label">${timer.repeats} ${timer.repeats === 1 ? 'kierros' : 'kierrosta'} tehty</p><p class="muted">${esc(timer.name)} · yhteensä ${formatLength(totalSeconds(timer))}</p></section>
       <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-close">Sulje</button><button class="btn primary" data-action="timerstart" data-id="${esc(timer.id)}" data-key="timer-again">Aloita alusta</button></div>`
-    : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="eyebrow accent" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label" id="trun-label">${esc(snap.label)}</p><p class="muted" id="trun-index">${snap.index}</p><p class="muted" id="trun-next">${esc(snap.next)}</p></section>
-      <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')} Jatka</button>` : '<button class="btn primary" data-action="timerpause" data-key="timer-pause">Tauko</button>'}</div>`;
+    : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="timer-round" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label" id="trun-label">${esc(snap.label)}</p></section>
+      <div class="timer-controls timer-run-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">${icon('stop')}Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')}Jatka</button>` : `<button class="btn primary" data-action="timerpause" data-key="timer-pause">${icon('pause')}Tauko</button>`}</div>`;
   return timerChrome('', `<div class="stat-heading"><h1 tabindex="-1">${esc(timer.name)}</h1></div>${body}`);
 }
 
@@ -612,7 +613,7 @@ function paintTimer() {
   const snap = timerRunSnapshot(timer);
   if (snap.phase.done !== !!timerRun.done) { timerRun.done = snap.phase.done; render(); return; }
   if (!snap.phase.done) {
-    for (const [id, value] of [['trun-round', snap.round], ['trun-time', snap.time], ['trun-label', snap.label], ['trun-index', snap.index], ['trun-next', snap.next]]) {
+    for (const [id, value] of [['trun-round', snap.round], ['trun-time', snap.time], ['trun-label', snap.label]]) {
       const el = document.getElementById(id);
       if (el && el.textContent !== value) el.textContent = value;
     }
@@ -654,7 +655,7 @@ function homeView() {
   const hint = ios ? '<p class="install-hint" id="ios-hint">Lisää sovellus aloitusnäyttöön: Jaa → Lisää Koti-valikkoon. Tiedot säilyvät tällä laitteella. Selaintietojen tyhjentäminen voi poistaa ne.</p>' : '';
   return `${brand()}${warn()}${savedCard()}${resume}<h1 class="sr-only" tabindex="-1">Treenipäiväkirja</h1>
     <div class="stats"><button type="button" class="stat-tile" data-action="homeperiod" data-key="homeperiod"><strong>${thisWeek}</strong> <span>${periodLabel}</span></button><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
-    <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="timer" data-key="timer-top">Ajastin</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
+    <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="timer" data-key="timer-top">${icon('stopwatch')} Ajastin</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
     <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Luo treeniohjelma</button></section>
     <div class="home-aside">
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
@@ -1121,6 +1122,16 @@ async function shareBackup(text) {
   } catch (error) { return error?.name === 'AbortError' ? false : null; }
 }
 
+// Työ / Lepo quick-add: a named interval with the saved (or factory) duration for that kind.
+function addPresetInterval(kind) {
+  if (!timerDraft || timerDraft.intervals.length >= TIMER_MAX_INTERVALS) return;
+  const { label } = TIMER_PRESETS[kind], seconds = presetSeconds(state.timerDefaults, kind);
+  timerDraft.intervals.push(newInterval(label, seconds));
+  render();
+  document.querySelector(`[data-key="timer-${kind}"]`)?.scrollIntoView({ block: 'nearest' });
+  announce(`${label}-intervalli lisätty, ${formatLength(seconds)}.`);
+}
+
 const actions = {
   statistics() { readLatest(); view = 'statistics'; render(); },
   showhistory() { readLatest(); view = 'history'; render(); },
@@ -1140,6 +1151,23 @@ const actions = {
     if (!timerDraft || timerDraft.intervals.length >= TIMER_MAX_INTERVALS) return;
     timerDraft.intervals.push(newInterval()); render();
     document.querySelector(`[data-key="tl-${timerDraft.intervals.length - 1}"]`)?.focus();
+  },
+  timeraddwork() { addPresetInterval('work'); },
+  timeraddrest() { addPresetInterval('rest'); },
+  async timerdefault(t) {
+    if (!timerDraft) return;
+    const n = +t.dataset.i, kind = presetKind(timerDraft.intervals[n]?.label);
+    if (!kind) return;
+    timerError = '';
+    const parsed = intervalSeconds(timerDraft.intervals[n], n);
+    let failed = parsed.error ?? '';
+    if (!failed && !await mutate((next) => { next.timerDefaults = { ...next.timerDefaults, [kind]: parsed.seconds }; }, { critical: true })) {
+      failed = 'Oletusta ei voitu tallentaa. Tarkista tallennuksen tila ja yritä uudelleen.';
+    }
+    timerError = failed;
+    render();
+    if (failed) { document.getElementById('timer-err')?.focus(); return; }
+    announce(`${kind === 'work' ? 'Työn' : 'Levon'} oletuskesto on nyt ${formatLength(parsed.seconds)}.`);
   },
   timerdelint(t) {
     if (!timerDraft || timerDraft.intervals.length < 2) return;
@@ -1657,7 +1685,10 @@ document.addEventListener('input', (e) => {
   if (t.dataset.tf && timerDraft) {
     const field = t.dataset.tf;
     if (field === 'name' || field === 'repeats') timerDraft[field] = t.value;
-    else if (['label', 'min', 'sec'].includes(field) && timerDraft.intervals[+t.dataset.ti]) timerDraft.intervals[+t.dataset.ti][field] = t.value;
+    else if (['label', 'min', 'sec'].includes(field) && timerDraft.intervals[+t.dataset.ti]) {
+      timerDraft.intervals[+t.dataset.ti][field] = t.value;
+      if (field === 'label') t.closest('fieldset')?.querySelector('[data-action="timerdefault"]')?.toggleAttribute('hidden', !presetKind(t.value));
+    }
     return;
   }
   if (t.dataset.tracking && draft && t.type !== 'radio') {

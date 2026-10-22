@@ -479,11 +479,21 @@ button.stat-tile { font: inherit; text-align: left; color: inherit; padding: var
 .timer-fieldset { display: grid; gap: var(--control-gap); min-width: 0; margin: 0; padding: var(--card-padding); border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
 .timer-fieldset legend { padding-inline: var(--space-2); font-size: 13px; font-weight: 700; }
 .timer-fieldset .delete { justify-self: start; color: var(--danger); }
+.timer-fieldset-actions { display: flex; align-items: center; gap: var(--control-gap); }
+.timer-fieldset-actions .timer-default { margin-left: auto; }
+.timer-add-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); gap: var(--control-gap); }
+.timer-add-row .btn { padding-inline: var(--space-2); }
+.timer-preset { flex-direction: column; gap: 0; line-height: 1.15; }
+.timer-preset-time { font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .timer-duration { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--control-gap); }
 .timer-editor .field small { display: block; margin-top: var(--space-1); font-weight: 400; }
 .timer-card { display: grid; gap: var(--space-2); justify-items: center; text-align: center; padding: var(--space-5) var(--card-padding); min-width: 0; }
+.timer-round { max-width: 100%; font-size: clamp(36px, 13vw, 60px); font-weight: 800; line-height: 1.1; letter-spacing: -.01em; color: var(--accent); }
 .timer-clock { font-size: clamp(64px, 24vw, 120px); font-weight: 800; line-height: 1.05; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .timer-label { max-width: 100%; margin: 0; font-size: 22px; font-weight: 700; overflow-wrap: anywhere; }
 .timer-card p { margin: 0; }
 .timer-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--control-gap); }
 .timer-controls .btn { min-height: 56px; }
+.timer-run-controls { grid-template-columns: repeat(2, minmax(0, 190px)); justify-content: center; gap: var(--space-4); }
+.timer-run-controls .btn { aspect-ratio: 1; min-height: 0; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border-radius: 28px; font-size: 22px; font-weight: 800; }
+.timer-run-controls .icon { width: 44px; height: 44px; }
