@@ -193,9 +193,9 @@ try {
           assert.match(await bench.locator('.record-result').innerText(), /60 kg/);
           assert.equal(await bench.locator('.record-estimate').count(), 2);
           const external = bench.locator('.record-estimate').filter({ hasText: 'Levytanko' });
-          assert.match(await external.innerText(), /Teoreettinen maksimi ~63,3 kg/);
+          assert.match(await external.innerText(), /Arvio ~63,3 kg/);
           assert.equal(await external.locator('.record-date').innerText(), new Date(best.endedAt).toLocaleDateString('fi-FI'));
-          assert.match(await bench.locator('.record-estimate').filter({ hasText: 'kg/käsipaino' }).innerText(), /Teoreettinen maksimi ~25,3 kg\/käsipaino/);
+          assert.match(await bench.locator('.record-estimate').filter({ hasText: 'kg/käsipaino' }).innerText(), /Arvio ~25,3 kg\/käsipaino/);
           assert.equal(await bench.locator('img').count(), 0);
           const row = recordRow(page, 'Kulmasoutu');
           assert.match(await row.locator('.record-result').innerText(), /40 kg/);
@@ -203,7 +203,9 @@ try {
           assert.equal(await page.locator('[data-action="editrecord"]').count(), 0);
           assert.doesNotMatch(await page.locator('.record-list').innerText(), /NaN|Infinity|Epley|RIR/);
           assert.equal(await page.locator('.record-session[open]').count(), 0);
-          for (const session of [heavier, best, dumbbell]) {
+          assert.equal(await bench.locator('.record-session').count(), 1);
+          assert.doesNotMatch(await page.locator('.record-list').innerText(), /Näytä maksimiarvion treeni|Teoreettinen maksimi/);
+          for (const session of [heavier]) {
             const disclosure = bench.locator(`.record-session[data-session-id="${session.id}"]`);
             const summary = disclosure.locator('summary');
             await summary.focus(); await summary.press('Enter');
@@ -221,13 +223,22 @@ try {
             for (const colorScheme of ['dark', 'light']) {
               await page.emulateMedia({ colorScheme });
               await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, colorScheme === 'dark' ? 'dark' : 'aurora');
+              const layout = await bench.evaluate((row) => {
+                const result = row.querySelector('.record-result').getBoundingClientRect();
+                const session = row.querySelector('.record-session').getBoundingClientRect();
+                return [...row.querySelectorAll('.record-estimate')].every((estimate) => {
+                  const bounds = estimate.getBoundingClientRect();
+                  return bounds.top >= result.bottom && bounds.bottom <= session.top;
+                });
+              });
+              assert.equal(layout, true, 'estimates sit below the recorded maximum and above the workout disclosure');
               assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${width}px ${colorScheme}`);
               const result = await new AxeBuilder({ page }).analyze();
               assert.deepEqual(result.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), []);
             }
           }
           await page.reload(); await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('.record-list').innerText(), /Teoreettinen maksimi ~63,3 kg/);
+          assert.match(await page.locator('.record-list').innerText(), /Arvio ~63,3 kg/);
           assert.equal(await page.locator('.record-session[open]').count(), 0);
           assert.deepEqual(await saved(page), before);
           assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-v1')), rawBefore);
@@ -252,7 +263,7 @@ try {
           assert.equal((await saved(page)).history[0].exercises[0].sets[0].actualReps, '8');
           assert.deepEqual((await saved(page)).routines, state.routines);
           await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('.record-estimate').innerText(), /Teoreettinen maksimi ~63,3 kg/);
+          assert.match(await page.locator('.record-estimate').innerText(), /Arvio ~63,3 kg/);
         });
 
         await run('an exercise without a load meaning asks once, then yields a 1RM; range targets are never recorded', async (page) => {
@@ -278,7 +289,7 @@ try {
           assert.equal(session[1].actualReps, undefined, 'a range target is not silently recorded as its top');
           await tap(button(page, 'Tallenna harjoitus'));
           await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('.record-estimate').innerText(), /Teoreettinen maksimi ~63,3 kg/);
+          assert.match(await page.locator('.record-estimate').innerText(), /Arvio ~63,3 kg/);
         });
 
         await run('one 5 x 20 kg set is enough despite incomplete and weaker sets, including after reload', async (page) => {
@@ -300,7 +311,7 @@ try {
             await tap(button(page, 'Ennätykset'));
             const bench = recordRow(page, 'Penkkipunnerrus');
             assert.match(await bench.locator('.record-result').innerText(), /20 kg/);
-            assert.match(await bench.locator('.record-estimate').innerText(), /Teoreettinen maksimi ~23,3 kg/);
+            assert.match(await bench.locator('.record-estimate').innerText(), /Arvio ~23,3 kg/);
             const row = recordRow(page, 'Kulmasoutu');
             assert.match(await row.locator('.record-result').innerText(), /5 kg/);
             assert.equal(await row.locator('.record-estimate').count(), 0);
@@ -365,9 +376,9 @@ try {
           updated.editedAt = after.history.find((x) => x.id === h.id).editedAt;
           assert.deepEqual(after, expected, 'only the explicitly confirmed historical fields may change');
           await tap(button(page, 'Harjoituksiin')); await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('.record-estimate').innerText(), /Teoreettinen maksimi ~63,3 kg/);
+          assert.match(await page.locator('.record-estimate').innerText(), /Arvio ~63,3 kg/);
           await page.reload(); await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('.record-estimate').innerText(), /Teoreettinen maksimi ~63,3 kg/);
+          assert.match(await page.locator('.record-estimate').innerText(), /Arvio ~63,3 kg/);
           assert.deepEqual(await saved(page), after);
         });
 
@@ -391,7 +402,7 @@ try {
           const before = await saved(page);
           await tap(button(page, 'Historiaan')); await tap(button(page, 'Harjoituksiin')); await tap(button(page, 'Ennätykset'));
           assert.equal(await page.locator('.record-estimate').count(), 2);
-          assert.match(await page.locator('.record-list').innerText(), /Teoreettinen maksimi ~120 kg/);
+          assert.match(await page.locator('.record-list').innerText(), /Arvio ~120 kg/);
           const disclosure = page.locator('.record-session').first();
           await tap(disclosure.locator('summary'));
           assert.match(await disclosure.innerText(), /Vertailutreeni/);

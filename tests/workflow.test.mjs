@@ -299,29 +299,29 @@ try {
           await p.goto(url);
           await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
           await p.reload();
-          const showRecord = async (pattern, sessionId) => {
+          const showRecord = async (pattern) => {
             await tap(button(p, 'Ennätykset'));
             assert.match(await p.locator('.record-estimate').innerText(), pattern);
             const disclosure = p.locator('.record-estimate').locator('..').locator('.record-session');
-            assert.equal(await disclosure.getAttribute('data-session-id'), sessionId);
+            assert.equal(await disclosure.getAttribute('data-session-id'), 'record-best');
             await tap(disclosure.locator('summary'));
             assert.match(await disclosure.innerText(), /Penkkipunnerrus/);
             await tap(button(p, 'Harjoituksiin'));
           };
-          await showRecord(/Teoreettinen maksimi ~63,3 kg/, 'record-best');
+          await showRecord(/Arvio ~63,3 kg/);
           await tap(button(p, 'Historia')); await tap(p.locator('[data-key="hedit-record-best"]'));
           await p.locator('[data-key="hr-0-0"]').fill('1'); await p.keyboard.press('Tab');
           await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
           await tap(button(p, 'Harjoituksiin'));
-          await showRecord(/Teoreettinen maksimi ~50,7 kg/, 'record-previous');
+          await showRecord(/Arvio ~50,7 kg/);
           await tap(button(p, 'Historia'));
           const beforeDelete = (await saved(p)).history;
           await tapConfirm(p.locator('[data-key="hdel-record-previous"]'));
-          await tap(button(p, 'Harjoituksiin')); await showRecord(/Teoreettinen maksimi ~50 kg/, 'record-best');
+          await tap(button(p, 'Harjoituksiin')); await showRecord(/Arvio ~50 kg/);
           await tap(button(p, 'Historia')); await tap(p.locator('[data-key="undodelete"]'));
           assert.deepEqual((await saved(p)).history, beforeDelete);
-          await tap(button(p, 'Harjoituksiin')); await showRecord(/Teoreettinen maksimi ~50,7 kg/, 'record-previous');
-          await p.reload(); await showRecord(/Teoreettinen maksimi ~50,7 kg/, 'record-previous');
+          await tap(button(p, 'Harjoituksiin')); await showRecord(/Arvio ~50,7 kg/);
+          await p.reload(); await showRecord(/Arvio ~50,7 kg/);
           assert.deepEqual((await saved(p)).history, beforeDelete);
           assert.deepEqual((await saved(p)).routines, state.routines);
         });

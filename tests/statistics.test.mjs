@@ -458,7 +458,7 @@ test('records render compact approximate values, independent dates and escaped c
   heavier.exercises[0].weight = '60'; delete heavier.exercises[0].sets[0].actualReps;
   state.history = [h, heavier];
   const html = recordsView(state);
-  assert.match(html, /Teoreettinen maksimi <strong>~63,3 kg\/käsipaino<\/strong>/);
+  assert.match(html, /Arvio <strong>~63,3 kg\/käsipaino<\/strong>/);
   assert.ok(html.includes(new Date(h.endedAt).toLocaleDateString('fi-FI')));
   assert.ok(html.includes(new Date(heavier.endedAt).toLocaleDateString('fi-FI')));
   assert.match(html, /&lt;img/);
@@ -491,7 +491,7 @@ test('one completed 5 x 20 kg set establishes a record regardless of other sets 
   assert.equal(record.weight, 20);
   assert.deepEqual(record.estimates, expected);
   const html = recordsView({ history });
-  assert.match(html, /Teoreettinen maksimi <strong>~23,3 kg<\/strong>/);
+  assert.match(html, /Arvio <strong>~23,3 kg<\/strong>/);
   assert.doesNotMatch(html, /Täydennä|editrecord|1RM —/);
   assert.deepEqual(history, before);
 });
@@ -510,21 +510,22 @@ test('weight-only records never ask to complete other sets or manufacture missin
   }
 });
 
-test('record disclosures reference the latest weight session and the independent estimate session without mutating data', () => {
+test('records show estimates below the result and only disclose the latest weight session without mutating data', () => {
   const best = recordWorkout('best', NOW - 2 * DAY), heavier = recordWorkout('heavier', NOW - DAY);
   best.name = 'Arvion <paras> treeni';
   heavier.name = 'Painoennätyksen treeni';
   heavier.exercises[0].weight = '60'; heavier.exercises[0].sets[0].actualReps = '1';
   const other = workout('other', NOW - DAY).exercises[1];
   other.sets[0].done = false; other.sets[1].actualReps = '3';
-  best.exercises.push(other);
+  heavier.exercises.push(other);
   const duplicate = structuredClone(heavier);
   duplicate.name = 'Duplicate must not be used'; duplicate.exercises[0].sets[0].actualReps = '10';
   const history = [heavier, duplicate, best], before = structuredClone(history);
   const html = recordsView({ history });
   assert.match(html, /data-session-id="heavier"><summary[^>]*>Näytä ennätyspainon treeni<\/summary>/);
-  assert.match(html, /data-session-id="best"><summary[^>]*>Näytä maksimiarvion treeni<\/summary>/);
-  assert.match(html, /Arvion &lt;paras&gt; treeni/);
+  assert.doesNotMatch(html, /data-session-id="best"|Näytä maksimiarvion treeni|Teoreettinen maksimi|Arvion &lt;paras&gt; treeni/);
+  assert.ok(html.indexOf('class="record-result"') < html.indexOf('class="record-estimate"'));
+  assert.ok(html.indexOf('class="record-estimate"') < html.indexOf('class="history-log record-session"'));
   assert.match(html, /Painoennätyksen treeni/);
   assert.match(html, /Kulmasoutu tangolla<\/strong>: tekemättä \/ 3 toistoa @ 100/);
   assert.match(html, /1:00:00 · 2\/3 sarjaa/);

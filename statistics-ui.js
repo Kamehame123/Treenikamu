@@ -87,10 +87,10 @@ export function historySets(h) {
   return `<ul>${exercises}</ul>${h.fatigued ? '<p>Palautuminen oli heikkoa.</p>' : ''}`;
 }
 
-function recordSession(h, key, label) {
+function recordSession(h, key) {
   const { done, total } = progress(h);
   const metadata = [date(h.endedAt), Number.isFinite(h.startedAt) ? formatDuration(h.endedAt - h.startedAt) : '', `${done}/${total} sarjaa`].filter(Boolean).join(' · ');
-  return `<details class="history-log record-session" data-session-id="${esc(h.id)}"><summary data-key="${esc(key)}">${esc(label)}</summary><div class="record-session-content"><p><strong>${esc(h.name)}</strong></p><p class="muted">${esc(metadata)}</p>${historySets(h)}</div></details>`;
+  return `<details class="history-log record-session" data-session-id="${esc(h.id)}"><summary data-key="${esc(key)}">Näytä ennätyspainon treeni</summary><div class="record-session-content"><p><strong>${esc(h.name)}</strong></p><p class="muted">${esc(metadata)}</p>${historySets(h)}</div></details>`;
 }
 
 export function recordsView(state) {
@@ -100,9 +100,9 @@ export function recordsView(state) {
   const rows = records.map((r) => {
     const estimates = r.estimates.map((estimate) => {
       const context = [estimate.equipment || (r.estimates.length > 1 ? 'Laite ei tiedossa' : ''), estimate.variant].filter(Boolean).join(' · ');
-      return `<div class="record-entry"><div class="record-estimate"><span>Teoreettinen maksimi <strong>~${esc(fmt(estimate.value, 1))} ${estimate.loadType === 'per-hand' ? 'kg/käsipaino' : 'kg'}</strong></span> <span class="muted record-date">${esc(date(estimate.at))}</span>${context ? ` <span class="muted record-context">${esc(context)}</span>` : ''}</div>${recordSession(sessions.get(estimate.sessionId), `record-estimate-${estimate.key}`, 'Näytä maksimiarvion treeni')}</div>`;
+      return `<div class="record-estimate"><span>Arvio <strong>~${esc(fmt(estimate.value, 1))} ${estimate.loadType === 'per-hand' ? 'kg/käsipaino' : 'kg'}</strong></span> <span class="muted record-date">${esc(date(estimate.at))}</span>${context ? ` <span class="muted record-context">${esc(context)}</span>` : ''}</div>`;
     }).join('');
-    return `<li class="record-row"><div class="record-entry"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${recordSession(sessions.get(r.sessionId), `record-weight-${r.key}`, 'Näytä ennätyspainon treeni')}</div>${estimates}</li>`;
+    return `<li class="record-row"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${estimates}${recordSession(sessions.get(r.sessionId), `record-weight-${r.key}`)}</li>`;
   }).join('');
   return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin viimeksi. Yksi tehty sarja riittää ennätykseen.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
 }

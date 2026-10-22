@@ -1,4 +1,7 @@
 [
+  { "version": 62, "date": "2026-10-22", "changes": [
+    "Ennätyksissä laskettu maksimi näkyy nyt kirjattua ennätyspainoa alempana lyhyesti Arvio ~50 kg. Maksimiarvion erillinen treenipainike poistettiin. Näytä ennätyspainon treeni avaa edelleen varsinaisen painoennätyksen harjoituksen. Laskentatapa ja tallennetut treenit säilyvät ennallaan."
+  ] },
   { "version": 61, "date": "2026-10-22", "changes": [
     "Ajastin on yksinkertaistettu: ajastinsarjaan ei enää liitetä liikettä, painoa tai toistoja, eikä ajastin tallenna mitään harjoitushistoriaan. Kenttä Toistojen määrä on nimetty uudelleen Kierrosten määräksi. Aiemmat tiedot ja varmuuskopiot säilyvät ennallaan."
   ] },

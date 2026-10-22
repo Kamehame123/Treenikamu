@@ -360,7 +360,6 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .record-context { flex: 1 1 100%; overflow-wrap: anywhere; font-size: 12px; }
 .record-name { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; font-weight: 650; }
 .record-date { font-size: 12px; }
-.record-entry { min-width: 0; }
 .record-session-content { display: grid; gap: var(--space-2); }
 .record-session-content ul { margin: 0; }
 .statistics-content { display: grid; gap: var(--section-gap); min-width: 0; }
