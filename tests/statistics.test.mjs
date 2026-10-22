@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
 import * as stats from '../statistics.js';
-import { statisticsView, escapeHtml } from '../statistics-ui.js';
+import { statisticsView, recordsView, escapeHtml } from '../statistics-ui.js';
 import { DAY, NOW, workout, baselineHistory, configuredState, statisticsRoutine } from './statistics-fixtures.mjs';
 
 const dataFor = (history, extra = {}) => stats.buildStatistics(history, { now: NOW, range: 'all', ...extra });
@@ -318,4 +318,151 @@ test('records keep the heaviest logged kg per move name across programs, with th
     ['Kyykky', 100, NOW - 2 * DAY],
     ['penkkipunnerrus', 62.5, NOW - 3 * DAY],
   ]);
+  assert.ok(records.every((r) => r.estimates.length === 0), 'weight-only legacy records have no invented reps');
+});
+
+function recordWorkout(id = 'record', at = NOW) {
+  const h = workout(id, at, [50, 50]);
+  h.exercises = [h.exercises[0]];
+  h.exercises[0].sets = [{ done: true, actualReps: '8' }];
+  h.setsDone = h.setsTotal = 1;
+  return h;
+}
+
+test('estimated records compare every set independently of the heaviest load and retain their own latest date', () => {
+  const older = recordWorkout('older', NOW - 3 * DAY), heavier = recordWorkout('heavier', NOW - DAY);
+  heavier.exercises[0].weight = '60'; heavier.exercises[0].sets[0].actualReps = '1';
+  const repeated = recordWorkout('repeated', NOW - 2 * DAY);
+  repeated.routineId = 'another-program'; repeated.exercises[0].id = 'another-exercise';
+  const before = structuredClone([heavier, repeated, older]);
+  for (const history of [before, [...before].reverse()]) {
+    const [record] = stats.buildRecords(history, NOW);
+    assert.equal(record.weight, 60);
+    assert.equal(record.at, heavier.endedAt);
+    assert.equal(record.estimates.length, 1);
+    const [estimate] = record.estimates;
+    approximately(estimate.value, 50 * (1 + 8 / 30));
+    assert.deepEqual([estimate.load, estimate.reps, estimate.at, estimate.sessionId], [50, 8, repeated.endedAt, 'repeated']);
+  }
+  assert.deepEqual(before, [heavier, repeated, older], 'aggregation must not modify the saved snapshots');
+});
+
+test('estimated records reuse Epley boundaries, decimal kg overrides and per-dumbbell loads without rounding early', () => {
+  for (const [weight, actualWeight, reps, loadType, expected] of [
+    ['50', undefined, '1', 'external', 50],
+    ['50', undefined, '10', 'external', 50 * (1 + 10 / 30)],
+    ['12,5 kg', undefined, '8', 'external', 12.5 * (1 + 8 / 30)],
+    ['50', '22,5 kg', '8', 'per-hand', 22.5 * (1 + 8 / 30)],
+    ['50', '', '8', 'external', 50 * (1 + 8 / 30)],
+  ]) {
+    const h = recordWorkout(), e = h.exercises[0];
+    e.weight = weight; e.tracking.loadType = loadType;
+    Object.assign(e.sets[0], { actualWeight, actualReps: reps });
+    const [estimate] = stats.buildRecords([h], NOW)[0].estimates;
+    approximately(estimate.value, expected);
+    assert.equal(estimate.loadType, loadType);
+    assert.equal(estimate.reps, Number(reps));
+  }
+});
+
+test('estimated records never turn targets, time, assistance, invalid results or missing metadata into a maximum', () => {
+  for (const modify of [
+    (e) => { delete e.sets[0].actualReps; e.reps = '8'; },
+    (e) => { delete e.sets[0].actualReps; e.sets[0].reps = '8–10'; },
+    ...['', '0', '11', '8.5', '8–10', 'NaN', 'Infinity'].map((reps) => (e) => { e.sets[0].actualReps = reps; }),
+    (e) => { e.sets[0].done = false; },
+    (e) => { e.sets[0].actualSeconds = '45'; },
+    (e) => { e.reps = '45 s'; },
+    (e) => { e.sets[0].reps = '2 min'; },
+    ...['', '0', 'invalid', '-5', 'Infinity', '10001'].map((weight) => (e) => { e.weight = weight; }),
+    ...['0', 'invalid'].map((weight) => (e) => { e.sets[0].actualWeight = weight; }),
+    ...['unknown', 'bodyweight', 'assisted', 'other'].map((type) => (e) => { e.tracking.loadType = type; }),
+    (e) => { delete e.tracking; },
+  ]) {
+    const h = recordWorkout(); modify(h.exercises[0]);
+    assert.ok(stats.buildRecords([h], NOW).every((r) => r.estimates.length === 0), modify.toString());
+  }
+});
+
+test('estimated records require no effort or working-set classification and leave strict index rules unchanged', () => {
+  for (const modify of [
+    () => {},
+    (h, e) => { e.sets[0].kind = 'warmup'; },
+    (h, e) => { e.sets[0].kind = 'working'; e.sets[0].setRir = '5'; },
+    (h, e) => { e.pain = true; },
+    (h, e) => { e.deload = true; },
+    (h) => { h.fatigued = true; },
+  ]) {
+    const h = recordWorkout(); modify(h, h.exercises[0]);
+    approximately(stats.buildRecords([h], NOW)[0].estimates[0].value, 50 * (1 + 8 / 30));
+    assert.equal(dataFor([h]).allGroups[0].points[0].estimate, null);
+  }
+});
+
+test('estimated records merge matching movement contexts across programs but separate equipment, variants and load conventions', () => {
+  const original = recordWorkout('original', NOW - DAY);
+  original.exercises[0].tracking.variant = 'Sali A';
+  const matching = recordWorkout('matching');
+  matching.routineId = 'other'; matching.exercises[0].id = 'different';
+  matching.exercises[0].name = 'penkkipunnerrus';
+  matching.exercises[0].tracking.sourceId = 'different-source';
+  matching.exercises[0].tracking.variant = 'sali a';
+  const variants = [
+    { equipment: 'Laite' }, { equipment: '' }, { variant: 'Sali B' }, { loadType: 'per-hand' },
+  ].map((change, i) => {
+    const h = recordWorkout(`context-${i}`, NOW - DAY / 2);
+    h.exercises[0].tracking = { ...original.exercises[0].tracking, ...change };
+    return h;
+  });
+  const [record] = stats.buildRecords([original, matching, ...variants], NOW);
+  assert.equal(record.estimates.length, 5);
+  const combined = record.estimates.find((e) => e.equipment === 'Levytanko' && e.loadType === 'external' && e.variant === 'sali a');
+  assert.equal(combined.sessionId, 'matching');
+  assert.equal(new Set(record.estimates.map((e) => e.key)).size, 5);
+  assert.deepEqual(stats.buildRecords([original, matching, ...variants], NOW), stats.buildRecords([...variants].reverse().concat(original, matching), NOW));
+});
+
+test('estimated records exclude future, invalid, duplicate and summary-only sessions', () => {
+  const valid = recordWorkout('valid'), duplicate = recordWorkout('valid'), future = recordWorkout('future', NOW + DAY);
+  duplicate.exercises[0].weight = '500'; future.exercises[0].weight = '500';
+  const badDates = [0, -1, NaN, Infinity, '2026-10-20'].map((at, i) => recordWorkout(`invalid-${i}`, at));
+  const legacy = { id: 'legacy', endedAt: NOW, setsDone: 10, setsTotal: 10 };
+  assert.deepEqual(stats.buildRecords([valid, duplicate, future, ...badDates, legacy, null], NOW), stats.buildRecords([valid], NOW));
+});
+
+test('estimated records recompute after history correction, deletion, undo and compatible backup merges without persisting derived data', () => {
+  const state = core.defaultState(); state.history = [recordWorkout('best'), recordWorkout('previous', NOW - DAY)];
+  state.history[1].exercises[0].weight = '40';
+  const estimate = () => stats.buildRecords(state.history, NOW)[0].estimates[0].value;
+  approximately(estimate(), 50 * (1 + 8 / 30));
+  assert.equal(core.editHistorySet(state, 'best', 0, 0, 'actualReps', '1', NOW).ok, true);
+  approximately(estimate(), 40 * (1 + 8 / 30));
+  const removed = core.deleteHistoryEntry(state, 'previous');
+  assert.equal(estimate(), 50);
+  assert.equal(core.restoreHistoryEntry(state, removed.entry, removed.index).ok, true);
+  approximately(estimate(), 40 * (1 + 8 / 30));
+  const before = structuredClone(state), backup = core.buildBackup(state, NOW), parsed = core.parseBackup(JSON.stringify(backup));
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(stats.buildRecords(parsed.state.history, NOW), stats.buildRecords(state.history, NOW));
+  const merged = core.mergeState(core.defaultState(), parsed.state).state;
+  assert.deepEqual(stats.buildRecords(merged.history, NOW), stats.buildRecords(state.history, NOW));
+  assert.deepEqual(core.mergeState(merged, parsed.state).state, merged);
+  assert.deepEqual(state, before);
+  assert.equal(JSON.stringify(backup).includes('estimates'), false);
+});
+
+test('records render compact approximate values, independent dates and escaped contexts without inventing missing maxima', () => {
+  const state = core.defaultState(), h = recordWorkout('estimate', NOW - DAY), heavier = recordWorkout('heavier');
+  h.exercises[0].tracking.variant = '<img src=x onerror=alert(1)>';
+  h.exercises[0].tracking.loadType = 'per-hand';
+  heavier.exercises[0].weight = '60'; delete heavier.exercises[0].sets[0].actualReps;
+  state.history = [h, heavier];
+  const html = recordsView(state);
+  assert.match(html, /1RM <strong>~63,3 kg\/käsipaino<\/strong>/);
+  assert.ok(html.includes(new Date(h.endedAt).toLocaleDateString('fi-FI')));
+  assert.ok(html.includes(new Date(heavier.endedAt).toLocaleDateString('fi-FI')));
+  assert.match(html, /&lt;img/);
+  assert.doesNotMatch(html, /<img|NaN|Infinity|Epley|RIR|epätark/);
+  assert.match(recordsView({ history: [heavier] }), /1RM —/);
+  assert.match(recordsView({ history: [] }), /Ei vielä ennätyksiä/);
 });

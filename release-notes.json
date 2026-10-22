@@ -1,4 +1,8 @@
 [
+  { "version": 47, "date": "2026-10-22", "changes": [
+    "Ennätykset näyttää nyt arvioidun yhden toiston maksimipainon muodossa 1RM ~63,3 kg kirjattujen toistojen ja painon perusteella. Saman liikkeen vertailukelpoiset tulokset yhdistyvät eri ohjelmista, eri laitteet ja kuormakäytännöt pysyvät erillään.",
+    "Ennätyspaino ja maksimipainoarvio näyttävät omat päivämääränsä. Aiemmat harjoitukset, historia ja varmuuskopiot säilyvät ennallaan."
+  ] },
   { "version": 46, "date": "2026-10-21", "changes": [
     "Asetuksiin tuli kytkin, jolla ruotsinkielisen kannustuksen voi poistaa käytöstä. Valinta tallentuu, ja kannustukset ovat edelleen oletuksena päällä.",
     "Etusivun Uusi harjoitus -painikkeen nimi on nyt Luo treeniohjelma, ja valmennusohje siirtyi ohjelman avattavaan osioon. Tallennetut tiedot säilyvät ennallaan."

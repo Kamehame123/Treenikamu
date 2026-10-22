@@ -346,8 +346,11 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .stats-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--control-gap); }
 button.stat-tile { font: inherit; text-align: left; color: inherit; padding: var(--card-padding); border-radius: 14px; background: var(--card); border: 1px solid var(--line); min-width: 0; min-height: 44px; cursor: pointer; }
 .record-list { list-style: none; margin: 0; padding: var(--space-1) var(--card-padding); }
-.record-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.record-row { display: grid; gap: var(--space-2); padding: var(--control-gap) 0; border-bottom: 1px solid var(--line); }
 .record-row:last-child { border-bottom: 0; }
+.record-result, .record-estimate { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--control-gap); min-width: 0; }
+.record-estimate { font-size: 13px; }
+.record-context { flex: 1 1 100%; overflow-wrap: anywhere; font-size: 12px; }
 .record-name { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; font-weight: 650; }
 .record-date { font-size: 12px; }
 .statistics-content { display: grid; gap: var(--section-gap); min-width: 0; }

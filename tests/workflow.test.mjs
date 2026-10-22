@@ -256,8 +256,47 @@ try {
           assert.equal(rows.length, 2);
           assert.match(rows[0], /^Kyykky 100 kg /);
           assert.match(rows[1], /^Penkkipunnerrus 70 kg /);
+          assert.deepEqual(await p.locator('.record-estimate').allInnerTexts(), ['1RM —', '1RM —']);
           await tap(button(p, 'Harjoituksiin'));
           assert.deepEqual(await saved(p), state);
+        });
+
+        await run('estimated records recalculate after correcting, deleting and restoring saved sets', async (p) => {
+          const now = Date.now(), state = core.defaultState();
+          const session = core.startSession(state.routines[0], now - 3600000);
+          session.exercises = [session.exercises[0]];
+          const exercise = session.exercises[0];
+          exercise.name = 'Penkkipunnerrus'; exercise.weight = '50';
+          exercise.tracking = { sourceId: '', category: 'Rinta', equipment: 'Levytanko', loadType: 'external', variant: '' };
+          exercise.sets = [{ done: true, actualReps: '8' }];
+          const best = { ...core.summarize(session, now - 1000), id: 'record-best' };
+          const previous = structuredClone(best);
+          previous.id = 'record-previous'; previous.endedAt = now - 2000; previous.exercises[0].weight = '40';
+          state.history = [best, previous];
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          const showRecord = async (pattern) => {
+            await tap(button(p, 'Ennätykset'));
+            assert.match(await p.locator('.record-estimate').innerText(), pattern);
+            await tap(button(p, 'Harjoituksiin'));
+          };
+          await showRecord(/1RM ~63,3 kg/);
+          await tap(button(p, 'Historia')); await tap(p.locator('[data-key="hedit-record-best"]'));
+          await p.locator('[data-key="hr-0-0"]').fill('1'); await p.keyboard.press('Tab');
+          await p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+          await tap(button(p, 'Harjoituksiin'));
+          await showRecord(/1RM ~50,7 kg/);
+          await tap(button(p, 'Historia'));
+          const beforeDelete = (await saved(p)).history;
+          await tapConfirm(p.locator('[data-key="hdel-record-previous"]'));
+          await tap(button(p, 'Harjoituksiin')); await showRecord(/1RM ~50 kg/);
+          await tap(button(p, 'Historia')); await tap(p.locator('[data-key="undodelete"]'));
+          assert.deepEqual((await saved(p)).history, beforeDelete);
+          await tap(button(p, 'Harjoituksiin')); await showRecord(/1RM ~50,7 kg/);
+          await p.reload(); await showRecord(/1RM ~50,7 kg/);
+          assert.deepEqual((await saved(p)).history, beforeDelete);
+          assert.deepEqual((await saved(p)).routines, state.routines);
         });
 
         await run('resume and reload center the current exercise without losing the session', async (p) => {

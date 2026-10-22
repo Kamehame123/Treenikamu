@@ -115,8 +115,9 @@ export function statisticsPeriod(range, now, first, fromInput = '', toInput = ''
 
 // Heaviest kg ever logged per move name (all programs combined) and the latest day it was reached.
 // The weight is the set's logged weight, otherwise the move's planned weight.
+// Estimated records use actual reps only and compare like equipment/load conventions across programs.
 export function buildRecords(history, now = Date.now()) {
-  const records = new Map(), seen = new Set();
+  const records = new Map(), estimates = new Map(), seen = new Set();
   for (const h of history ?? []) {
     if (!h || seen.has(h.id)) continue;
     seen.add(h.id);
@@ -132,10 +133,25 @@ export function buildRecords(history, now = Date.now()) {
         if (!current || weight > current.weight || (weight === current.weight && h.endedAt > current.at)) {
           records.set(key, { key, name: e.name, weight, at: h.endedAt });
         }
+        const tracking = e.tracking;
+        if (!['external', 'per-hand'].includes(tracking?.loadType) || set.actualSeconds !== undefined ||
+          /^\d+(?:[.,]\d+)?\s*(?:s\b|sek|min)/i.test(set.reps ?? e.reps ?? '')) continue;
+        const reps = integer(set.actualReps, 1, 10), value = estimateStrength(weight, reps);
+        if (value === null) continue;
+        const equipment = tracking.equipment ?? '', variant = tracking.variant ?? '', loadType = tracking.loadType;
+        const estimateKey = JSON.stringify([key, equipment, loadType, normalizeSearch(variant)]);
+        if (!estimates.has(key)) estimates.set(key, new Map());
+        const contexts = estimates.get(key), best = contexts.get(estimateKey);
+        if (!best || value > best.value || (value === best.value && h.endedAt > best.at)) {
+          contexts.set(estimateKey, { key: estimateKey, value, load: weight, reps, at: h.endedAt,
+            loadType, equipment, variant, sessionId: h.id });
+        }
       }
     }
   }
-  return [...records.values()].sort((a, b) => a.name.localeCompare(b.name, 'fi-FI'));
+  return [...records.values()].sort((a, b) => a.name.localeCompare(b.name, 'fi-FI')).map((record) => ({
+    ...record, estimates: [...(estimates.get(record.key)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key, 'fi-FI')),
+  }));
 }
 
 function emptyTotals() {

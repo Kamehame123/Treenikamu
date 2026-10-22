@@ -78,6 +78,44 @@ compared with only part of today; custom past ranges include their whole last da
   Coverage and exclusions are visible alongside totals; recording more complete
   data can itself change comparisons.
 
+### Records: Ennätykset
+
+Open **Ennätykset** from home for all-time movement records. The existing heaviest
+logged kg and its latest achievement date remain unchanged. Each movement also
+shows its best estimated single-repetition maximum as **1RM ~63,3 kg**, with the
+estimate's own date. The best estimate can come from a lighter, higher-rep set,
+not necessarily the heaviest logged weight.
+
+Estimates use completed sets with explicitly recorded **1–10 actual reps** and
+a positive kg load whose saved historical convention is external total load or
+per-dumbbell load. Epley's formula is `load * (1 + reps / 30)`; one actual rep
+uses the load unchanged. Per-dumbbell estimates are labelled **kg/käsipaino**
+and are never doubled. Blank actual weight uses the saved planned weight;
+explicit zero or invalid overrides do not fall back to a positive planned load.
+Checked target-only sets, time-based sets, summary-only history and unknown,
+bodyweight, assisted or other-unit loads cannot supply an estimate. Missing
+estimates display **1RM —**, not zero.
+
+Matching normalized movement names combine across programs when their saved
+equipment, load convention and normalized variant identifier also match.
+Different equipment, variants and per-hand/total loads have separate labelled
+estimates; undeclared equipment is not merged with declared equipment. Current
+routine/library metadata is never applied retrospectively to older records.
+
+Unlike **Kehitysindeksi**, these records do not require RIR or a working-set
+classification and do not exclude warm-ups or pain/deload/fatigue flags. RIR is
+not added to reps. This generic, movement-independent approximation is not a
+measured maximum or a lifting recommendation: easy sets and differences in
+technique, exercise and individual rep capacity limit its accuracy. The stricter
+statistics/index rules below are unchanged.
+
+Records are recalculated from saved history after corrections, deletion/undo
+and imports, including offline. No estimates are written into history, storage
+or backups. Existing schema-1 browser data, active sessions and backups remain
+unchanged and recoverable; no migration, reset, re-import or prior backup is
+needed. Old records without actual reps or load conventions remain available
+without invented estimates.
+
 ### Combined progress: Kehitysindeksi
 
 Choose 2-6 representative benchmark exercises in statistics. Each requires three
