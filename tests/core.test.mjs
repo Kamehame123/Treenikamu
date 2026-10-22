@@ -29,7 +29,8 @@ test('new UI set taps capture the displayed reps without replacing overrides or 
   assert.equal(c.toggleSet(s, 0, 0, { logReps: true }), false);
   assert.equal(s.exercises[0].sets[0].actualReps, '5', 'undo keeps the entered count but excludes the unfinished set');
   c.toggleSet(s, 0, 1, { logReps: true });
-  assert.equal(s.exercises[0].sets[1].actualReps, '12', 'the UI displays this count before logging a range target');
+  assert.equal(s.exercises[0].sets[1].actualReps, undefined, 'a range target never records its upper bound');
+  assert.equal(c.isRepRange(s.exercises[0], s.exercises[0].sets[1]), true);
   for (const actualReps of ['0', '7', 'invalid']) {
     const set = s.exercises[0].sets[2]; set.done = false; set.actualReps = actualReps;
     c.toggleSet(s, 0, 2, { logReps: true });
@@ -58,18 +59,35 @@ test('old completed reps are filled only by explicit confirmation, preserving ov
     { done: true, reps: '45 s' }, { done: true, actualSeconds: '30' }];
   state.history = [c.summarize(s, 5000)];
   const h = state.history[0], before = structuredClone(state);
-  assert.deepEqual(c.historyRepSuggestions(h.exercises[0]), [{ si: 0, reps: 5 }, { si: 1, reps: 12 }]);
+  assert.deepEqual(c.historyRepSuggestions(h.exercises[0]), [{ si: 0, reps: 5 }], 'range targets are never suggested');
   assert.deepEqual(state, before, 'suggestions alone are read-only');
   assert.equal(c.confirmHistoryReps(state, h.id, 0, 6000).ok, true);
   const expected = structuredClone(before);
   expected.history[0].exercises[0].sets[0].actualReps = '5';
-  expected.history[0].exercises[0].sets[1].actualReps = '12';
   expected.history[0].editedAt = 6000;
   assert.deepEqual(state, expected);
   assert.equal(c.confirmHistoryReps(state, h.id, 0).ok, false);
   assert.equal(c.confirmHistoryReps(state, 'missing', 0).ok, false);
   assert.equal(c.confirmHistoryReps(state, h.id, 99).ok, false);
   assert.deepEqual(state, expected, 'retry is non-destructive and does not duplicate or alter confirmed results');
+});
+
+test('a workout load choice is saved to the session and once to the program, never to history', () => {
+  const state = c.defaultState();
+  state.routines = [routine()];
+  state.session = c.startSession(state.routines[0], 1000);
+  state.history = [{ id: 'old', name: 'Vanha', startedAt: 1, endedAt: 2, setsDone: 0, setsTotal: 0, exercises: [] }];
+  const before = structuredClone(state.history);
+  assert.equal(state.session.exercises[0].tracking, undefined);
+  assert.deepEqual(c.setSessionLoadType(state, 0, 'external'), { ok: true, programUpdated: true });
+  assert.equal(state.session.exercises[0].tracking.loadType, 'external');
+  assert.equal(state.routines[0].exercises[0].tracking.loadType, 'external');
+  assert.deepEqual(state.history, before);
+  assert.deepEqual(c.setSessionLoadType(state, 0, 'per-hand'), { ok: true, programUpdated: false }, 'a program choice is not overwritten');
+  assert.equal(state.routines[0].exercises[0].tracking.loadType, 'external');
+  assert.equal(c.setSessionLoadType(state, 0, 'unknown').ok, false);
+  assert.equal(c.setSessionLoadType(state, 99, 'external').ok, false);
+  assert.equal(c.startSession(state.routines[0], 3000).exercises[0].tracking.loadType, 'external');
 });
 
 test('explicit historical load corrections preserve metadata and unrelated data through backup and reload', () => {

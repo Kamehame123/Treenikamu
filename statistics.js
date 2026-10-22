@@ -117,7 +117,7 @@ export function statisticsPeriod(range, now, first, fromInput = '', toInput = ''
 // The weight is the set's logged weight, otherwise the move's planned weight.
 // Estimated records use actual reps only and compare like equipment/load conventions across programs.
 export function buildRecords(history, now = Date.now()) {
-  const records = new Map(), estimates = new Map(), seen = new Set();
+  const records = new Map(), estimates = new Map(), fixes = new Map(), seen = new Set();
   for (const h of history ?? []) {
     if (!h || seen.has(h.id)) continue;
     seen.add(h.id);
@@ -134,11 +134,20 @@ export function buildRecords(history, now = Date.now()) {
           records.set(key, { key, name: e.name, weight, at: h.endedAt, sessionId: h.id });
         }
         const tracking = e.tracking;
+        // Sessions the user can still complete: unknown load meaning, or a fixed-rep target never confirmed.
+        const loadType = tracking?.loadType, target = String(set.reps ?? e.reps ?? '').trim();
+        const fixable = !['external', 'per-hand', 'bodyweight', 'assisted', 'other'].includes(loadType) ||
+          (['external', 'per-hand'].includes(loadType) && set.actualReps === undefined && set.actualSeconds === undefined &&
+            /^\d+$/.test(target) && Number(target) > 0);
+        const fix = fixes.get(key);
+        if (fixable && (!fix || weight > fix.weight || (weight === fix.weight && h.endedAt > fix.at))) {
+          fixes.set(key, { weight, at: h.endedAt, sessionId: h.id });
+        }
         if (!['external', 'per-hand'].includes(tracking?.loadType) || set.actualSeconds !== undefined ||
           /^\d+(?:[.,]\d+)?\s*(?:s\b|sek|min)/i.test(set.reps ?? e.reps ?? '')) continue;
         const reps = integer(set.actualReps, 1, 10), value = estimateStrength(weight, reps);
         if (value === null) continue;
-        const equipment = tracking.equipment ?? '', variant = tracking.variant ?? '', loadType = tracking.loadType;
+        const equipment = tracking.equipment ?? '', variant = tracking.variant ?? '';
         const estimateKey = JSON.stringify([key, equipment, loadType, normalizeSearch(variant)]);
         if (!estimates.has(key)) estimates.set(key, new Map());
         const contexts = estimates.get(key), best = contexts.get(estimateKey);
@@ -150,7 +159,8 @@ export function buildRecords(history, now = Date.now()) {
     }
   }
   return [...records.values()].sort((a, b) => a.name.localeCompare(b.name, 'fi-FI')).map((record) => ({
-    ...record, estimates: [...(estimates.get(record.key)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key, 'fi-FI')),
+    ...record, fixSessionId: fixes.get(record.key)?.sessionId ?? '',
+    estimates: [...(estimates.get(record.key)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key, 'fi-FI')),
   }));
 }
 

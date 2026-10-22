@@ -439,11 +439,32 @@ export function toggleSet(session, ei, si, { logReps = false } = {}) {
   if (!set) return false;
   set.done = !set.done;
   // A new UI tap confirms the displayed reps. Loading old completion-only data does not.
-  if (set.done && logReps && set.actualReps === undefined && set.actualSeconds === undefined) {
+  // A range target (e.g. 8–12) names no single count, so the top of the range is never assumed.
+  if (set.done && logReps && set.actualReps === undefined && set.actualSeconds === undefined && !isRepRange(exercise, set)) {
     const reps = setRepCount(exercise, set);
     if (reps !== null) set.actualReps = String(reps);
   }
   return set.done;
+}
+
+export function isRepRange(exercise, set) {
+  const target = targetReps(set?.reps ?? exercise?.reps);
+  return !!target && target.low !== target.high;
+}
+
+// Records what the user's weight means for this workout and, once, for the saved program
+// when the program has no choice yet. Saved history is never touched.
+export function setSessionLoadType(state, ei, loadType) {
+  const exercise = state.session?.exercises?.[ei];
+  if (!exercise || loadType === 'unknown' || !Object.hasOwn(LOAD_TYPES, loadType)) {
+    return { ok: false, error: 'Tarkista liike ja kuorman merkitys.' };
+  }
+  const withLoad = (tracking) => ({ ...(sanitizeTracking(tracking) ?? sanitizeTracking({})), loadType });
+  exercise.tracking = withLoad(exercise.tracking);
+  const planned = state.routines.find((r) => r.id === state.session.routineId)?.exercises.find((x) => x.id === exercise.id && x.name === exercise.name);
+  const programUpdated = !!planned && (planned.tracking?.loadType ?? 'unknown') === 'unknown';
+  if (programUpdated) planned.tracking = withLoad(planned.tracking);
+  return { ok: true, programUpdated };
 }
 
 export function setRepCount(exercise, set) {
@@ -651,7 +672,7 @@ export function restoreHistoryEntry(state, entry, index) {
 // Suggestions only: old completion flags do not establish performed repetitions without confirmation.
 export function historyRepSuggestions(exercise) {
   return (exercise?.sets ?? []).flatMap((set, si) => {
-    if (!set.done || set.actualReps !== undefined || set.actualSeconds !== undefined) return [];
+    if (!set.done || set.actualReps !== undefined || set.actualSeconds !== undefined || isRepRange(exercise, set)) return [];
     const reps = setRepCount(exercise, set);
     return reps === null ? [] : [{ si, reps }];
   });

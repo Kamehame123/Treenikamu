@@ -466,3 +466,16 @@ test('records render compact approximate values, independent dates and escaped c
   assert.match(recordsView({ history: [heavier] }), /1RM —/);
   assert.match(recordsView({ history: [] }), /Ei vielä ennätyksiä/);
 });
+
+test('record repair targets the session the user can still complete, never an unfixable one', () => {
+  const make = (id, at, weight, tracking, extra = {}) => ({ id, name: id, startedAt: at - 1000, endedAt: at, setsDone: 1, setsTotal: 1,
+    exercises: [{ id: 'e', name: 'Penkki', reps: '8', weight: String(weight), ...(tracking ? { tracking } : {}), sets: [{ done: true, ...extra }] }] });
+  const external = { sourceId: '', category: '', equipment: '', loadType: 'external', variant: '' };
+  const unfixable = make('heavy', NOW - DAY, 90, { ...external, loadType: 'bodyweight' });
+  const open = make('open', NOW - 2 * DAY, 60);
+  const unconfirmed = make('unconfirmed', NOW - 3 * DAY, 50, external);
+  assert.equal(stats.buildRecords([unfixable, open, unconfirmed], NOW)[0].fixSessionId, 'open', 'heaviest repairable session');
+  assert.equal(stats.buildRecords([unfixable], NOW)[0].fixSessionId, '', 'nothing to offer when no result can be completed');
+  const range = make('range', NOW, 70, external); range.exercises[0].reps = '8-12';
+  assert.equal(stats.buildRecords([range], NOW)[0].fixSessionId, '', 'range targets are not repairable by guesswork');
+});

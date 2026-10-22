@@ -552,9 +552,10 @@ function setEntry(e, ei, si, nextSi) {
   const target = core.setTargetLabel(set.reps ?? e.reps, e.weight);
   const count = core.setRepCount(e, set);
   const logged = (count !== null && set.actualReps !== undefined) || !!set.actualWeight;
-  const value = core.setTargetLabel(count ?? set.reps ?? e.reps, set.actualWeight || e.weight);
+  const range = set.actualReps === undefined && core.isRepRange(e, set);
+  const value = core.setTargetLabel(range ? set.reps ?? e.reps : count ?? set.reps ?? e.reps, set.actualWeight || e.weight);
   const showTarget = logged || value !== target;
-  const status = set.done ? 'Tehty' : count === null ? 'Kirjaa' : `Kirjaa ${count} toistoa`;
+  const status = set.done ? 'Tehty' : count === null || range ? 'Kirjaa' : `Kirjaa ${count} toistoa`;
   const weight = core.setWeightValue(e, set);
   const step = String(core.weightStepFor(e)).replace('.', ',');
   const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < 100 })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: `Vähennä painoa ${step} kg`, up: `Lisää painoa ${step} kg`, canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
@@ -587,6 +588,14 @@ function patchLoggedSet(ei, si) {
   const focusedKey = entry.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   entry.outerHTML = setEntry(e, ei, si, nextSi);
   if (focusedKey) document.querySelector(`[data-key="${CSS.escape(focusedKey)}"]`)?.focus({ preventScroll: true });
+}
+
+// Asked once per weighted exercise whose load meaning is unknown; without it no 1RM estimate is possible.
+function loadPrompt(e, ei) {
+  const weighted = String(e.weight ?? '').trim() !== '' || e.sets.some((set) => set.actualWeight);
+  if (!weighted || (e.tracking?.loadType ?? 'unknown') !== 'unknown') return '';
+  const options = Object.entries(LOAD_TYPES).filter(([value]) => value !== 'unknown').map(([value, label]) => `<label class="choice-option"><input type="radio" name="sload-${ei}" data-sessionload="1" data-e="${ei}" data-key="sload-${ei}-${value}" value="${value}"><span>${esc(label)}</span></label>`).join('');
+  return `<details class="choice-menu load-prompt"><summary data-key="sload-${ei}">Mitä paino tarkoittaa? Valitse 1RM-arviota varten</summary><fieldset><legend>${esc(e.name)}: kuorman merkitys</legend><p class="muted small-copy">Valinta tallentuu tähän treeniin ja ohjelmaan. Vanhoja treenejä ei muuteta.</p>${options}</fieldset></details>`;
 }
 
 function exerciseLog(e, ei) {
@@ -650,7 +659,7 @@ function workoutView() {
     const individual = e.sets.some((set) => set.reps);
     const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
     const restLabel = core.formatDuration(core.restFor(state.settings, e, nextSi >= 0 ? nextSi : 0) * 1000);
-    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div>${exerciseRir(e, ei)}<div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseActions(e, s.exercises.length)}${state.settings.advancedLogging ? exerciseLog(e, ei) : ''}</li>`;
+    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div>${exerciseRir(e, ei)}${loadPrompt(e, ei)}<div class="exercise-footer"><span class="muted">${completed}/${e.sets.length} kirjattu</span><div class="mini"><button class="btn ghost" data-action="rmset" data-key="r${ei}" data-e="${ei}" ${e.sets.length < 2 ? 'disabled' : ''} aria-label="Poista sarja: ${esc(e.name)}">− Sarja</button><button class="btn ghost" data-action="addset" data-key="a${ei}" data-e="${ei}" ${e.sets.length >= core.MAX_SETS ? 'disabled' : ''} aria-label="Lisää sarja: ${esc(e.name)}">+ Sarja</button></div></div>${exerciseActions(e, s.exercises.length)}${state.settings.advancedLogging ? exerciseLog(e, ei) : ''}</li>`;
   }).join('');
   return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-metrics">${hrBadge()}<span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryNote(s)}${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<ul class="list exercise-list">${exercises}</ul><button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>${trackRail(s, cur)}`;
 }
@@ -1502,6 +1511,15 @@ document.addEventListener('change', async (e) => {
       exercise.tracking = sanitizeTracking({ ...exercise.tracking, loadType: t.value });
       rememberDraft();
     }
+    return;
+  }
+  if (t.dataset.sessionload) {
+    const ei = +t.dataset.e, value = t.value;
+    enqueueAction(async () => {
+      let result;
+      const ok = await mutate((next) => { result = core.setSessionLoadType(next, ei, value); return result.ok; }, { ...sessionOptions(), critical: true });
+      announce(ok ? 'Kuorman merkitys tallennettu.' : result?.error ?? 'Muutosta ei voitu tallentaa. Yritä uudelleen.');
+    });
     return;
   }
   if (t.dataset.log) { logInput(t); return; }

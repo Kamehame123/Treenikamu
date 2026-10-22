@@ -229,6 +229,32 @@ try {
           assert.match(await page.locator('.record-estimate').innerText(), /1RM ~63,3 kg/);
         });
 
+        await run('an exercise without a load meaning asks once, then yields a 1RM; range targets are never recorded', async (page) => {
+          const state = core.defaultState(), routine = statisticsRoutine();
+          routine.exercises = [routine.exercises[0]];
+          Object.assign(routine.exercises[0], { sets: 2, reps: '8', setReps: ['8', '8-12'], weight: '50' });
+          delete routine.exercises[0].tracking;
+          state.routines = [routine]; state.settings.autoRest = false;
+          await seed(page, state);
+          await tap(button(page, 'Aloita harjoitus'));
+          assert.match(await page.locator('[data-key="s0-1"] .set-foot').innerText(), /^Kirjaa$/);
+          const menu = page.locator('[data-key="sload-0"]');
+          await menu.click();
+          await page.locator('[data-key="sload-0-external"]').check(); await idle(page);
+          assert.equal(await page.locator('[data-key="sload-0"]').count(), 0, 'the question is asked once');
+          const mid = await saved(page);
+          assert.equal(mid.session.exercises[0].tracking.loadType, 'external');
+          assert.equal(mid.routines[0].exercises[0].tracking.loadType, 'external');
+          await tap(page.locator('[data-key="s0-0"]'));
+          await tap(page.locator('[data-key="s0-1"]'));
+          const session = (await saved(page)).session.exercises[0].sets;
+          assert.equal(session[0].actualReps, '8');
+          assert.equal(session[1].actualReps, undefined, 'a range target is not silently recorded as its top');
+          await tap(button(page, 'Tallenna harjoitus'));
+          await tap(button(page, 'Ennätykset'));
+          assert.match(await page.locator('.record-estimate').innerText(), /1RM ~63,3 kg/);
+        });
+
         await run('completion-only history is recoverable directly from records without guessing results or changing the program', async (page) => {
           const state = core.defaultState(), routine = statisticsRoutine();
           routine.exercises = [routine.exercises[0]];

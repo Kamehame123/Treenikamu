@@ -69,8 +69,9 @@ compared with only part of today; custom past ranges include their whole last da
   unclassified. The exercise-level hardest-set RIR is never assigned to all sets.
 - Tapping a numeric set now confirms and saves the rep count displayed on its
   button, without requiring a separate +/- edit or advanced logging. Adjust the
-  displayed count before logging if needed. Range targets show the concrete
-  count being confirmed as well as the original target. Undo retains the entered
+  displayed count before logging if needed. Range targets (for example 8–12)
+  name no single count, so tapping a set never records their upper bound; enter
+  the reps with +/- instead. Undo retains the entered
   count but the unfinished set is not included in records. Timed/free-text work
   is never converted into repetitions. Older checked sets without actual reps
   remain unknown until explicitly confirmed. A blank actual load retains
@@ -122,12 +123,19 @@ compatible and recoverable; no migration, reset, re-import or prior backup is
 needed. Old records without actual reps or load conventions remain available
 without invented estimates. **Täydennä tulos** beside a missing estimate opens
 the original saved workout for correction, including entries beyond the first
-history page. Enter actual reps individually, or use **Vahvista tavoitteiden
+history page. It targets the heaviest saved workout that can still be completed
+(unknown load meaning or an unconfirmed fixed rep target) and is hidden when no
+saved workout can be repaired. Enter actual reps individually, or use **Vahvista tavoitteiden
 mukaiset toistot** only when the listed saved targets match what was performed.
 Confirmation fills only completed sets with missing reps; explicit results,
 unfinished sets and timed work are preserved. **Kuorman merkitys** lets the user
 explicitly correct the saved exercise's load convention. These corrections affect
 only that historical workout, never the current program or other old sessions.
+
+During a workout, a weighted exercise whose load meaning is unknown (hand-typed
+exercises and the default program) shows **Mitä paino tarkoittaa?** once. The
+choice is saved to that workout and to the program exercise only if the program
+has no choice yet; later workouts reuse it, and saved history is never changed.
 Cancelled or failed confirmations leave saved data unchanged and can be retried.
 Nothing is backfilled automatically when opening records, loading an older
 session or importing a backup.

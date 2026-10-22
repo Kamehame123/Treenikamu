@@ -1,5 +1,5 @@
 // Bump VERSION on every release. All files are cached together so app.js and core.js can never be mixed across versions.
-const VERSION = '48';
+const VERSION = '49';
 const CACHE = `gym-tracker-v${VERSION}`;
 const ASSETS = ['./', './index.html', './app.js', './core.js', './progression.js', './cheers.js', './heartrate.js', './statistics.js', './statistics-ui.js', './exercises.js', './styles.css', './release-notes.json', './manifest.webmanifest', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
