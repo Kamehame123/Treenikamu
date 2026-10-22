@@ -175,12 +175,53 @@ try {
           await p.waitForFunction((i) => {
             const card = document.getElementById(`exercise-${i}`);
             const set = card.querySelector('.set.next') || card.querySelector('.set');
-            const r = card.getBoundingClientRect().height <= innerHeight ? card.getBoundingClientRect() : set.getBoundingClientRect();
+            // Mirrors the app: the whole card is shown only when it fits below the sticky header with 12 px margins.
+            const room = innerHeight - document.querySelector('.session-header').getBoundingClientRect().height - 24;
+            const r = card.getBoundingClientRect().height <= room ? card.getBoundingClientRect() : set.getBoundingClientRect();
             return r.top >= 0 && r.bottom <= innerHeight;
           }, last);
           assert.equal(await p.locator('.track-rail').evaluate((r) => r.getBoundingClientRect().top), railTop);
           const before = (await saved(p)).session;
           await boxes.nth(0).click();
+          assert.deepEqual((await saved(p)).session, before);
+        });
+
+        await run('rail boxes show a decorative icon for the main muscle group behind the set count, and none for other moves', async (p) => {
+          const names = ['Takakyykky', 'Romanialainen maastaveto', 'Kulmasoutu tangolla', 'Penkkipunnerrus', 'Pystypunnerrus tangolla', 'Hauiskääntö tangolla', 'Ojentajapunnerrus köydellä', 'Lankku', 'Kahvakuulaheilautus', 'Oma liike'];
+          const state = core.defaultState();
+          state.settings.autoRest = false;
+          state.routines = [core.sanitizeRoutine({ id: 'r', name: 'Lihakset', exercises: names.map((name, i) => ({ id: `m${i}`, name, sets: 3, reps: '10' })) })];
+          state.session = core.startSession(state.routines[0]);
+          state.session.exercises[0].sets.forEach((set) => { set.done = true; });
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          const boxes = p.locator('.track-box');
+          await boxes.first().waitFor();
+          const before = (await saved(p)).session;
+          assert.deepEqual(await boxes.evaluateAll((list) => list.map((b) => b.dataset.muscle || '')), ['legs', 'legs', 'back', 'chest', 'shoulders', 'arms', 'arms', 'core', '', '']);
+          assert.deepEqual(await boxes.allInnerTexts(), names.map(() => '3'));
+          assert.equal(await boxes.nth(0).getAttribute('aria-label'), 'Liike 1: Takakyykky, 3 sarjaa, tehty');
+          for (const theme of ['dark', 'aurora']) {
+            await p.evaluate((value) => window.TrackerAppearance.set(value), theme);
+            const checks = await boxes.evaluateAll((list) => list.map((b) => {
+              const icon = b.querySelector('.track-muscle');
+              const num = b.querySelector('.track-num').getBoundingClientRect();
+              const box = b.getBoundingClientRect();
+              if (!icon) return { icon: false, numInside: num.left >= box.left && num.right <= box.right };
+              const r = icon.getBoundingClientRect();
+              const s = getComputedStyle(icon);
+              return { icon: true, hidden: icon.getAttribute('aria-hidden') === 'true', faint: Number(s.opacity) <= 0.3, events: s.pointerEvents,
+                inside: r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
+                behind: Math.abs((r.left + r.right) / 2 - (num.left + num.right) / 2) < 2 && Math.abs((r.top + r.bottom) / 2 - (num.top + num.bottom) / 2) < 3,
+                numOnTop: document.elementFromPoint((num.left + num.right) / 2, (num.top + num.bottom) / 2)?.closest('.track-box') === b,
+                height: box.height };
+            }));
+            checks.forEach((c, i) => {
+              if (!c.icon) return assert.equal(c.numInside, true, `${theme} box ${i}`);
+              assert.deepEqual(c, { icon: true, hidden: true, faint: true, events: 'none', inside: true, behind: true, numOnTop: true, height: 48 }, `${theme} box ${i}`);
+            });
+          }
           assert.deepEqual((await saved(p)).session, before);
         });
 
@@ -194,8 +235,10 @@ try {
               const violations = (await new AxeBuilder({ page: p }).analyze()).violations;
               assert.deepEqual(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), [], label);
               assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, label);
+              // The one-row RIR and set controls are intentionally narrow (WCAG 2.5.8 minimum 24 px) but keep full height.
               assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('button, input, summary')].filter((e) => {
-                const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 47.9 || r.height < 47.9);
+                const r = e.getBoundingClientRect(); const minWidth = e.closest('.exercise-rir-controls') ? 23.9 : 47.9;
+                return r.width > 0 && r.height > 0 && (r.width < minWidth || r.height < 47.9);
               }).map((e) => e.outerHTML.slice(0, 100))), [], label);
               assert.equal(await p.evaluate(() => {
                 const rail = document.querySelector('.track-rail').getBoundingClientRect();

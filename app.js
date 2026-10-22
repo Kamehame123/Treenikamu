@@ -900,11 +900,25 @@ function recoveryNote(s) {
   return `<p class="notice" role="status">${light ? 'Kevennetty treeni: toistot ja painot ovat noin 15 % pienemmät. Ohjelma ei muutu, eikä tämän treenin tulos muuta tavoitteita. Lopeta, jos olo huononee.' : 'Palautuminen on merkitty heikoksi. Tätä treeniä ei ole kevennetty automaattisesti: valitse kuormat itse ja lopeta, jos olo huononee.'}</p>`;
 }
 
+// Only the largest muscle groups get a rail graphic; whole-body, cardio, mobility and unknown moves stay plain.
+const RAIL_MUSCLE = { Etureidet: 'legs', Takareidet: 'legs', Pakarat: 'legs', Pohkeet: 'legs', Selkä: 'back', Rinta: 'chest', Hartiat: 'shoulders', Hauis: 'arms', Ojentajat: 'arms', Keskivartalo: 'core' };
+const MUSCLE_GLYPHS = {
+  legs: 'M6 2h12l-.6 7L16 20h1.5a1.2 1.2 0 0 1 0 2.4h-3.7L12.6 11h-1.2l-1.2 11.4H6.5a1.2 1.2 0 0 1 0-2.4H8L6.6 9 6 2z',
+  back: 'M3.5 3.5h17l-3.3 9.5-1.6 7.5H8.4L6.8 13 3.5 3.5zM11.3 6v12h1.4V6h-1.4z',
+  chest: 'M2.5 6.5c3-2.4 6.3-2.6 8.8-1V15c-2.6 1.8-6.2 1.6-8.2-.9-1.1-1.7-1.2-5.6-.6-7.6zM21.5 6.5c-3-2.4-6.3-2.6-8.8-1V15c2.6 1.8 6.2 1.6 8.2-.9 1.1-1.7 1.2-5.6.6-7.6z',
+  shoulders: 'M12 1.5a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4zM2.5 19c0-6.5 2.7-10 6.5-10h6c3.8 0 6.5 3.5 6.5 10v3h-3.3v-4.5c0-1-.4-2-1.2-2.6V22H7V14.9c-.8.6-1.2 1.6-1.2 2.6V22H2.5v-3z',
+  arms: 'M2 21v-6c0-4 3-6 6.5-6 2.5 0 4 1 5 2.5l.5-3.5-.8-2c-.6-1.6.4-3 2-3H18c1.3 0 2 1 1.8 2.2l-.5 2.3c1.7 3.5 2.2 7.5 1.2 10.5-.7 2-2.5 3-4.5 3H2z',
+  core: 'M6.5 3.5h5v5h-5zM12.5 3.5h5v5h-5zM6.5 9.5h5v5h-5zM12.5 9.5h5v5h-5zM6.5 15.5h5v5h-5zM12.5 15.5h5v5h-5z',
+};
+const railMuscle = (e) => RAIL_MUSCLE[core.sessionExerciseCategory(e, state.customExercises)] || '';
+
 function trackRail(s, cur) {
   const boxes = s.exercises.map((e, ei) => {
     const done = core.exerciseDone(e);
     const status = done ? 'tehty' : ei === cur ? 'vuorossa' : 'kesken';
-    return `<li><button class="track-box${done ? ' done' : ''}${ei === cur ? ' current' : ''}" data-action="jumpto" data-e="${ei}" data-key="track-${ei}" ${ei === cur ? 'aria-current="step"' : ''} aria-label="Liike ${ei + 1}: ${esc(e.name)}, ${e.sets.length} sarjaa, ${status}">${e.sets.length}</button></li>`;
+    const muscle = railMuscle(e);
+    const glyph = muscle ? `<svg class="track-muscle" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="${MUSCLE_GLYPHS[muscle]}"/></svg>` : '';
+    return `<li><button class="track-box${done ? ' done' : ''}${ei === cur ? ' current' : ''}" data-action="jumpto" data-e="${ei}" data-key="track-${ei}" ${muscle ? `data-muscle="${muscle}"` : ''} ${ei === cur ? 'aria-current="step"' : ''} aria-label="Liike ${ei + 1}: ${esc(e.name)}, ${e.sets.length} sarjaa, ${status}">${glyph}<span class="track-num">${e.sets.length}</span></button></li>`;
   }).join('');
   return `<nav class="track-rail" aria-label="Harjoituksen eteneminen"><ol>${boxes}</ol></nav>`;
 }

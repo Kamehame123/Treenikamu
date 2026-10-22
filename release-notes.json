@@ -1,4 +1,8 @@
 [
+  { "version": 67, "date": "2026-10-22", "changes": [
+    "Treenin oikeassa reunassa olevissa liikeruuduissa näkyy nyt sarjamäärän takana himmeä kuva liikkeen pääasiallisesta lihasryhmästä: jalat, selkä, rinta, olkapäät, kädet tai keskivartalo. Koko kehon liikkeissä, kestävyys- ja liikkuvuusliikkeissä sekä luokittelemattomissa omissa liikkeissä kuvaa ei näytetä.",
+    "RIR-valinnat sekä sarjojen − ja + -painikkeet ovat taas 48 px korkeita, jotta niitä on helpompi napauttaa. Ne mahtuvat edelleen yhdelle riville. Tallennetut treenit ja historia säilyvät ennallaan."
+  ] },
   { "version": 66, "date": "2026-10-22", "changes": [
     "Ajastimessa nykyisen intervallin nimi on nyt suurempi ja lihavoitu. Sen alla näkyy pienemmällä, kursivoidulla tekstillä Seuraavaksi - seuraavan intervallin nimi. Esikatselu huomioi kierroksen vaihtumisen, säilyy tauolla ja piilotetaan viimeisen kierroksen viimeisessä intervallissa. Ajastinsarjat ja tallennetut harjoitukset säilyvät ennallaan."
   ] },

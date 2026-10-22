@@ -251,9 +251,16 @@ scope, storage keys and user data; no data migration or reset is required.
 The RIR choices and compact **- Sarja** / **+ Sarja** buttons share one row,
 separated by a short vertical divider. At widths up to 380 px the set buttons show
 only **-** / **+**, retaining their full accessible names. All eight buttons stay
-44 px tall and at least 24 px wide, fitting even a 320 px screen with the exercise
+48 px tall and at least 24 px wide, fitting even a 320 px screen with the exercise
 rail. The redundant per-exercise "0/3 kirjattu" counter is omitted; workout progress
 and set completion indicators remain unchanged.
+
+Each box in the right-side exercise rail shows a faint, decorative muscle-group
+icon behind its set count: legs (front/back thighs, glutes, calves), back, chest,
+shoulders, arms (biceps/triceps) and core. The group comes from the exercise's
+saved category, a matching custom exercise or the library. Whole-body, cardio,
+mobility and uncategorised exercises show no icon. The icons are inline SVG,
+hidden from screen readers and in forced-colors mode, and change no saved data.
 
 During a workout, each exercise has "Vaihda tai poista liike" (swap or remove), and
 "Lisää liike tähän treeniin" adds an exercise after the current one. Swapping opens
