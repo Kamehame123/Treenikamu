@@ -1331,15 +1331,6 @@ const actions = {
     historyEditing = historyEditing === t.dataset.id ? null : t.dataset.id;
     historyMessage = ''; render();
   },
-  editrecord(t) {
-    readLatest();
-    const index = state.history.findIndex((h) => h.id === t.dataset.id);
-    if (index < 0) { render(); announce('Harjoitusta ei löytynyt. Näkymä on päivitetty.'); return; }
-    historyEditing = t.dataset.id; historyLimit = Math.max(historyLimit, index + 1);
-    historyMessage = ''; view = 'history'; render();
-    document.querySelector(`[data-hist="${CSS.escape(historyEditing)}"]`)?.scrollIntoView({ block: 'start' });
-    document.querySelector(`[data-key="hedit-${CSS.escape(historyEditing)}"]`)?.focus({ preventScroll: true });
-  },
   async confirmhistoryreps(t) {
     readLatest();
     const id = t.dataset.id, ei = +t.dataset.e, exercise = state.history.find((h) => h.id === id)?.exercises?.[ei];

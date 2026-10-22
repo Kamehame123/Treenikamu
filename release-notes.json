@@ -1,4 +1,8 @@
 [
+  { "version": 53, "date": "2026-10-22", "changes": [
+    "Ennätyksissä yksi tehty sarja riittää. Muiden sarjojen puuttuvat, tekemättömät tai heikommat tulokset eivät estä ennätystä tai yksittäisestä sarjasta laskettavaa 1RM-arviota.",
+    "Täydennä tulos -painike ja puuttuvan 1RM-arvion tyhjä rivi poistettiin ennätyksistä. Kirjattu ennätyspaino ja päivämäärä näkyvät edelleen, eikä vanhoja tuloksia arvata tai muuteta. Historiaa voi edelleen muokata halutessaan Historia-sivulla."
+  ] },
   { "version": 52, "date": "2026-10-23", "changes": [
     "Asetuksissa on uusi Ulkoasu-valinta. Dark mode on edelleen oletus ja näyttää täsmälleen samalta kuin ennen. Uusi Aurora-ulkoasu on vaalea ja värikäs: violetti pääväri, turkoosi tehdyille sarjoille ja korallin sävyjä.",
     "Ulkoasu on laitekohtainen asetus. Se ei kuulu varmuuskopioon eikä muuta treenejä, historiaa tai muuta tallennettua tietoa. Aurora käyttää vain lyhyitä, rauhallisia siirtymiä, ja ne poistuvat kokonaan, jos laitteen asetuksissa on vähennetty liike."

@@ -110,7 +110,10 @@ Open **Ennätykset** from home for all-time movement records. The existing heavi
 logged kg and its latest achievement date remain unchanged. Each movement also
 shows its best estimated single-repetition maximum as **1RM ~63,3 kg**, with the
 estimate's own date. The best estimate can come from a lighter, higher-rep set,
-not necessarily the heaviest logged weight.
+not necessarily the heaviest logged weight. One completed set is sufficient:
+for example, a recorded 5 x 20 kg set supplies its estimate regardless of missing,
+unfinished or weaker results in other sets or sessions. Records never request
+completion of the remaining sets.
 
 Estimates use completed sets with explicitly recorded **1–10 actual reps** and
 a positive kg load whose saved historical convention is external total load or
@@ -119,8 +122,9 @@ uses the load unchanged. Per-dumbbell estimates are labelled **kg/käsipaino**
 and are never doubled. Blank actual weight uses the saved planned weight;
 explicit zero or invalid overrides do not fall back to a positive planned load.
 Checked target-only sets, time-based sets, summary-only history and unknown,
-bodyweight, assisted or other-unit loads cannot supply an estimate. Missing
-estimates display **1RM —**, not zero.
+bodyweight, assisted or other-unit loads cannot supply an estimate. When no
+estimate is available, only the logged weight record and its date are shown,
+without an empty 1RM row or a completion prompt.
 
 Matching normalized movement names combine across programs when their saved
 equipment, load convention and normalized variant identifier also match.
@@ -140,11 +144,9 @@ and imports, including offline. No estimates are written into history, storage
 or backups. Existing schema-1 browser data, active sessions and backups remain
 compatible and recoverable; no migration, reset, re-import or prior backup is
 needed. Old records without actual reps or load conventions remain available
-without invented estimates. **Täydennä tulos** beside a missing estimate opens
-the original saved workout for correction, including entries beyond the first
-history page. It targets the heaviest saved workout that can still be completed
-(unknown load meaning or an unconfirmed fixed rep target) and is hidden when no
-saved workout can be repaired. Enter actual reps individually, or use **Vahvista tavoitteiden
+without invented estimates. Corrections remain optional through **Historia**:
+open **Muokkaa** for the original saved workout, using **Näytä lisää** for older
+entries when needed. Enter actual reps individually, or use **Vahvista tavoitteiden
 mukaiset toistot** only when the listed saved targets match what was performed.
 Confirmation fills only completed sets with missing reps; explicit results,
 unfinished sets and timed work are preserved. **Kuorman merkitys** lets the user

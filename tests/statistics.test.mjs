@@ -463,19 +463,49 @@ test('records render compact approximate values, independent dates and escaped c
   assert.ok(html.includes(new Date(heavier.endedAt).toLocaleDateString('fi-FI')));
   assert.match(html, /&lt;img/);
   assert.doesNotMatch(html, /<img|NaN|Infinity|Epley|RIR|epätark/);
-  assert.match(recordsView({ history: [heavier] }), /1RM —/);
+  const weightOnly = recordsView({ history: [heavier] });
+  assert.match(weightOnly, /<strong>60 kg<\/strong>/);
+  assert.doesNotMatch(weightOnly, /1RM|Täydennä|editrecord/);
   assert.match(recordsView({ history: [] }), /Ei vielä ennätyksiä/);
 });
 
-test('record repair targets the session the user can still complete, never an unfixable one', () => {
-  const make = (id, at, weight, tracking, extra = {}) => ({ id, name: id, startedAt: at - 1000, endedAt: at, setsDone: 1, setsTotal: 1,
-    exercises: [{ id: 'e', name: 'Penkki', reps: '8', weight: String(weight), ...(tracking ? { tracking } : {}), sets: [{ done: true, ...extra }] }] });
-  const external = { sourceId: '', category: '', equipment: '', loadType: 'external', variant: '' };
-  const unfixable = make('heavy', NOW - DAY, 90, { ...external, loadType: 'bodyweight' });
-  const open = make('open', NOW - 2 * DAY, 60);
-  const unconfirmed = make('unconfirmed', NOW - 3 * DAY, 50, external);
-  assert.equal(stats.buildRecords([unfixable, open, unconfirmed], NOW)[0].fixSessionId, 'open', 'heaviest repairable session');
-  assert.equal(stats.buildRecords([unfixable], NOW)[0].fixSessionId, '', 'nothing to offer when no result can be completed');
-  const range = make('range', NOW, 70, external); range.exercises[0].reps = '8-12';
-  assert.equal(stats.buildRecords([range], NOW)[0].fixSessionId, '', 'range targets are not repairable by guesswork');
+test('one completed 5 x 20 kg set establishes a record regardless of other sets or sessions', () => {
+  const best = recordWorkout('best'), e = best.exercises[0];
+  e.weight = '20'; e.sets[0].actualReps = '5';
+  const expected = stats.buildRecords([best], NOW)[0].estimates;
+  approximately(expected[0].value, 20 * (1 + 5 / 30));
+  for (const set of [
+    { done: false, actualReps: '10', actualWeight: '100' },
+    { done: true },
+    { done: true, actualReps: '0' },
+    { done: true, actualReps: '1' },
+    { done: true, actualReps: '4', actualWeight: '15' },
+    { done: true, actualReps: 'invalid' },
+  ]) {
+    e.sets.push(set);
+  }
+  const incomplete = recordWorkout('incomplete', NOW - DAY);
+  incomplete.exercises[0].weight = '5'; delete incomplete.exercises[0].sets[0].actualReps;
+  const history = [incomplete, best], before = structuredClone(history);
+  const [record] = stats.buildRecords(history, NOW);
+  assert.equal(record.weight, 20);
+  assert.deepEqual(record.estimates, expected);
+  const html = recordsView({ history });
+  assert.match(html, /1RM <strong>~23,3 kg<\/strong>/);
+  assert.doesNotMatch(html, /Täydennä|editrecord|1RM —/);
+  assert.deepEqual(history, before);
+});
+
+test('weight-only records never ask to complete other sets or manufacture missing reps', () => {
+  for (const loadType of [undefined, 'unknown', 'external', 'per-hand', 'bodyweight', 'assisted', 'other']) {
+    const h = recordWorkout(), e = h.exercises[0];
+    if (loadType === undefined) delete e.tracking;
+    else e.tracking.loadType = loadType;
+    delete e.sets[0].actualReps;
+    e.sets.push({ done: false });
+    const before = structuredClone(h), html = recordsView({ history: [h] });
+    assert.match(html, /<strong>50 kg<\/strong>/);
+    assert.doesNotMatch(html, /Täydennä|editrecord|1RM/);
+    assert.deepEqual(h, before);
+  }
 });

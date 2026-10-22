@@ -193,7 +193,10 @@ try {
           assert.equal(await external.locator('.record-date').innerText(), new Date(best.endedAt).toLocaleDateString('fi-FI'));
           assert.match(await bench.locator('.record-estimate').filter({ hasText: 'kg/käsipaino' }).innerText(), /1RM ~25,3 kg\/käsipaino/);
           assert.equal(await bench.locator('img').count(), 0);
-          assert.match(await page.locator('.record-row').filter({ hasText: 'Kulmasoutu' }).locator('.record-estimate').innerText(), /^1RM —/);
+          const row = page.locator('.record-row').filter({ hasText: 'Kulmasoutu' });
+          assert.match(await row.locator('.record-result').innerText(), /40 kg/);
+          assert.equal(await row.locator('.record-estimate').count(), 0);
+          assert.equal(await page.locator('[data-action="editrecord"]').count(), 0);
           assert.doesNotMatch(await page.locator('.record-list').innerText(), /NaN|Infinity|Epley|RIR/);
           for (const width of [320, 390]) {
             await page.setViewportSize({ width, height: 800 });
@@ -258,7 +261,37 @@ try {
           assert.match(await page.locator('.record-estimate').innerText(), /1RM ~63,3 kg/);
         });
 
-        await run('completion-only history is recoverable directly from records without guessing results or changing the program', async (page) => {
+        await run('one 5 x 20 kg set is enough despite incomplete and weaker sets, including after reload', async (page) => {
+          const state = core.defaultState(), h = workout('single-best', Date.now() - 1000, [20, 5]);
+          h.exercises[0].sets = [
+            { done: true, actualReps: '5' },
+            { done: true },
+            { done: true, actualReps: '0' },
+            { done: true, actualReps: '2', actualWeight: '15' },
+            { done: false, actualReps: '10', actualWeight: '100' },
+          ];
+          h.exercises[1].sets.forEach((set) => { delete set.actualReps; });
+          h.setsDone = 6; h.setsTotal = 7;
+          state.history = [h];
+          await seed(page, state);
+          const before = await saved(page);
+          const rawBefore = await page.evaluate(() => localStorage.getItem('gym-tracker-v1'));
+          for (let i = 0; i < 2; i++) {
+            await tap(button(page, 'Ennätykset'));
+            const bench = page.locator('.record-row').filter({ hasText: 'Penkkipunnerrus' });
+            assert.match(await bench.locator('.record-result').innerText(), /20 kg/);
+            assert.match(await bench.locator('.record-estimate').innerText(), /1RM ~23,3 kg/);
+            const row = page.locator('.record-row').filter({ hasText: 'Kulmasoutu' });
+            assert.match(await row.locator('.record-result').innerText(), /5 kg/);
+            assert.equal(await row.locator('.record-estimate').count(), 0);
+            assert.doesNotMatch(await page.locator('.record-list').innerText(), /Täydennä|1RM —/);
+            assert.deepEqual(await saved(page), before);
+            assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-v1')), rawBefore);
+            if (i === 0) await page.reload();
+          }
+        });
+
+        await run('completion-only records need no supplementation; history corrections remain optional and preserve the program', async (page) => {
           const state = core.defaultState(), routine = statisticsRoutine();
           routine.exercises = [routine.exercises[0]];
           Object.assign(routine.exercises[0], { sets: 2, reps: '8', weight: '50' });
@@ -273,11 +306,16 @@ try {
           await seed(page, state);
           const before = await saved(page);
           await tap(button(page, 'Ennätykset'));
-          assert.match(await page.locator('.record-estimate').innerText(), /^1RM —/);
-          await tap(button(page, 'Täydennä tulos: Penkkipunnerrus'));
+          assert.match(await page.locator('.record-result').innerText(), /50 kg/);
+          assert.equal(await page.locator('.record-estimate').count(), 0);
+          assert.equal(await page.locator('[data-action="editrecord"]').count(), 0);
+          assert.deepEqual(await saved(page), before, 'viewing weight-only records must not modify history');
+          await tap(button(page, 'Harjoituksiin')); await tap(button(page, 'Historia'));
+          await tap(page.locator('[data-action="morehistory"]'));
+          await tap(page.locator('[data-key="hedit-old-completion"]'));
           assert.equal(await page.locator('h1').innerText(), 'Historia');
           await page.locator('[data-hist="old-completion"] .history-editor').waitFor();
-          assert.deepEqual(await saved(page), before, 'opening recovery must not modify history');
+          assert.deepEqual(await saved(page), before, 'opening optional history editing must not modify history');
           const confirm = () => page.locator('[data-key="hconfirm-old-completion-0"]');
           await tapConfirm(confirm(), false);
           assert.deepEqual(await saved(page), before, 'cancelling confirmation must not infer reps');
