@@ -48,6 +48,8 @@ try {
             await page.evaluate((raw) => localStorage.setItem('gym-tracker-v1', raw), raw);
             await page.reload();
             await page.locator('.settings > summary').click();
+            await gaps(page, '.home-grid > *', 16, 'programs and expanded settings');
+            await gaps(page, '.home-programs > *', 16, 'program list and create button');
             const backup = page.locator('.backup-group');
             assert.equal(await backup.evaluate((e) => e.open), false);
             await backup.locator('> summary').click();

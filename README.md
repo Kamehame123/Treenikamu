@@ -5,11 +5,14 @@ Run `npm test` for pure logic and asset tests; `npm run test:progression` exerci
 the progression UI in Chromium and WebKit. Browser tests use isolated storage.
 
 The home screen shows only the **Treenipäiväkirja** title, then the stat tiles and
-the **Ajastin**/**Ennätykset** buttons, then the training programs as compact
+the **Historia**/**Ajastin**/**Ennätykset** buttons, then the training programs as compact
 green-accented cards (name, exercise/set counts and a one-tap **Aloita** button).
 Program details still expand on demand; an unfinished workout keeps its resume
-shortcut above the list. History and the statistics summary sit beside programs on
-desktop and below them on phones. Backup reminders and export remain inside
+shortcut above the list. Home always uses one centered column, at most 540 px wide,
+on phones, tablets and desktop: programs, **Luo treeniohjelma**, then **Asetukset**.
+Stat tiles and the three navigation buttons retain their three-column rows.
+History opens on its own page, with **Tilastot** at the top.
+Backup reminders and export remain inside
 **Asetukset**, with the same weekly schedule. This is a presentation-only update:
 existing browser storage, training history, imports and active sessions are
 unchanged; no migration or reset is needed.

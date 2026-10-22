@@ -1,4 +1,7 @@
 [
+  { "version": 55, "date": "2026-10-22", "changes": [
+    "Etusivu pysyy nyt samanlaisena puhelimella, tabletilla ja tietokoneella: ohjelmat, Luo treeniohjelma ja Asetukset ovat samassa keskitetyssä sarakkeessa. Tilastoluvut ja Historia-, Ajastin- ja Ennätykset-painikkeet pysyvät kolmen sarakkeen riveillä. Tallennetut treenit ja historia säilyvät ennallaan."
+  ] },
   { "version": 53, "date": "2026-10-22", "changes": [
     "Ennätyksissä yksi tehty sarja riittää. Muiden sarjojen puuttuvat, tekemättömät tai heikommat tulokset eivät estä ennätystä tai yksittäisestä sarjasta laskettavaa 1RM-arviota.",
     "Täydennä tulos -painike ja puuttuvan 1RM-arvion tyhjä rivi poistettiin ennätyksistä. Kirjattu ennätyspaino ja päivämäärä näkyvät edelleen, eikä vanhoja tuloksia arvata tai muuteta. Historiaa voi edelleen muokata halutessaan Historia-sivulla."

@@ -134,18 +134,26 @@ try {
           assert.equal(await p.locator('.routine').count(), 2);
           assert.equal(await p.locator('.routine h2').last().textContent(), state.routines[1].name);
           assert.match(await p.locator('.routine-meta').last().innerText(), /1 liikettä\s+4 sarjaa/);
-          for (const colorScheme of ['dark', 'light']) {
-            await p.emulateMedia({ colorScheme });
-            for (const width of [320, 390, 700, 768, 1280]) {
+          for (const appearance of ['dark', 'aurora']) {
+            await p.evaluate((value) => window.TrackerAppearance.set(value), appearance);
+            for (const width of [320, 390, 540, 700, 701, 768, 1280, 1920]) {
               await p.setViewportSize({ width, height: 844 });
               const layout = await p.evaluate(() => {
                 const programs = document.querySelector('.home-programs');
                 const aside = document.querySelector('.home-aside');
                 const rect = (e) => e.getBoundingClientRect();
+                const app = rect(document.getElementById('app'));
                 return {
                   first: !!(programs.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING),
                   stacked: rect(aside).top >= rect(programs).bottom,
-                  wider: rect(programs).width > rect(aside).width,
+                  gap: rect(aside).top - rect(programs).bottom,
+                  aligned: rect(programs).left === rect(aside).left && rect(programs).width === rect(aside).width,
+                  width: app.width,
+                  centered: Math.abs(app.left - (innerWidth - app.width) / 2) < 0.6,
+                  threeAcross: ['.stats > *', '.stats-links > *'].every((selector) => {
+                    const boxes = [...document.querySelectorAll(selector)].map(rect);
+                    return boxes.length === 3 && boxes.every((box) => box.top === boxes[0].top && Math.abs(box.width - boxes[0].width) < 0.6);
+                  }),
                   visible: rect(document.querySelector('.routine')).bottom < innerHeight,
                   noOverflow: document.documentElement.scrollWidth <= innerWidth,
                   noOverlap: [...document.querySelectorAll('.routine')].every((r) => {
@@ -155,10 +163,15 @@ try {
                 };
               });
               assert.equal(layout.first, true, 'reading order puts programs first');
-              assert.equal(width <= 700 ? layout.stacked : layout.wider, true, `${colorScheme}/${width}: program priority`);
+              assert.equal(layout.stacked, true, `${appearance}/${width}: settings stay below programs`);
+              assert.equal(layout.gap, 16, `${appearance}/${width}: consistent gap above settings`);
+              assert.equal(layout.aligned, true, `${appearance}/${width}: programs and settings share the same column`);
+              assert.equal(layout.width, Math.min(width, 540), `${appearance}/${width}: compact home width`);
+              assert.equal(layout.centered, true, `${appearance}/${width}: home column is centered`);
+              assert.equal(layout.threeAcross, true, `${appearance}/${width}: stats and navigation stay in three-column rows`);
               assert.equal(layout.visible, true, 'first program is fully visible without scrolling');
-              assert.equal(layout.noOverflow, true, `${colorScheme}/${width}: no overflow`);
-              assert.equal(layout.noOverlap, true, `${colorScheme}/${width}: long names and counts do not overlap the start button`);
+              assert.equal(layout.noOverflow, true, `${appearance}/${width}: no overflow`);
+              assert.equal(layout.noOverlap, true, `${appearance}/${width}: long names and counts do not overlap the start button`);
             }
           }
           const summary = p.locator('.routine-details > summary').last();
