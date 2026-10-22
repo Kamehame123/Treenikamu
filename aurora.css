@@ -1,0 +1,146 @@
+/* Aurora: the bright, colorful appearance. Everything is scoped to html[data-theme="aurora"],
+   so Dark mode (the default) is exactly what styles.css defines and nothing here can leak into it.
+   Layout, spacing and typography stay as in Dark mode; this file only changes color, depth and motion. */
+
+html[data-theme="aurora"] {
+	color-scheme: light;
+	--bg: #f7f6fc; --card: #ffffff; --card-hi: #f3efff; --surface: #eee9ff; --input: #f6f4fd;
+	--text: #201b35; --muted: #625e75; --line: #e1dcf2; --line-hi: #c9c0e6;
+	--accent: #6544d8; --accent-ink: #ffffff; --accent-soft: #ece6ff; --accent-ring: #6544d833;
+	--danger: #a3203a; --danger-bg: #fff0f2; --focus: #1a5fd0;
+	--shadow: 0 10px 28px #4b2fb31a, 0 2px 6px #4b2fb30f;
+	--success: #0b6b59; --success-soft: #dcf4ea; --success-bright: #1a9a7f;
+	--coral: #f17676; --coral-ink: #963b48; --peach: #fff0ed;
+}
+html[data-theme="aurora"] body { background: var(--bg); }
+/* Static color washes behind the content; fixed and non-interactive so scrolling stays cheap. */
+html[data-theme="aurora"] body::before {
+	content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+	background:
+		radial-gradient(520px 340px at 100% 0%, #ece6ff99, transparent 70%),
+		radial-gradient(460px 320px at 0% 4%, #ffe9e480, transparent 70%),
+		radial-gradient(520px 420px at 100% 72%, #dcf4ea80, transparent 70%);
+}
+html[data-theme="aurora"] * { -webkit-tap-highlight-color: #6544d82a; }
+
+/* Header */
+html[data-theme="aurora"] .brand-row { border-bottom-color: var(--line-hi); }
+html[data-theme="aurora"] .brand-mark { background: linear-gradient(135deg, #6544d8, #a03bd0); box-shadow: 0 4px 12px #6544d840; }
+html[data-theme="aurora"] .status { background: #ffffffcc; border-color: var(--line-hi); }
+html[data-theme="aurora"] .status::before { background: var(--success-bright); box-shadow: 0 0 0 3px #1a9a7f26; }
+
+/* Surfaces */
+html[data-theme="aurora"] .card { border-radius: 20px; }
+html[data-theme="aurora"] .stats > div, html[data-theme="aurora"] button.stat-tile { border-radius: 18px; box-shadow: var(--shadow); }
+html[data-theme="aurora"] .stats > :nth-child(1) { background: linear-gradient(160deg, #ece6ff, #ffffff); border-color: #d6cbf7; }
+html[data-theme="aurora"] .stats > :nth-child(2) { background: linear-gradient(160deg, #dcf4ea, #ffffff); border-color: #bfe6d4; }
+html[data-theme="aurora"] .stats > :nth-child(3) { background: linear-gradient(160deg, #ffe6e0, #ffffff); border-color: #f6cbc3; }
+html[data-theme="aurora"] .stats > :nth-child(1) strong { color: var(--accent); }
+html[data-theme="aurora"] .stats > :nth-child(2) strong { color: var(--success); }
+html[data-theme="aurora"] .stats > :nth-child(3) strong { color: var(--coral-ink); }
+html[data-theme="aurora"] .card.routine { border-left-width: 5px; border-color: var(--line-hi); border-left-color: var(--accent); background: linear-gradient(115deg, #ece6ff, #ffffff 75%); }
+html[data-theme="aurora"] .card.routine[data-tone="1"] { border-left-color: var(--success-bright); background: linear-gradient(115deg, #dcf4ea, #ffffff 75%); }
+html[data-theme="aurora"] .card.routine[data-tone="2"] { border-left-color: var(--coral); background: linear-gradient(115deg, #ffe9e4, #ffffff 75%); }
+html[data-theme="aurora"] .routine:focus-within { border-color: var(--accent); }
+html[data-theme="aurora"] button.quick-start { background: linear-gradient(135deg, #6a49e0, #5a3cc8); border-color: #5a3cc8; box-shadow: 0 6px 16px #6544d840; }
+html[data-theme="aurora"] .routine-meta > span { background: #ffffffb3; }
+html[data-theme="aurora"] .pill { background: #ffffffcc; border-color: var(--line-hi); }
+html[data-theme="aurora"] .settings { background: #ffffffe6; }
+html[data-theme="aurora"] .resume { border-color: var(--accent); background: linear-gradient(135deg, #ece6ff, #ffffff 80%); box-shadow: var(--shadow); }
+html[data-theme="aurora"] .pulse { background: var(--success-bright); box-shadow: 0 0 0 3px #1a9a7f33; }
+html[data-theme="aurora"] .empty-state { border-color: var(--line-hi); background: linear-gradient(160deg, #ffffff, #f3efff); }
+html[data-theme="aurora"] footer { border-top-color: var(--line-hi); }
+
+/* Buttons */
+html[data-theme="aurora"] .btn { border-radius: 14px; }
+html[data-theme="aurora"] .btn.primary { background: linear-gradient(135deg, #6a49e0, #5a3cc8); border-color: #5a3cc8; box-shadow: 0 6px 16px #6544d83d; }
+html[data-theme="aurora"] .btn.secondary { background: #ffffff; border-color: var(--line-hi); }
+html[data-theme="aurora"] .btn.ghost, html[data-theme="aurora"] .btn.small { background: transparent; }
+html[data-theme="aurora"] .add-workout, html[data-theme="aurora"] .add-ex-btn { background: transparent; border-color: var(--accent); color: var(--accent); }
+
+/* Messages */
+html[data-theme="aurora"] .banner { background: var(--danger-bg); border-color: #e7a5b0; }
+html[data-theme="aurora"] .update-notice, html[data-theme="aurora"] .notice, html[data-theme="aurora"] .autorange-note { background: var(--accent-soft); border-color: #b9a7f1; }
+html[data-theme="aurora"] .backup.due { border-color: var(--coral); background: var(--peach); }
+html[data-theme="aurora"] .settings-flag { background: var(--peach); color: var(--coral-ink); }
+html[data-theme="aurora"] .cheer { background: var(--peach); color: var(--coral-ink); border: 1px solid #f6cbc3; }
+html[data-theme="aurora"] .release-notes .release-version { color: var(--accent); }
+
+/* Workout */
+html[data-theme="aurora"] .session-time, html[data-theme="aurora"] .session-hr { background: var(--accent-soft); border-color: #cfc3f5; }
+html[data-theme="aurora"] .session-intro { background: linear-gradient(135deg, #f3efff, #ffffff); }
+html[data-theme="aurora"] .ex.current { border-color: var(--accent); background: linear-gradient(160deg, #f3efff, #ffffff 60%); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow); }
+html[data-theme="aurora"] .ex.complete { background: #f4fbf8; border-color: #bfe6d4; }
+html[data-theme="aurora"] .ex.current .exercise-index { background: linear-gradient(135deg, #6a49e0, #a03bd0); color: #ffffff; }
+html[data-theme="aurora"] .exercise-index { background: var(--accent-soft); color: var(--accent); }
+html[data-theme="aurora"] .badge.done-badge { background: var(--success-soft); border-color: var(--success); color: var(--success); }
+html[data-theme="aurora"] .progress { background: #e1dcf2; }
+html[data-theme="aurora"] .progress::-webkit-progress-bar { background: #e1dcf2; }
+html[data-theme="aurora"] .progress::-webkit-progress-value { background: linear-gradient(90deg, #6544d8, #1a9a7f); }
+html[data-theme="aurora"] .progress::-moz-progress-bar { background: linear-gradient(90deg, #6544d8, #1a9a7f); }
+html[data-theme="aurora"] .set { background: #ffffff; border-radius: 22px; box-shadow: 0 2px 8px #4b2fb314; }
+html[data-theme="aurora"] .set.next { background: var(--card-hi); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), 0 6px 16px #6544d826; }
+html[data-theme="aurora"] .set.done { background: var(--success-soft); border-color: var(--success); color: var(--success); box-shadow: none; }
+html[data-theme="aurora"] .set.done .set-foot, html[data-theme="aurora"] .set.done .set-label { color: var(--success); }
+html[data-theme="aurora"] .set.done .set-planned { color: var(--muted); }
+html[data-theme="aurora"] .stepper { background: var(--input); border-radius: 18px; }
+html[data-theme="aurora"] .step-btn { background: #ffffff; box-shadow: 0 1px 4px #4b2fb31f; }
+html[data-theme="aurora"] .step-btn:disabled { box-shadow: none; }
+html[data-theme="aurora"] .rir-btn { background: #ffffff; }
+html[data-theme="aurora"] .track-rail { background: #ffffffe6; border-color: var(--line-hi); }
+html[data-theme="aurora"] .track-box { background: var(--card-hi); }
+html[data-theme="aurora"] .track-box.done { background: var(--success); border-color: var(--success); color: #ffffff; }
+html[data-theme="aurora"] .track-box.current { border-color: var(--accent); }
+html[data-theme="aurora"] .rest { background: #ffffff; border-color: var(--accent); box-shadow: 0 -8px 28px #4b2fb333; }
+html[data-theme="aurora"] .library-done { box-shadow: 0 -8px 24px #4b2fb31a; }
+html[data-theme="aurora"] .mini .btn { background: #ffffff; }
+
+/* History, library and statistics */
+html[data-theme="aurora"] .history-check { background: var(--success-soft); color: var(--success); }
+html[data-theme="aurora"] .exercise-choice { background: #ffffff; }
+html[data-theme="aurora"] .choice-icon { background: var(--accent-soft); color: var(--accent); }
+html[data-theme="aurora"] .library-multi[aria-pressed="true"], html[data-theme="aurora"] .exercise-choice[aria-disabled="true"] { background: var(--success-soft); border-color: var(--success); }
+html[data-theme="aurora"] .index-card { background: linear-gradient(135deg, #ece6ff, #ffe9e4); }
+html[data-theme="aurora"] .index-value { color: var(--accent); }
+html[data-theme="aurora"] .stat-metric { border-top: 4px solid var(--accent); }
+html[data-theme="aurora"] .stat-metric:nth-child(3n+2) { border-top-color: var(--success-bright); }
+html[data-theme="aurora"] .stat-metric:nth-child(3n) { border-top-color: var(--coral); }
+html[data-theme="aurora"] .stat-line { stroke: var(--accent); }
+html[data-theme="aurora"] .stat-dot { fill: var(--accent); }
+html[data-theme="aurora"] .stat-bar { fill: var(--success-bright); }
+html[data-theme="aurora"] .activity-calendar li { background: #ffffff; }
+html[data-theme="aurora"] .activity-calendar [data-active="true"] { background: var(--success); color: #ffffff; }
+html[data-theme="aurora"] .activity-calendar .calendar-gap { background: transparent; }
+html[data-theme="aurora"] .stat-ranges [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* Timer */
+html[data-theme="aurora"] .timer-card { background: radial-gradient(circle at 50% 0%, #ece6ff, #ffffff 70%); }
+html[data-theme="aurora"] .timer-clock { color: var(--text); }
+html[data-theme="aurora"] .timer-fieldset { background: #ffffff; }
+
+/* Dialogs */
+html[data-theme="aurora"] .confirm { border-radius: 22px; border-color: var(--line-hi); border-top: 4px solid var(--accent); box-shadow: 0 24px 60px #2a1a6b40; }
+html[data-theme="aurora"] .confirm::backdrop { background: #201b35a6; }
+
+/* Settings selector */
+html[data-theme="aurora"] .appearance-option { background: #ffffff; }
+html[data-theme="aurora"] .appearance-option:has(input:checked) { background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* Motion: short, opacity-only entrances on real view changes, and one check pop on an explicit set log.
+   Never loops, and never applies transforms or filters to anything that contains fixed or sticky UI. */
+@keyframes aurora-rise { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aurora-check { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+html[data-theme="aurora"] #app[data-entering] :is(.stats > *, .routine-list > li, .home-aside > *, .statistics-content > *, .timer-card, .timer-item, .ex, .history-list > li) { animation: aurora-rise .26s ease-out both; }
+html[data-theme="aurora"] #app[data-entering] :is(.stats > :nth-child(2), .routine-list > li:nth-child(2), .ex:nth-of-type(2)) { animation-delay: 40ms; }
+html[data-theme="aurora"] #app[data-entering] :is(.stats > :nth-child(3), .routine-list > li:nth-child(3), .ex:nth-of-type(3)) { animation-delay: 80ms; }
+html[data-theme="aurora"] .set.just-logged.done .set-foot .icon { animation: aurora-check .28s ease-out; }
+html[data-theme="aurora"] .set, html[data-theme="aurora"] .btn, html[data-theme="aurora"] .step-btn, html[data-theme="aurora"] .appearance-option { transition: transform .12s, background-color .18s, border-color .18s, box-shadow .18s; }
+
+@media (prefers-reduced-motion: reduce) {
+	html[data-theme="aurora"] *, html[data-theme="aurora"] *::before, html[data-theme="aurora"] *::after { animation: none !important; transition: none !important; }
+}
+@media (forced-colors: active) {
+	html[data-theme="aurora"] body::before { display: none; }
+	html[data-theme="aurora"] * { background-image: none !important; box-shadow: none !important; }
+	html[data-theme="aurora"] .set.done { border: 2px solid Highlight; }
+}

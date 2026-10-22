@@ -30,9 +30,30 @@ const paths = {
   stop: 'M6 6h12v12H6z',
   stopwatch: 'M9.5 2.5h5M12 2.5V6M12 10v3.5l2.5 1.5M19.5 13.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0M18.5 6.5l1.5-1.5',
   heart: 'M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z',
+  moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.weight}"/></svg>`;
 let announceId;
+let appearanceMessage = '';
+const APPEARANCE_FAILED = 'Ulkoasua ei voitu tallentaa pysyvästi. Valinta on käytössä vain tässä välilehdessä.';
+// The appearance choice is a per-device preference kept by appearance.js, never part of the training data or backups.
+function appearanceNote() { return window.TrackerAppearance?.saved === false ? APPEARANCE_FAILED : appearanceMessage; }
+function appearanceSection() {
+  const api = window.TrackerAppearance;
+  const current = api?.theme ?? 'dark';
+  const option = (value, glyph, name, note) => `<label class="appearance-option">${icon(glyph)}<span class="appearance-text">${name}<small>${note}</small></span><input type="radio" name="appearance" value="${value}" data-appearance="${value}" data-key="appearance-${value}" ${current === value ? 'checked' : ''} ${api ? '' : 'disabled'}></label>`;
+  return `<fieldset class="appearance"><legend>Ulkoasu</legend><div class="appearance-options">${option('dark', 'moon', 'Dark mode', 'Oletus')}${option('aurora', 'sun', 'Aurora', 'Vaalea ja värikäs')}</div><p class="small-copy muted appearance-status" id="appearance-status" role="status">${esc(appearanceNote())}</p></fieldset>`;
+}
+// Updates the selector in place; changing the look must never rebuild the screen or touch saved data.
+function paintAppearance() {
+  const api = window.TrackerAppearance;
+  if (!api) return;
+  for (const radio of document.querySelectorAll('input[name="appearance"]')) radio.checked = radio.value === api.theme;
+  const status = document.getElementById('appearance-status');
+  if (status) status.textContent = appearanceNote();
+}
+window.addEventListener('appearancechange', paintAppearance);
 function announce(text) {
   clearTimeout(announceId); $live.textContent = '';
   announceId = setTimeout(() => { $live.textContent = text; }, 40);
@@ -642,7 +663,7 @@ function homeView() {
   const resume = s ? `<section class="resume card"><div class="row"><span class="eyebrow accent"><span class="pulse" aria-hidden="true"></span> HARJOITUS KESKEN</span><span class="badge now">${core.progress(s).pct}%</span></div><h2>${esc(s.name)}</h2><p class="muted">${core.progress(s).done}/${core.progress(s).total} sarjaa tehty · Jatka siitä, mihin jäit.</p>${progressBar(core.progress(s))}<button class="btn primary big" data-action="resume" data-key="resume">Jatka harjoitusta ${icon('arrow')}</button></section>` : '';
   const routines = state.routines.map((r, i) => {
     const pills = r.exercises.map((e) => `<li class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></li>`).join('');
-    return `<li class="card routine">
+    return `<li class="card routine" data-tone="${[...r.id].reduce((n, c) => n + c.charCodeAt(0), 0) % 3}">
       <button class="quick-start" data-action="start" data-key="quick-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Aloita: ${esc(r.name)}">${icon('play')} <span>Aloita</span></button>
       <details class="routine-details" data-routine-panel="${esc(r.id)}" ${openRoutines.has(r.id) ? 'open' : ''}>
         <summary><h2>${esc(r.name)}</h2>
@@ -660,6 +681,7 @@ function homeView() {
     <div class="home-aside">
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
       <div class="settings-body">
+        ${appearanceSection()}
         <div class="rest-settings">
           <label class="check"><span>Automaattinen lepoajastin<small>Laskee tieteellisen lepoajan (45–180 s) automaattisesti liikkeen ja sarjan mukaan, ellet aseta omaa aikaa</small></span><input type="checkbox" role="switch" data-action="autorest" data-key="autorest" ${state.settings.autoRest ? 'checked' : ''} aria-label="Käynnistä lepoajastin sarjan jälkeen"></label>
           <p class="muted small-copy">Automaattinen lepoaika: moninivelliikkeissä 120–180 s, eristävissä liikkeissä 75–120 s ja keskivartalo-/liikkuvuusliikkeissä 45–60 s. Lisätoistot ja tiukat sarjat pidentävät palautusta automaattisesti.</p>
@@ -919,6 +941,7 @@ function render() {
   if (view === 'library' && !(picker.mode === 'session' ? state.session : draft)) view = 'home';
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
+  $app.toggleAttribute('data-entering', changed);
   $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
@@ -1381,13 +1404,15 @@ const actions = {
     dirty = false; saveConflict = false; storageOk = true; readLatest(); render();
   },
   async set(t) {
-    let advance = null;
+    let advance = null, logged = false;
     const interaction = scrollInteraction;
+    const target = { e: t.dataset.e, s: t.dataset.s };
     const ok = await mutate((next) => {
       const ei = +t.dataset.e, si = +t.dataset.s, ex = next.session?.exercises[ei];
       if (!ex?.sets[si]) return false;
       const current = core.currentExercise(next.session);
       const done = core.toggleSet(next.session, ei, si, { logReps: true });
+      logged = done;
       const restSeconds = core.restFor(next.settings, ex, si);
       cheer = null;
       if (done) {
@@ -1403,6 +1428,8 @@ const actions = {
       }
       announce(`${ex.name}, sarja ${si + 1} ${done ? 'tehty' : 'kirjaus peruttu'}.${done && next.restEnd ? ` Lepoajastin käynnistyi, ${restSeconds} sekuntia.` : ''}${cheer ? ` ${cheer.text}` : ''}`);
     }, sessionOptions());
+    // Lets an alternate look play a one-shot confirmation on the set the user just logged (never on later redraws).
+    if (ok && logged) document.querySelector(`[data-action="set"][data-e="${target.e}"][data-s="${target.s}"]`)?.classList.add('just-logged');
     if (ok && advance && storageOk && interaction === scrollInteraction) scheduleExerciseScroll(advance.sessionId, advance.index);
   },
   async adjustreps(t) {
@@ -1746,6 +1773,12 @@ async function commitHistoryEdit(t) {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.appearance) {
+    window.TrackerAppearance?.set(t.dataset.appearance);
+    appearanceMessage = 'Ulkoasu tallennettu tälle laitteelle.';
+    paintAppearance();
+    return;
+  }
   if (t.dataset.hedit) { enqueueAction(() => commitHistoryEdit(t)); return; }
   if (t.dataset.statFilter || t.dataset.statDate) {
     const field = t.dataset.statFilter || t.dataset.statDate;

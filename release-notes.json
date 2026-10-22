@@ -1,4 +1,8 @@
 [
+  { "version": 52, "date": "2026-10-23", "changes": [
+    "Asetuksissa on uusi Ulkoasu-valinta. Dark mode on edelleen oletus ja näyttää täsmälleen samalta kuin ennen. Uusi Aurora-ulkoasu on vaalea ja värikäs: violetti pääväri, turkoosi tehdyille sarjoille ja korallin sävyjä.",
+    "Ulkoasu on laitekohtainen asetus. Se ei kuulu varmuuskopioon eikä muuta treenejä, historiaa tai muuta tallennettua tietoa. Aurora käyttää vain lyhyitä, rauhallisia siirtymiä, ja ne poistuvat kokonaan, jos laitteen asetuksissa on vähennetty liike."
+  ] },
   { "version": 51, "date": "2026-10-22", "changes": [
     "Ajastin-painikkeessa on nyt sekuntikellon kuvake. Käynnissä olevassa ajastimessa Kierros-teksti on paljon isompi, intervallin nimen alla olevat toistuvat tekstit on poistettu ja Tauko- ja Lopeta-painikkeet ovat isoja pyöristettyjä neliöitä.",
     "Sarjaa luodessa Lisää intervalli -painikkeen vasemmalla puolella on Työ ja oikealla Lepo. Ne lisäävät nimetyn intervallin kiinteällä kestolla (aluksi Työ 30 s ja Lepo 15 s). Työ- tai Lepo-intervallin laatikon oikean alakulman Tee oletus -painike tallentaa sen keston uudeksi oletukseksi. Oletukset tallentuvat laitteelle ja kuuluvat varmuuskopioon; aiemmat tiedot toimivat ennallaan.",
