@@ -43,9 +43,16 @@ Lepo saves its duration as the new default. Each interval change vibrates, beeps
 announced to screen readers, and the screen wake lock stays on while the timer is
 open. Elapsed time is timestamp based and a running timer survives a reload, but
 iOS pauses page JavaScript when the screen locks, so cues cannot fire then.
-Sequences and the Työ/Lepo defaults are saved locally and included in backups;
-timer runs are not logged to history. This is an additive change (`timers` and
-`timerDefaults` are written only once they exist): existing browser data, history, imports and old backups load and restore
+Sequences and the Työ/Lepo defaults are saved locally and included in backups.
+A sequence can optionally have an **exercise** (name suggested from the library,
+optional kg weight and optional reps per round) in the editor's "Kirjaa historiaan"
+section. When such a run finishes, or is stopped with at least one completed round,
+it is saved to the workout history as one done working set per completed round (at
+most 20), so it appears in history, statistics and the maximum-weight records. With
+reps the sets log reps, otherwise the round duration. A run is logged once (fixed
+history id per run, remembered in the tab session), a failed save offers retry, and
+sequences without an exercise are never logged. This is an additive change (`timers` and
+`timerDefaults` are written only once they exist; `workout` on a sequence is optional): existing browser data, history, imports and old backups load and restore
 unchanged, so no migration is needed. **Tilastot** moved from home to the top of
 **Historia**. Run `npm run test:timer` for the Chromium/WebKit timer tests.
 
@@ -505,10 +512,19 @@ same storage keys and resume after reload. Editor drafts use the same tab's
 session storage. No data migration, uninstall, clearing storage or prior backup
 is required for this update mechanism.
 
-Immediate activation requires closing other windows/tabs of this app, so an
-update cannot interrupt their workouts or unsaved drafts. The worker checks
-this itself before accepting the activation request. Without explicit acceptance,
+Immediate activation requires that no other **visible** window or tab of this app
+exists, so an update cannot interrupt another window's workout or unsaved draft.
+The worker checks this itself before accepting the activation request. Background
+(hidden) tabs do not block it: browsers such as iOS Chrome keep old tabs alive for
+days. Such a tab reloads into the new version when reopened, only if it has no
+unsaved changes; otherwise it shows the usual warning. Without explicit acceptance,
 normal service-worker activation still waits until old clients close.
+
+Reloading the page (or launching the app) while an update is already downloaded
+applies it automatically, because a cache-first worker would otherwise keep serving
+the old version indefinitely on browsers that never close tabs. This runs at most once a minute per tab and only when everything is saved; if anything blocks it, the
+normal "Päivitä nyt" notice is shown instead of an error. An update found while the
+app is open is never applied without acceptance.
 
 Offline launches keep the cached version. An already-downloaded update can be
 accepted offline; otherwise reconnection checks for a download. Failed checks,

@@ -1,4 +1,10 @@
 [
+  { "version": 59, "date": "2026-10-22", "changes": [
+    "Ajastinsarjaan voi nyt halutessaan liittää liikkeen, painon ja toistot kierrosta kohti. Kun ajastin valmistuu tai lopetat sen kesken, valmiit kierrokset tallentuvat harjoitushistoriaan yhtenä sarjana kierrosta kohti, ja ne näkyvät tilastoissa sekä ennätyksissä painon mukaan. Ilman liikettä ajastin toimii kuten ennen. Aiemmat tiedot ja varmuuskopiot säilyvät ennallaan."
+  ] },
+  { "version": 58, "date": "2026-10-22", "changes": [
+    "Päivitys onnistuu nyt myös iPhonen Chromessa: sivun lataaminen uudelleen ottaa jo ladatun uuden version käyttöön, ja taustalla avoimet välilehdet eivät enää estä Päivitä nyt -painiketta. Tallennetut treenit ja historia säilyvät ennallaan."
+  ] },
   { "version": 57, "date": "2026-10-22", "changes": [
     "Ennätyspainon ja teoreettisen maksimin alta voi nyt avata treenin, jossa tulos saavutettiin. Näet alkuperäisen treenin liikkeet, sarjat, kirjatut toistot tai kestot, painot ja tekemättömät sarjat. Painoennätys ja maksimiarvio avaavat kumpikin oman treeninsä.",
     "Laskettu yhden toiston maksimipaino näkyy nyt nimellä Teoreettinen maksimi, esimerkiksi Teoreettinen maksimi ~50 kg. Ennätykset ja historia käyttävät samaa sarjanäkymää: puuttuvia toteutuneita toistoja ei arvata tavoitteista. Tallennettuja treenejä ja varmuuskopioita ei muuteta."

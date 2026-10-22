@@ -1,5 +1,6 @@
 // Interval timer: saved sequences of timed intervals that repeat. Pure helpers, no DOM.
-// A sequence is { id, name, repeats, intervals: [{ id, label, seconds }] }.
+// A sequence is { id, name, repeats, intervals: [{ id, label, seconds }], workout? }.
+import { parseWeight } from './progression.js';
 
 export const TIMER_MAX_SEQUENCES = 50;
 export const TIMER_MAX_INTERVALS = 30;
@@ -12,6 +13,15 @@ const int = (v, min, max, fallback) => {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
+
+// Optional exercise attached to a sequence: { name, weight ('' or kg text), reps (0 = not counted) }.
+// A finished run is logged to the workout history as that exercise, one set per completed round.
+export function sanitizeWorkout(raw) {
+  const name = text(raw?.name, 60);
+  if (!name) return null;
+  const weight = text(raw.weight, 20).replace(/\s*kg$/i, '');
+  return { name, weight: parseWeight(weight) > 0 ? weight : '', reps: int(raw.reps, 0, 100, 0) };
+}
 
 // Lowest unused "Sarja N", so deleting Sarja 2 lets the next unnamed sequence take its place.
 export function defaultTimerName(timers) {
@@ -40,7 +50,8 @@ export function sanitizeTimers(raw) {
     let id = text(t.id, 80) || newId();
     if (seen.has(id)) id = newId();
     seen.add(id);
-    timers.push({ id, name: text(t.name, 60), repeats: int(t.repeats, 1, TIMER_MAX_REPEATS, 1), intervals });
+    const workout = sanitizeWorkout(t.workout);
+    timers.push({ id, name: text(t.name, 60), repeats: int(t.repeats, 1, TIMER_MAX_REPEATS, 1), intervals, ...(workout ? { workout } : {}) });
   }
   for (const t of timers) if (!t.name) t.name = defaultTimerName(timers);
   return timers;
@@ -97,7 +108,7 @@ export function sanitizeRun(raw, timers) {
   const startedAt = Number(raw.startedAt), pausedMs = Number(raw.pausedMs);
   const pausedAt = raw.pausedAt === null ? null : Number(raw.pausedAt);
   if (![startedAt, pausedMs].every(Number.isFinite) || pausedMs < 0 || (pausedAt !== null && !Number.isFinite(pausedAt))) return null;
-  return { id: raw.id, startedAt, pausedAt, pausedMs };
+  return { id: raw.id, startedAt, pausedAt, pausedMs, ...(raw.logged === true ? { logged: true } : {}) };
 }
 
 // One editor interval (min/sec strings) -> { seconds }, or { error, interval } explaining the first problem.
@@ -122,7 +133,17 @@ export function buildTimer(draft, timers) {
   const repeats = Number(String(draft.repeats).trim() || NaN);
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > TIMER_MAX_REPEATS) return { error: `Toistojen määrä on 1–${TIMER_MAX_REPEATS}.`, field: 'repeats' };
   const others = timers.filter((t) => t.id !== draft.id);
-  return { timer: { id: draft.id || newId(), name: text(draft.name, 60) || defaultTimerName(others), repeats, intervals } };
+  const workoutName = text(draft.wName, 60);
+  let workout = null;
+  if (workoutName) {
+    const weight = text(draft.wWeight, 20).replace(/\s*kg$/i, '');
+    if (weight && !(parseWeight(weight) > 0)) return { error: 'Painon pitää olla positiivinen luku kilogrammoina, esimerkiksi 20 tai 22,5.', field: 'wWeight' };
+    const repsText = String(draft.wReps ?? '').trim();
+    const reps = repsText === '' ? 0 : Number(repsText);
+    if (!Number.isInteger(reps) || reps < 0 || reps > 100) return { error: 'Toistot kierrosta kohti ovat kokonaisluku 1–100. Jätä tyhjäksi, jos haluat kirjata keston.', field: 'wReps' };
+    workout = { name: workoutName, weight, reps };
+  }
+  return { timer: { id: draft.id || newId(), name: text(draft.name, 60) || defaultTimerName(others), repeats, intervals, ...(workout ? { workout } : {}) } };
 }
 
 export const newInterval = (label = '', seconds = 0) => ({ id: newId(), label, min: String(Math.floor(seconds / 60) || ''), sec: String(seconds % 60 || '') });
@@ -130,6 +151,7 @@ export const newInterval = (label = '', seconds = 0) => ({ id: newId(), label, m
 export function draftFrom(timer) {
   return {
     id: timer.id, name: timer.name, repeats: String(timer.repeats),
+    wName: timer.workout?.name ?? '', wWeight: timer.workout?.weight ?? '', wReps: timer.workout?.reps ? String(timer.workout.reps) : '',
     intervals: timer.intervals.map((i) => ({ id: i.id, label: i.label, min: String(Math.floor(i.seconds / 60) || ''), sec: String(i.seconds % 60 || '') })),
   };
 }

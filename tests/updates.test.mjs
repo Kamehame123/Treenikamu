@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 import { join, extname } from 'node:path';
 import * as core from '../core.js';
 import { chromium, webkit, devices, AxeBuilder, root, tap } from './support.mjs';
@@ -41,6 +42,28 @@ async function updated(page) {
 }
 
 try {
+  await test('service worker accepts an update unless another visible window of the app exists', async () => {
+    const source = await readFile(join(root, 'sw.js'), 'utf8');
+    const scope = 'https://app.test/';
+    const client = (id, visibilityState, path = 'index.html') => ({ id, visibilityState, url: `${scope}${path}` });
+    const apply = async (clients, sourceId) => {
+      const listeners = []; let skipped = false; const work = []; const replies = [];
+      vm.runInNewContext(source, {
+        self: { addEventListener: (name, fn) => { if (name === 'message') listeners.push(fn); }, registration: { scope }, clients: { matchAll: async () => clients }, skipWaiting: async () => { skipped = true; } },
+        location: { origin: 'https://app.test' }, URL,
+      });
+      for (const fn of listeners) fn({ data: { type: 'APPLY_UPDATE' }, source: { id: sourceId }, ports: [{ postMessage: (m) => replies.push(m) }], waitUntil: (p) => work.push(p) });
+      await Promise.all(work);
+      return { reply: replies[0], skipped };
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(await apply([client('a', 'visible')], 'a'))), { reply: { ok: true }, skipped: true });
+    assert.equal((await apply([client('a', 'visible'), client('b', 'hidden')], 'a')).reply.ok, true);
+    assert.equal((await apply([client('a', 'visible'), { id: 'c', visibilityState: 'visible', url: 'https://app.test.evil/' }], 'a')).reply.ok, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(await apply([client('a', 'visible'), client('b', 'visible')], 'a'))), { reply: { ok: false, reason: 'other-windows' }, skipped: false });
+    assert.equal((await apply([client('a', 'hidden'), client('b', 'visible', 'x/index.html')], 'a')).reply.ok, false);
+    assert.equal((await apply([client('b', 'hidden')], 'a')).reply.ok, false);
+  });
+
   for (const [name, engine, device] of [['chromium', chromium, 'Pixel 7'], ['webkit', webkit, 'iPhone 14']]) {
     const browser = await engine.launch();
     try {
@@ -76,17 +99,60 @@ try {
           assert.equal(await page.locator('[data-f="name"]').first().inputValue(), 'Oma liike');
         });
 
-        await run('resuming the app checks for a newly deployed version and cold icon launch offers existing waiting updates', async (page) => {
+        await run('resuming the app checks for a newly deployed version and cold icon launch applies an existing waiting update', async (page) => {
           await ready(page);
           release = 2;
           await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
           await button(page, 'Päivitä nyt').waitFor();
           await tap(button(page, 'Myöhemmin'));
           await page.goto(url);
-          await button(page, 'Päivitä nyt').waitFor();
-          assert.equal(await page.evaluate(() => globalThis.testRelease), 1);
-          await updated(page);
+          await page.waitForFunction(() => globalThis.testRelease === 2);
+          await page.locator('h1').waitFor();
           assert.equal(await page.locator('#update-notice').isVisible(), false);
+        });
+
+        await run('reloading with a downloaded update applies it automatically and keeps saved data', async (page) => {
+          await ready(page);
+          const state = core.defaultState();
+          state.history = [{ id: 'legacy', name: 'Vanha', startedAt: 1000, endedAt: 2000, setsDone: 2, setsTotal: 3 }];
+          state.session = core.startSession(state.routines[0]);
+          Object.assign(state.session.exercises[0].sets[0], { done: true, actualReps: '4', actualWeight: '55 kg' });
+          await page.evaluate((state) => localStorage.setItem('gym-tracker-v1', JSON.stringify(state)), state);
+          await page.reload();
+          await offer(page);
+          await page.reload();
+          await page.waitForFunction(() => globalThis.testRelease === 2);
+          await page.locator('h1').waitFor();
+          assert.deepEqual(await saved(page), state);
+        });
+
+        await run('reload keeps the offer, without an error, while another visible window is open', async (page, context) => {
+          await ready(page);
+          const other = await context.newPage(); await other.goto(url);
+          await other.locator('h1').waitFor();
+          await offer(page);
+          await page.reload();
+          await page.locator('[data-key="installupdate"]:not([disabled])').waitFor();
+          assert.doesNotMatch(await page.locator('#update-notice').innerText(), /Sulje muut tämän sovelluksen ikkunat ja selaimen/);
+          assert.equal(await page.evaluate(() => globalThis.testRelease), 1);
+          assert.equal(await other.evaluate(() => globalThis.testRelease), 1);
+        });
+
+        await run('a recent automatic attempt is not repeated on reload', async (page) => {
+          await ready(page); await offer(page);
+          await page.evaluate(() => sessionStorage.setItem('gym-tracker-auto-update', String(Date.now())));
+          await page.reload();
+          await page.locator('[data-key="installupdate"]:not([disabled])').waitFor();
+          assert.equal(await page.evaluate(() => globalThis.testRelease), 1);
+        });
+
+        await run('accepting an update still reloads when the browser never reports controllerchange', async (page) => {
+          await page.addInitScript(() => {
+            const add = ServiceWorkerContainer.prototype.addEventListener;
+            ServiceWorkerContainer.prototype.addEventListener = function (type, ...rest) { if (type !== 'controllerchange') add.call(this, type, ...rest); };
+          });
+          await ready(page); await offer(page);
+          await updated(page);
         });
 
         await run('acceptance preserves historical data, running sets, targets, rest timer and unrelated caches', async (page) => {
