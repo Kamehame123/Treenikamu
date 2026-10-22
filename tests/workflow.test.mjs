@@ -326,6 +326,55 @@ try {
           assert.deepEqual((await saved(p)).routines, state.routines);
         });
 
+        await run('compact set controls follow RIR without a logged counter and preserve workout edits', async (p) => {
+          const state = await seedWorkout(p, { autoRest: false, weight: '25 kg' });
+          const raw = await p.evaluate(() => localStorage.getItem('gym-tracker-v1'));
+          for (const appearance of ['dark', 'aurora']) {
+            await p.evaluate((value) => window.TrackerAppearance.set(value), appearance);
+            for (const width of [320, 390, 844, 1280]) {
+              await p.setViewportSize({ width, height: 844 });
+              const layout = await p.locator('.ex').first().evaluate((exercise) => {
+                const rir = exercise.querySelector('.exercise-rir');
+                const controls = exercise.querySelector('.exercise-footer');
+                const buttons = [...controls.querySelectorAll('button')].map((button) => button.getBoundingClientRect());
+                const row = rir.querySelector('.rir-row').getBoundingClientRect();
+                return {
+                  direct: rir.nextElementSibling === controls,
+                  gap: controls.getBoundingClientRect().top - row.bottom,
+                  aligned: buttons[0].top === buttons[1].top && buttons[0].width === buttons[1].width,
+                  right: Math.abs(buttons[1].right - row.right) < 0.6,
+                  compact: buttons.every((box) => box.height === 44 && box.width === 64),
+                  counter: /\d+\/\d+ kirjattu/.test(exercise.textContent),
+                  overflow: document.documentElement.scrollWidth > innerWidth,
+                };
+              });
+              assert.deepEqual(layout, { direct: true, gap: 8, aligned: true, right: true, compact: true, counter: false, overflow: false }, `${appearance}/${width}: compact controls directly under RIR`);
+            }
+          }
+          assert.equal(await p.evaluate(() => localStorage.getItem('gym-tracker-v1')), raw, 'presentation changes preserve all saved data');
+          assert.doesNotMatch(await p.locator('#exercise-0 .exercise-actions > p').textContent(), /Ohjelma ei muutu/);
+          await tap(p.locator('[data-key="rir-btn-0-2"]'));
+          await tap(p.locator('[data-key="a0"]'));
+          assert.equal(await p.locator('#exercise-0 .set').count(), 4);
+          assert.equal((await saved(p)).session.exercises[0].rir, '2', 'adding a set preserves RIR');
+          await tap(p.locator('[data-key="r0"]'));
+          assert.equal(await p.locator('#exercise-0 .set').count(), 3);
+          await tap(p.locator('[data-key="s0-2"]'));
+          await tapConfirm(p.locator('[data-key="r0"]'), false);
+          assert.equal(await p.locator('#exercise-0 .set').count(), 3, 'cancel keeps the logged set');
+          await tapConfirm(p.locator('[data-key="r0"]'));
+          assert.equal(await p.locator('#exercise-0 .set').count(), 2, 'logged sets still require confirmation');
+          await tap(p.locator('[data-key="r0"]'));
+          assert.equal(await p.locator('#exercise-0 .set').count(), 1);
+          assert.equal(await p.locator('[data-key="r0"]').isDisabled(), true, 'the last set cannot be removed');
+          const after = await saved(p);
+          assert.deepEqual(after.routines, state.routines, 'set edits do not change the saved program');
+          assert.deepEqual(after.history, state.history, 'set edits do not change history');
+          await p.reload();
+          assert.deepEqual((await saved(p)).session, after.session, 'set edits and RIR survive reload');
+          assert.equal(await p.locator('#exercise-0 .exercise-footer button').count(), 2, 'RIR patching and reload never duplicate the controls');
+        });
+
         await run('resume and reload center the current exercise without losing the session', async (p) => {
           const state = await seedWorkout(p, { current: 3 });
           await centered(p, '#exercise-3');

@@ -1,4 +1,7 @@
 [
+  { "version": 63, "date": "2026-10-22", "changes": [
+    "Liikkeen turha 0/3 kirjattu -laskuri on poistettu. Pienemmät − Sarja ja + Sarja -painikkeet ovat tasattuina oikealle heti RIR-valintojen alla. Vaihda tai poista liike -osiosta on poistettu Ohjelma ei muutu -teksti. Sarjojen lisääminen ja poistaminen, RIR sekä tallennetut harjoitukset ja historia toimivat ennallaan."
+  ] },
   { "version": 62, "date": "2026-10-22", "changes": [
     "Ennätyksissä laskettu maksimi näkyy nyt kirjattua ennätyspainoa alempana lyhyesti Arvio ~50 kg. Maksimiarvion erillinen treenipainike poistettiin. Näytä ennätyspainon treeni avaa edelleen varsinaisen painoennätyksen harjoituksen. Laskentatapa ja tallennetut treenit säilyvät ennallaan."
   ] },

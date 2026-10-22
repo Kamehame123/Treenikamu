@@ -288,10 +288,10 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .set-foot { font-size: 12px; font-weight: 650; color: var(--muted); }
 .set.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .set.done .set-foot, .set.done .set-label { color: var(--accent); font-weight: 750; }
-.exercise-footer { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-top: var(--control-gap); padding-top: var(--control-gap); border-top: 1px solid var(--line); }
-.exercise-footer > .muted { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.exercise-footer { display: flex; justify-content: flex-end; align-items: center; margin-top: var(--space-2); }
 .mini { display: flex; align-items: center; gap: 6px; }
 .mini .btn { font-size: 12px; padding-inline: 10px; background: var(--surface); border-color: var(--line); border-radius: 10px; }
+.exercise-footer .btn { min-width: 64px; min-height: 44px; padding: var(--space-1) var(--space-2); }
 .session-end { display: grid; gap: var(--control-gap); text-align: center; }
 .track-rail { position: fixed; z-index: 14; top: max(12px, env(safe-area-inset-top)); right: max(4px, env(safe-area-inset-right)); width: 56px; box-sizing: border-box; height: fit-content; max-height: calc(100vh - 108px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 108px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 3px; border: 1px solid var(--line-hi); border-radius: 18px; background: var(--card); box-shadow: var(--shadow); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .track-rail::-webkit-scrollbar { display: none; }

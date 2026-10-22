@@ -244,6 +244,10 @@ scope, storage keys and user data; no data migration or reset is required.
 
 ## Changing exercises during a workout
 
+The compact **- Sarja** / **+ Sarja** buttons sit directly below the RIR choices,
+aligned to the right. The redundant per-exercise "0/3 kirjattu" counter is omitted;
+workout progress and set completion indicators remain unchanged.
+
 During a workout, each exercise has "Vaihda tai poista liike" (swap or remove), and
 "Lisää liike tähän treeniin" adds an exercise after the current one. Swapping opens
 the exercise library on the original exercise's muscle group (inferred from its
