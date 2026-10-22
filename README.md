@@ -35,8 +35,12 @@ also verify that navigating the updated layouts leaves existing data unchanged.
 **Ajastin** on the home screen opens an in-app timer view. Create sequences of
 intervals (explanation plus minutes/seconds) and a repeat count; a sequence with
 no name becomes **Sarja 1**, **Sarja 2**, and so on (lowest unused number). While
-running it shows a large **Kierros x/y**, the current interval name and the
-remaining time, with big square pause/resume/stop buttons. **Työ** and **Lepo**
+running it shows a large **Kierros x/y**, the remaining time and a large, bold
+current interval name. A smaller, regular-weight italic **Seuraavaksi - …** line
+underneath previews the next interval, including the first interval of the next
+round. The preview stays in sync through pause/resume and reload, and is hidden
+during the final interval of the final round and after completion. Pause/resume/stop
+buttons remain big squares. **Työ** and **Lepo**
 beside **Lisää intervalli** add named intervals with a fixed duration (30 s and
 15 s at first); **Tee oletus** in the lower right of an interval labelled Työ or
 Lepo saves its duration as the new default. Each interval change vibrates, beeps and is

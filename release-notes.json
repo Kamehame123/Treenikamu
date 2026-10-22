@@ -1,4 +1,7 @@
 [
+  { "version": 66, "date": "2026-10-22", "changes": [
+    "Ajastimessa nykyisen intervallin nimi on nyt suurempi ja lihavoitu. Sen alla näkyy pienemmällä, kursivoidulla tekstillä Seuraavaksi - seuraavan intervallin nimi. Esikatselu huomioi kierroksen vaihtumisen, säilyy tauolla ja piilotetaan viimeisen kierroksen viimeisessä intervallissa. Ajastinsarjat ja tallennetut harjoitukset säilyvät ennallaan."
+  ] },
   { "version": 64, "date": "2026-10-22", "changes": [
     "RIR-valinnat ja sarjojen − / + -painikkeet ovat nyt samalla rivillä. Ryhmien välissä on pieni pystysuora erotin. Kapeimmilla näytöillä sarjapainikkeissa näkyvät vain − ja +, jotta kaikki painikkeet mahtuvat korttiin. Sarjojen kirjaus, RIR sekä tallennetut treenit ja historia säilyvät ennallaan."
   ] },

@@ -95,7 +95,8 @@ try {
           await tap(button(page, 'Käynnistä: Sarja 1'));
           assert.match(await text(page, 'trun-round'), /Kierros 1\/2/i);
           assert.equal(await text(page, 'trun-label'), 'Sprintti');
-          assert.equal(await page.locator('#trun-index, #trun-next').count(), 0, 'no repeated texts under the interval name');
+          assert.equal(await page.locator('#trun-index').count(), 0, 'no repeated interval counter');
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Lepo');
           assert.ok(await page.locator('#trun-round').evaluate((el) => parseFloat(getComputedStyle(el).fontSize)) >= 36, 'the round text is large');
           const [stop, pause] = await Promise.all([button(page, 'Lopeta'), button(page, 'Tauko')].map(async (b) => ({ box: await b.boundingBox(), radius: await b.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius)) })));
           for (const { box, radius } of [stop, pause]) {
@@ -107,8 +108,67 @@ try {
           assert.match(await page.locator('#live').innerText(), /Ajastin valmis/);
           await tap(button(page, 'Aloita alusta'));
           assert.match(await text(page, 'trun-round'), /Kierros 1\/2/i);
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Lepo');
           await tapConfirm(button(page, 'Lopeta'));
           await page.getByRole('heading', { name: 'Ajastin', exact: true }).waitFor();
+        });
+
+        await run('the next interval tracks transitions, round wrap, pause, reload and the final interval', async (page) => {
+          const now = new Date();
+          await page.clock.install({ time: now });
+          await page.clock.pauseAt(new Date(now.getTime() + 10000));
+          await page.reload();
+          await openTimer(page);
+          await createSequence(page, { repeats: '2', intervals: [['Työ', '', '20'], ['', '', '20'], ['Lepo', '', '20']] });
+          const before = await saved(page);
+          const rawBefore = await page.evaluate(() => localStorage.getItem('gym-tracker-v1'));
+          await tap(button(page, 'Käynnistä: Sarja 1'));
+          assert.equal(await text(page, 'trun-label'), 'Työ');
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Intervalli 2');
+          const nextNode = await page.locator('#trun-next').elementHandle();
+          await page.clock.runFor(20000);
+          assert.equal(await text(page, 'trun-label'), 'Intervalli 2');
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Lepo');
+          assert.equal(await nextNode.evaluate((el) => el === document.getElementById('trun-next')), true, 'ticks update the existing node');
+          await tap(button(page, 'Tauko'));
+          await page.clock.runFor(60000);
+          assert.equal(await text(page, 'trun-label'), 'Intervalli 2');
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Lepo');
+          await page.reload();
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Lepo');
+          await tap(button(page, 'Jatka'));
+          await page.clock.runFor(20000);
+          assert.equal(await text(page, 'trun-label'), 'Lepo');
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Työ');
+          await page.clock.runFor(600);
+          assert.match(await page.locator('#live').innerText(), /Seuraavaksi - Työ/);
+          await page.clock.runFor(19400);
+          assert.equal(await text(page, 'trun-round'), 'Kierros 2/2');
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Intervalli 2');
+          await page.clock.runFor(40000);
+          assert.equal(await text(page, 'trun-label'), 'Lepo');
+          assert.equal(await page.locator('#trun-next').isVisible(), false);
+          assert.equal(await page.locator('#trun-next').textContent(), '');
+          await page.clock.runFor(20000);
+          await page.locator('[aria-label="Ajastin valmis"]').waitFor();
+          assert.equal(await page.locator('#trun-next').count(), 0);
+          assert.deepEqual(await saved(page), before);
+          assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-v1')), rawBefore);
+        });
+
+        await run('single-interval repeats preview the same escaped name, but a final interval has no next', async (page) => {
+          await openTimer(page);
+          const label = '<img src=x onerror=alert(1)>';
+          await createSequence(page, { name: 'Toistuva', repeats: '2', intervals: [[label, '1', '']] });
+          await tap(button(page, 'Käynnistä: Toistuva'));
+          assert.equal(await text(page, 'trun-label'), label);
+          assert.equal(await text(page, 'trun-next'), `Seuraavaksi - ${label}`);
+          assert.equal(await page.locator('.timer-card img').count(), 0);
+          await tapConfirm(button(page, 'Lopeta'));
+          await createSequence(page, { name: 'Viimeinen', intervals: [['', '1', '']] });
+          await tap(button(page, 'Käynnistä: Viimeinen'));
+          assert.equal(await text(page, 'trun-label'), 'Intervalli 1');
+          assert.equal(await page.locator('#trun-next').isVisible(), false);
         });
 
         await run('pause freezes the clock, stop asks first, reload restores the run', async (page) => {
@@ -116,13 +176,16 @@ try {
           await createSequence(page, { name: 'Pitkä', repeats: '3', intervals: [['Työ', '1', '']] });
           await tap(button(page, 'Käynnistä: Pitkä'));
           await tap(button(page, 'Tauko'));
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Työ');
           const frozen = await text(page, 'trun-time');
           await page.waitForTimeout(1600);
           assert.equal(await text(page, 'trun-time'), frozen);
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Työ');
           await tap(button(page, 'Jatka'));
           await page.reload();
           await page.getByRole('heading', { name: 'Pitkä', exact: true }).waitFor();
           assert.match(await text(page, 'trun-round'), /Kierros 1\/3/i);
+          assert.equal(await text(page, 'trun-next'), 'Seuraavaksi - Työ');
           await tapConfirm(button(page, 'Lopeta'), false);
           assert.equal(await page.locator('#trun-time').count(), 1, 'cancelling the confirm keeps the run');
           await tapConfirm(button(page, 'Lopeta'));
@@ -193,12 +256,28 @@ try {
         await run('timer views have no axe violations or overflow at 320px', async (page) => {
           await page.setViewportSize({ width: 320, height: 640 });
           await openTimer(page);
-          await createSequence(page, { name: 'Pitkä nimi '.repeat(5), repeats: '2', intervals: [['Selitys '.repeat(8), '1', '5'], ['Työ', '', '30']] });
+          await createSequence(page, { name: 'Pitkä nimi '.repeat(5), repeats: '2', intervals: [['Selitys '.repeat(8), '1', '5'], ['Seuraava '.repeat(6), '', '30']] });
           for (const scheme of ['dark', 'light']) {
             await page.emulateMedia({ colorScheme: scheme });
             for (const step of ['list', 'editor', 'run']) {
               if (step === 'editor') { await tap(page.getByRole('button', { name: /^Muokkaa: / })); await page.locator('[data-key="tl-0"]').waitFor(); }
               if (step === 'run') { await tap(page.locator('[data-key="timer-cancel"]')); await tap(page.getByRole('button', { name: /^Käynnistä: / })); }
+              if (step === 'run') {
+                const hierarchy = await page.locator('.timer-card').evaluate((card) => {
+                  const current = card.querySelector('#trun-label'), next = card.querySelector('#trun-next');
+                  const currentStyle = getComputedStyle(current), nextStyle = getComputedStyle(next);
+                  return {
+                    currentSize: parseFloat(currentStyle.fontSize), currentWeight: Number(currentStyle.fontWeight),
+                    nextSize: parseFloat(nextStyle.fontSize), nextWeight: Number(nextStyle.fontWeight), nextStyle: nextStyle.fontStyle,
+                    below: next.getBoundingClientRect().top >= current.getBoundingClientRect().bottom,
+                  };
+                });
+                assert.ok(hierarchy.currentSize >= 26 && hierarchy.currentSize > hierarchy.nextSize);
+                assert.ok(hierarchy.currentWeight >= 700);
+                assert.equal(hierarchy.nextWeight, 400);
+                assert.equal(hierarchy.nextStyle, 'italic');
+                assert.equal(hierarchy.below, true);
+              }
               const result = await new AxeBuilder({ page }).analyze();
               assert.deepEqual(result.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), [], `${scheme} ${step}`);
               assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${scheme} ${step} overflow`);

@@ -697,11 +697,13 @@ function timerEditorView(timers) {
 
 function timerRunSnapshot(timer) {
   const phase = phaseAt(timer, runElapsed(timerRun, Date.now()));
+  const hasNext = !phase.done && (phase.index < timer.intervals.length - 1 || phase.round < timer.repeats);
   return {
     phase,
     round: `Kierros ${phase.round}/${timer.repeats}`,
     time: formatClock(phase.remainingMs),
     label: intervalLabel(timer, phase.index),
+    next: hasNext ? `Seuraavaksi - ${intervalLabel(timer, (phase.index + 1) % timer.intervals.length)}` : '',
   };
 }
 
@@ -711,7 +713,7 @@ function timerRunView(timer) {
   const body = done
     ? `<section class="card timer-card" aria-label="Ajastin valmis"><span class="eyebrow accent">${icon('check')} Valmis</span><p class="timer-label">${timer.repeats} ${timer.repeats === 1 ? 'kierros' : 'kierrosta'} tehty</p><p class="muted">${esc(timer.name)} · yhteensä ${formatLength(totalSeconds(timer))}</p></section>
       <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-close">Sulje</button><button class="btn primary" data-action="timerstart" data-id="${esc(timer.id)}" data-key="timer-again">Aloita alusta</button></div>`
-    : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="timer-round" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label" id="trun-label">${esc(snap.label)}</p></section>
+    : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="timer-round" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label" id="trun-label">${esc(snap.label)}</p><p class="timer-next muted" id="trun-next" ${snap.next ? '' : 'hidden'}>${esc(snap.next)}</p></section>
       <div class="timer-controls timer-run-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">${icon('stop')}Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')}Jatka</button>` : `<button class="btn primary" data-action="timerpause" data-key="timer-pause">${icon('pause')}Tauko</button>`}</div>`;
   return timerChrome('', `<div class="stat-heading"><h1 tabindex="-1">${esc(timer.name)}</h1></div>${body}`);
 }
@@ -764,10 +766,12 @@ function paintTimer() {
     return;
   }
   if (!snap.phase.done) {
-    for (const [id, value] of [['trun-round', snap.round], ['trun-time', snap.time], ['trun-label', snap.label]]) {
+    for (const [id, value] of [['trun-round', snap.round], ['trun-time', snap.time], ['trun-label', snap.label], ['trun-next', snap.next]]) {
       const el = document.getElementById(id);
       if (el && el.textContent !== value) el.textContent = value;
     }
+    const next = document.getElementById('trun-next');
+    if (next) next.hidden = !snap.next;
   }
   const key = snap.phase.done ? 'done' : `${snap.phase.round}:${snap.phase.index}`;
   if (timerCue === key) return;
@@ -777,7 +781,7 @@ function paintTimer() {
   if (snap.phase.done) { navigator.vibrate?.([300, 100, 300, 100, 300]); beep(3); announce(`Ajastin valmis. ${timer.repeats} kierrosta tehty.`); }
   else {
     navigator.vibrate?.([200, 100, 200]); beep(1);
-    announce(`${snap.round.replace('/', ' / ')}. ${snap.label}, ${formatLength(timer.intervals[snap.phase.index].seconds)}.`);
+    announce(`${snap.round.replace('/', ' / ')}. ${snap.label}, ${formatLength(timer.intervals[snap.phase.index].seconds)}.${snap.next ? ` ${snap.next}.` : ''}`);
   }
 }
 
