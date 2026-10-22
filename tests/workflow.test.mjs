@@ -256,7 +256,7 @@ try {
           assert.equal(rows.length, 2);
           assert.match(rows[0], /^Kyykky 100 kg /);
           assert.match(rows[1], /^Penkkipunnerrus 70 kg /);
-          assert.deepEqual(await p.locator('.record-estimate').allInnerTexts(), ['1RM —', '1RM —']);
+          assert.deepEqual(await p.locator('.record-estimate > span').allInnerTexts(), ['1RM —', '1RM —']);
           await tap(button(p, 'Harjoituksiin'));
           assert.deepEqual(await saved(p), state);
         });

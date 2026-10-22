@@ -79,7 +79,7 @@ export function recordsView(state) {
       const context = [estimate.equipment || (r.estimates.length > 1 ? 'Laite ei tiedossa' : ''), estimate.variant].filter(Boolean).join(' · ');
       return `<div class="record-estimate"><span>1RM <strong>~${esc(fmt(estimate.value, 1))} ${estimate.loadType === 'per-hand' ? 'kg/käsipaino' : 'kg'}</strong></span> <span class="muted record-date">${esc(date(estimate.at))}</span>${context ? ` <span class="muted record-context">${esc(context)}</span>` : ''}</div>`;
     }).join('');
-    return `<li class="record-row"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${estimates || '<div class="record-estimate muted">1RM —</div>'}</li>`;
+    return `<li class="record-row"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${estimates || `<div class="record-estimate muted"><span>1RM —</span> <button class="btn small" data-action="editrecord" data-id="${esc(r.sessionId)}" data-key="record-edit-${esc(r.key)}" aria-label="Täydennä tulos: ${esc(r.name)}">Täydennä tulos</button></div>`}</li>`;
   }).join('');
   return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin viimeksi.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
 }

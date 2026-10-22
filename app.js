@@ -464,8 +464,13 @@ function knownVolume(h) {
 function historyEditor(h) {
   const id = esc(h.id), minutes = h.startedAt ? Math.floor((h.endedAt - h.startedAt) / 60000) : 0;
   const duration = minutes >= 2 ? `<label class="field"><span>Kesto (min)</span><input type="text" inputmode="numeric" value="${minutes}" data-hedit="duration" data-hid="${id}" data-key="hdur-${id}" aria-label="Kesto (min), voi vain lyhentää"></label>` : '';
-  const sets = (h.exercises ?? []).map((e, ei) => `<fieldset class="history-edit-ex"><legend>${esc(e.name)}</legend>${e.sets.map((set, si) => `<div class="history-edit-set"><label class="check"><span>Sarja ${si + 1}</span><input type="checkbox" data-hedit="done" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hd-${ei}-${si}" aria-label="Sarja ${si + 1} tehty: ${esc(e.name)}" ${set.done ? 'checked' : ''}></label><label class="field"><span>Toistot</span><input type="text" inputmode="numeric" value="${esc(set.actualReps ?? '')}" placeholder="${esc(set.reps ?? e.reps ?? '')}" data-hedit="actualReps" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hr-${ei}-${si}" aria-label="Toistot: ${esc(e.name)}, sarja ${si + 1}"></label><label class="field"><span>Paino (kg)</span><input type="text" inputmode="decimal" value="${esc(set.actualWeight ?? '')}" placeholder="${esc(e.weight ?? '')}" data-hedit="actualWeight" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hw-${ei}-${si}" aria-label="Paino (kg): ${esc(e.name)}, sarja ${si + 1}"></label></div>`).join('')}</fieldset>`).join('');
-  return `<div class="history-editor">${duration}${sets}<p class="muted small-copy">Tyhjä toisto- tai painokenttä käyttää suunniteltua arvoa. Muutokset tallentuvat heti.</p></div>`;
+  const sets = (h.exercises ?? []).map((e, ei) => {
+    const loadType = e.tracking?.loadType ?? 'unknown';
+    const load = `<details class="choice-menu"><summary data-key="hload-${id}-${ei}">Kuorman merkitys: ${esc(LOAD_TYPES[loadType])}</summary><fieldset><legend>${esc(e.name)}: kuorman merkitys</legend>${Object.entries(LOAD_TYPES).map(([value, label]) => `<label class="choice-option"><input type="radio" name="hload-${id}-${ei}" data-hedit="loadType" data-hid="${id}" data-e="${ei}" data-key="hload-${id}-${ei}-${value}" value="${value}" ${loadType === value ? 'checked' : ''}><span>${esc(label)}</span></label>`).join('')}</fieldset></details>`;
+    const confirm = core.historyRepSuggestions(e).length ? `<button class="btn secondary" data-action="confirmhistoryreps" data-id="${id}" data-e="${ei}" data-key="hconfirm-${id}-${ei}">Vahvista tavoitteiden mukaiset toistot</button>` : '';
+    return `<fieldset class="history-edit-ex"><legend>${esc(e.name)}</legend>${load}${e.sets.map((set, si) => `<div class="history-edit-set"><label class="check"><span>Sarja ${si + 1}</span><input type="checkbox" data-hedit="done" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hd-${ei}-${si}" aria-label="Sarja ${si + 1} tehty: ${esc(e.name)}" ${set.done ? 'checked' : ''}></label><label class="field"><span>Toistot</span><input type="text" inputmode="numeric" value="${esc(set.actualReps ?? '')}" placeholder="${esc(set.reps ?? e.reps ?? '')}" data-hedit="actualReps" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hr-${ei}-${si}" aria-label="Toistot: ${esc(e.name)}, sarja ${si + 1}"></label><label class="field"><span>Paino (kg)</span><input type="text" inputmode="decimal" value="${esc(set.actualWeight ?? '')}" placeholder="${esc(e.weight ?? '')}" data-hedit="actualWeight" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hw-${ei}-${si}" aria-label="Paino (kg): ${esc(e.name)}, sarja ${si + 1}"></label></div>`).join('')}${confirm}</fieldset>`;
+  }).join('');
+  return `<div class="history-editor">${duration}${sets}<p class="muted small-copy">Tyhjät toistot ovat tuntemattomia. Tyhjä paino käyttää tallennettua tavoitepainoa. Muutokset tallentuvat heti ja koskevat vain tätä harjoitusta.</p></div>`;
 }
 
 function historyItem(h) {
@@ -547,11 +552,13 @@ function setEntry(e, ei, si, nextSi) {
   const target = core.setTargetLabel(set.reps ?? e.reps, e.weight);
   const count = core.setRepCount(e, set);
   const logged = (count !== null && set.actualReps !== undefined) || !!set.actualWeight;
-  const value = logged ? core.setTargetLabel(count !== null && set.actualReps !== undefined ? count : set.reps ?? e.reps, set.actualWeight || e.weight) : target;
+  const value = core.setTargetLabel(count ?? set.reps ?? e.reps, set.actualWeight || e.weight);
+  const showTarget = logged || value !== target;
+  const status = set.done ? 'Tehty' : count === null ? 'Kirjaa' : `Kirjaa ${count} toistoa`;
   const weight = core.setWeightValue(e, set);
   const step = String(core.weightStepFor(e)).replace('.', ',');
   const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < 100 })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: `Vähennä painoa ${step} kg`, up: `Lisää painoa ${step} kg`, canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
-  return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${logged ? ` Tavoite: ${esc(target)}` : ''} ${set.done ? 'Tehty' : 'Kirjaa'}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${logged ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} Tehty` : 'Kirjaa'}</span></button>${adjustment}</div>`;
+  return `<div class="set-entry"><button class="set ${set.done ? 'done' : ''} ${si === nextSi ? 'next' : ''}" data-action="set" data-e="${ei}" data-s="${si}" data-key="s${ei}-${si}" aria-pressed="${set.done}" aria-label="Sarja ${si + 1} ${esc(value)}${showTarget ? ` Tavoite: ${esc(target)}` : ''} ${esc(status)}. ${esc(e.name)}, sarja ${si + 1}/${e.sets.length}"><span class="set-label">SARJA ${si + 1}</span> <span class="set-value">${esc(value)}</span>${showTarget ? ` <span class="set-planned">Tavoite: ${esc(target)}</span>` : ''} <span class="set-foot">${set.done ? `${icon('check')} ` : ''}${esc(status)}</span></button>${adjustment}</div>`;
 }
 
 // One RIR per movement: the reps left in reserve after its hardest (last) set.
@@ -1052,6 +1059,30 @@ const actions = {
     historyEditing = historyEditing === t.dataset.id ? null : t.dataset.id;
     historyMessage = ''; render();
   },
+  editrecord(t) {
+    readLatest();
+    const index = state.history.findIndex((h) => h.id === t.dataset.id);
+    if (index < 0) { render(); announce('Harjoitusta ei löytynyt. Näkymä on päivitetty.'); return; }
+    historyEditing = t.dataset.id; historyLimit = Math.max(historyLimit, index + 1);
+    historyMessage = ''; view = 'history'; render();
+    document.querySelector(`[data-hist="${CSS.escape(historyEditing)}"]`)?.scrollIntoView({ block: 'start' });
+    document.querySelector(`[data-key="hedit-${CSS.escape(historyEditing)}"]`)?.focus({ preventScroll: true });
+  },
+  async confirmhistoryreps(t) {
+    readLatest();
+    const id = t.dataset.id, ei = +t.dataset.e, exercise = state.history.find((h) => h.id === id)?.exercises?.[ei];
+    const suggestions = core.historyRepSuggestions(exercise), before = JSON.stringify(exercise);
+    if (!suggestions.length) { render(); return; }
+    if (!await askConfirm(`${exercise.name}: ${suggestions.map(({ si, reps }) => `sarja ${si + 1}: ${reps} toistoa`).join(', ')}. Vahvista vain, jos teit nämä toistot. Muut tulokset ja tekemättömät sarjat säilyvät.`, 'Vahvista toistot')) return;
+    const ok = await mutate((next) => {
+      if (JSON.stringify(next.history.find((h) => h.id === id)?.exercises?.[ei]) !== before) { historyMessage = CHANGED_ELSEWHERE; return false; }
+      const result = core.confirmHistoryReps(next, id, ei);
+      if (!result.ok) historyMessage = result.error;
+      return result.ok;
+    }, { critical: true });
+    if (ok) historyMessage = 'Toteutuneet toistot vahvistettu. Muut harjoitustiedot säilyvät.';
+    render();
+  },
   fixsaved() {
     historyEditing = savedId; savedId = null; historyMessage = ''; view = 'history';
     render(); document.querySelector(`[data-hist="${CSS.escape(historyEditing)}"]`)?.scrollIntoView({ block: 'center' });
@@ -1105,7 +1136,7 @@ const actions = {
       const ei = +t.dataset.e, si = +t.dataset.s, ex = next.session?.exercises[ei];
       if (!ex?.sets[si]) return false;
       const current = core.currentExercise(next.session);
-      const done = core.toggleSet(next.session, ei, si);
+      const done = core.toggleSet(next.session, ei, si, { logReps: true });
       const restSeconds = core.restFor(next.settings, ex, si);
       cheer = null;
       if (done) {
@@ -1438,7 +1469,9 @@ async function commitHistoryEdit(t) {
   const { hid: id, hedit: field } = t.dataset, ei = +t.dataset.e, si = +t.dataset.s;
   let result, sourceOf = null;
   const ok = await mutate((next) => {
-    result = field === 'duration' ? core.shortenHistoryDuration(next, id, t.value) : core.editHistorySet(next, id, ei, si, field, field === 'done' ? t.checked : t.value);
+    result = field === 'duration' ? core.shortenHistoryDuration(next, id, t.value) :
+      field === 'loadType' ? core.editHistoryLoadType(next, id, ei, t.value) :
+        core.editHistorySet(next, id, ei, si, field, field === 'done' ? t.checked : t.value);
     if (!result.ok) return false;
     sourceOf = next.routines.find((r) => r.revision?.sourceId === id && !r.revision.undone)?.id ?? null;
   }, { critical: true });

@@ -21,6 +21,81 @@ test('toggle is reversible; invalid indexes are safe', () => {
   assert.equal(c.toggleSet(null, 0, 0), false);
 });
 
+test('new UI set taps capture the displayed reps without replacing overrides or reconstructing older results', () => {
+  const r = routine(); r.exercises[0].setReps = ['5', '8-12', '8'];
+  const s = c.startSession(r), original = structuredClone(r);
+  assert.equal(c.toggleSet(s, 0, 0, { logReps: true }), true);
+  assert.equal(s.exercises[0].sets[0].actualReps, '5');
+  assert.equal(c.toggleSet(s, 0, 0, { logReps: true }), false);
+  assert.equal(s.exercises[0].sets[0].actualReps, '5', 'undo keeps the entered count but excludes the unfinished set');
+  c.toggleSet(s, 0, 1, { logReps: true });
+  assert.equal(s.exercises[0].sets[1].actualReps, '12', 'the UI displays this count before logging a range target');
+  for (const actualReps of ['0', '7', 'invalid']) {
+    const set = s.exercises[0].sets[2]; set.done = false; set.actualReps = actualReps;
+    c.toggleSet(s, 0, 2, { logReps: true });
+    assert.equal(set.actualReps, actualReps);
+  }
+  c.toggleSet(s, 1, 0);
+  assert.equal(s.exercises[1].sets[0].actualReps, undefined, 'completion-only APIs and old snapshots remain distinct');
+  assert.deepEqual(r, original);
+});
+
+test('UI completion never converts timed, free-text or invalid targets into actual reps', () => {
+  for (const target of ['45 s', '2 min', 'AMRAP', '0', '101', '12-8']) {
+    const s = c.startSession(routine()), e = s.exercises[0]; e.reps = target;
+    c.toggleSet(s, 0, 0, { logReps: true });
+    assert.equal(e.sets[0].actualReps, undefined, target);
+  }
+  const s = c.startSession(routine()); s.exercises[0].sets[0].actualSeconds = '45';
+  c.toggleSet(s, 0, 0, { logReps: true });
+  assert.equal(s.exercises[0].sets[0].actualReps, undefined);
+});
+
+test('old completed reps are filled only by explicit confirmation, preserving overrides, incomplete sets and timed work', () => {
+  const state = c.defaultState(), s = c.startSession(routine(), 1000), e = s.exercises[0];
+  e.sets = [{ done: true }, { done: true, reps: '8-12' }, { done: false },
+    { done: true, actualReps: '0' }, { done: true, actualReps: '7' },
+    { done: true, reps: '45 s' }, { done: true, actualSeconds: '30' }];
+  state.history = [c.summarize(s, 5000)];
+  const h = state.history[0], before = structuredClone(state);
+  assert.deepEqual(c.historyRepSuggestions(h.exercises[0]), [{ si: 0, reps: 5 }, { si: 1, reps: 12 }]);
+  assert.deepEqual(state, before, 'suggestions alone are read-only');
+  assert.equal(c.confirmHistoryReps(state, h.id, 0, 6000).ok, true);
+  const expected = structuredClone(before);
+  expected.history[0].exercises[0].sets[0].actualReps = '5';
+  expected.history[0].exercises[0].sets[1].actualReps = '12';
+  expected.history[0].editedAt = 6000;
+  assert.deepEqual(state, expected);
+  assert.equal(c.confirmHistoryReps(state, h.id, 0).ok, false);
+  assert.equal(c.confirmHistoryReps(state, 'missing', 0).ok, false);
+  assert.equal(c.confirmHistoryReps(state, h.id, 99).ok, false);
+  assert.deepEqual(state, expected, 'retry is non-destructive and does not duplicate or alter confirmed results');
+});
+
+test('explicit historical load corrections preserve metadata and unrelated data through backup and reload', () => {
+  const state = c.defaultState(), s = c.startSession(routine(), 1000);
+  s.exercises[0].tracking = { sourceId: 'library', category: 'Jalat', equipment: 'Levytanko', loadType: 'unknown', variant: 'Sali A' };
+  s.exercises[0].sets[0].done = true;
+  state.history = [c.summarize(s, 5000)]; state.session = c.startSession(routine(), 2000);
+  const h = state.history[0], before = structuredClone(state);
+  assert.equal(c.editHistoryLoadType(state, h.id, 0, 'per-hand', 6000).ok, true);
+  const expected = structuredClone(before);
+  expected.history[0].exercises[0].tracking.loadType = 'per-hand'; expected.history[0].editedAt = 6000;
+  assert.deepEqual(state, expected);
+  assert.equal(c.editHistoryLoadType(state, h.id, 0, 'guessed').ok, false);
+  assert.equal(c.editHistoryLoadType(state, h.id, 0, '__proto__').ok, false);
+  assert.equal(c.editHistoryLoadType(state, 'missing', 0, 'external').ok, false);
+  assert.equal(c.editHistoryLoadType(state, h.id, 99, 'external').ok, false);
+  assert.deepEqual(state, expected);
+  c.confirmHistoryReps(state, h.id, 0, 6000);
+  const parsed = c.parseBackup(JSON.stringify(c.buildBackup(state, 7000)));
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.state.history, state.history);
+  const storage = mem(); assert.equal(c.saveState(storage, state), true);
+  assert.deepEqual(c.loadState(storage).history, state.history);
+  assert.deepEqual(state.routines, before.routines); assert.deepEqual(state.session, before.session);
+});
+
 test('quick rep adjustments change only actual reps, including on completed sets', () => {
   const r = routine();
   r.exercises[0].setReps = ['5', '8', '12'];

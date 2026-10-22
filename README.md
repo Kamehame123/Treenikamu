@@ -67,7 +67,13 @@ compared with only part of today; custom past ranges include their whole last da
   Repetition/weight quick adjustments still work as before. New sessions with
   tracking metadata default to working sets; older unclassified records remain
   unclassified. The exercise-level hardest-set RIR is never assigned to all sets.
-- Checked sets with no actual reps remain unknown. A blank actual load retains
+- Tapping a numeric set now confirms and saves the rep count displayed on its
+  button, without requiring a separate +/- edit or advanced logging. Adjust the
+  displayed count before logging if needed. Range targets show the concrete
+  count being confirmed as well as the original target. Undo retains the entered
+  count but the unfinished set is not included in records. Timed/free-text work
+  is never converted into repetitions. Older checked sets without actual reps
+  remain unknown until explicitly confirmed. A blank actual load retains
   the existing "planned load used" convention. Zero recorded reps/load/time is
   distinct from missing data. Summary-only legacy history contributes only
   workout/set/time counts; detailed measurements are not reconstructed.
@@ -112,9 +118,19 @@ statistics/index rules below are unchanged.
 Records are recalculated from saved history after corrections, deletion/undo
 and imports, including offline. No estimates are written into history, storage
 or backups. Existing schema-1 browser data, active sessions and backups remain
-unchanged and recoverable; no migration, reset, re-import or prior backup is
+compatible and recoverable; no migration, reset, re-import or prior backup is
 needed. Old records without actual reps or load conventions remain available
-without invented estimates.
+without invented estimates. **Täydennä tulos** beside a missing estimate opens
+the original saved workout for correction, including entries beyond the first
+history page. Enter actual reps individually, or use **Vahvista tavoitteiden
+mukaiset toistot** only when the listed saved targets match what was performed.
+Confirmation fills only completed sets with missing reps; explicit results,
+unfinished sets and timed work are preserved. **Kuorman merkitys** lets the user
+explicitly correct the saved exercise's load convention. These corrections affect
+only that historical workout, never the current program or other old sessions.
+Cancelled or failed confirmations leave saved data unchanged and can be retried.
+Nothing is backfilled automatically when opening records, loading an older
+session or importing a backup.
 
 ### Combined progress: Kehitysindeksi
 

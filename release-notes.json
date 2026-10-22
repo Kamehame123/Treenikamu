@@ -1,4 +1,8 @@
 [
+  { "version": 48, "date": "2026-10-22", "changes": [
+    "Sarjan kirjaaminen tallentaa nyt painikkeessa näkyvät toistot. 1RM-arvio ei enää vaadi erillistä toistojen muokkausta, kun sarjan paino ja kuorman merkitys on kirjattu.",
+    "Puuttuvan 1RM-arvion vieressä oleva Täydennä tulos avaa tallennetun treenin. Voit vahvistaa tavoitteiden mukaiset toteutuneet toistot ja korjata kuorman merkityksen. Vanhoja tuloksia ei arvata tai täytetä automaattisesti; historia ja ohjelmat säilyvät."
+  ] },
   { "version": 47, "date": "2026-10-22", "changes": [
     "Ennätykset näyttää nyt arvioidun yhden toiston maksimipainon muodossa 1RM ~63,3 kg kirjattujen toistojen ja painon perusteella. Saman liikkeen vertailukelpoiset tulokset yhdistyvät eri ohjelmista, eri laitteet ja kuormakäytännöt pysyvät erillään.",
     "Ennätyspaino ja maksimipainoarvio näyttävät omat päivämääränsä. Aiemmat harjoitukset, historia ja varmuuskopiot säilyvät ennallaan."

@@ -131,7 +131,7 @@ export function buildRecords(history, now = Date.now()) {
         if (weight === null || weight <= 0) continue;
         const current = records.get(key);
         if (!current || weight > current.weight || (weight === current.weight && h.endedAt > current.at)) {
-          records.set(key, { key, name: e.name, weight, at: h.endedAt });
+          records.set(key, { key, name: e.name, weight, at: h.endedAt, sessionId: h.id });
         }
         const tracking = e.tracking;
         if (!['external', 'per-hand'].includes(tracking?.loadType) || set.actualSeconds !== undefined ||

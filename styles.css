@@ -173,6 +173,8 @@ button.quick-start .icon { width: 24px; height: 24px; fill: currentColor; }
 .history-editor > .field { margin-bottom: 12px; }
 .history-edit-ex { min-width: 0; margin: 0 0 12px; padding: 0; border: 0; }
 .history-edit-ex legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.history-edit-ex > .choice-menu { margin: 0 0 var(--control-gap); }
+.history-edit-ex > .btn { max-width: 100%; }
 .history-edit-set { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: end; margin-bottom: 8px; }
 .history-edit-set .check { margin: 0; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 0; }
 .history-edit-set .check span { font-size: 12px; color: var(--muted); }

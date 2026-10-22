@@ -14,7 +14,7 @@
 // - Files from a newer app version are refused, never guessed at.
 import { CATEGORIES, EQUIPMENT, EXERCISES, normalizeSearch } from './exercises.js';
 import { progressionConfig, targetReps, recommendedRestSeconds, classifyExercise, automaticWeightStep, parseWeight, lightenRoutine } from './progression.js';
-import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking } from './statistics.js';
+import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking, LOAD_TYPES } from './statistics.js';
 import { sanitizeHr } from './heartrate.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
@@ -434,10 +434,15 @@ export function startSession(routine, now = Date.now(), { mode = 'normal' } = {}
   };
 }
 
-export function toggleSet(session, ei, si) {
-  const set = session?.exercises[ei]?.sets[si];
+export function toggleSet(session, ei, si, { logReps = false } = {}) {
+  const exercise = session?.exercises[ei], set = exercise?.sets[si];
   if (!set) return false;
   set.done = !set.done;
+  // A new UI tap confirms the displayed reps. Loading old completion-only data does not.
+  if (set.done && logReps && set.actualReps === undefined && set.actualSeconds === undefined) {
+    const reps = setRepCount(exercise, set);
+    if (reps !== null) set.actualReps = String(reps);
+  }
   return set.done;
 }
 
@@ -643,7 +648,34 @@ export function restoreHistoryEntry(state, entry, index) {
   return { ok: true };
 }
 
-// Corrects one logged set of a completed workout. An empty reps or weight means unknown/planned.
+// Suggestions only: old completion flags do not establish performed repetitions without confirmation.
+export function historyRepSuggestions(exercise) {
+  return (exercise?.sets ?? []).flatMap((set, si) => {
+    if (!set.done || set.actualReps !== undefined || set.actualSeconds !== undefined) return [];
+    const reps = setRepCount(exercise, set);
+    return reps === null ? [] : [{ si, reps }];
+  });
+}
+
+export function confirmHistoryReps(state, id, ei, now = Date.now()) {
+  const entry = state.history.find((h) => h.id === id), exercise = entry?.exercises?.[ei];
+  const suggestions = historyRepSuggestions(exercise);
+  if (!suggestions.length) return { ok: false, error: 'Vahvistettavia toistoja ei löytynyt.' };
+  for (const { si, reps } of suggestions) exercise.sets[si].actualReps = String(reps);
+  entry.editedAt = now;
+  return { ok: true };
+}
+
+// Explicit historical correction only; never copy present-day program metadata into old workouts.
+export function editHistoryLoadType(state, id, ei, loadType, now = Date.now()) {
+  const entry = state.history.find((h) => h.id === id), exercise = entry?.exercises?.[ei];
+  if (!exercise || !Object.hasOwn(LOAD_TYPES, loadType)) return { ok: false, error: 'Tarkista liike ja kuorman merkitys.' };
+  exercise.tracking = { ...(sanitizeTracking(exercise.tracking) ?? sanitizeTracking({})), loadType };
+  entry.editedAt = now;
+  return { ok: true };
+}
+
+// Corrects one logged set of a completed workout. Empty reps are unknown; empty weight uses the plan.
 export function editHistorySet(state, id, ei, si, field, value, now = Date.now()) {
   const entry = state.history.find((h) => h.id === id);
   if (!entry) return NOT_FOUND;

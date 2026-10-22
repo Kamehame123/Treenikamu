@@ -190,7 +190,7 @@ try {
           assert.equal(await external.locator('.record-date').innerText(), new Date(best.endedAt).toLocaleDateString('fi-FI'));
           assert.match(await bench.locator('.record-estimate').filter({ hasText: 'kg/käsipaino' }).innerText(), /1RM ~25,3 kg\/käsipaino/);
           assert.equal(await bench.locator('img').count(), 0);
-          assert.equal(await page.locator('.record-row').filter({ hasText: 'Kulmasoutu' }).locator('.record-estimate').innerText(), '1RM —');
+          assert.match(await page.locator('.record-row').filter({ hasText: 'Kulmasoutu' }).locator('.record-estimate').innerText(), /^1RM —/);
           assert.doesNotMatch(await page.locator('.record-list').innerText(), /NaN|Infinity|Epley|RIR/);
           for (const width of [320, 390]) {
             await page.setViewportSize({ width, height: 800 });
@@ -205,6 +205,83 @@ try {
           assert.match(await page.locator('.record-list').innerText(), /1RM ~63,3 kg/);
           assert.deepEqual(await saved(page), before);
           assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-v1')), rawBefore);
+        });
+
+        await run('one ordinary workout produces a 1RM without advanced logging or rep adjustments', async (page) => {
+          const state = core.defaultState(), routine = statisticsRoutine();
+          routine.exercises = [routine.exercises[0]];
+          Object.assign(routine.exercises[0], { sets: 1, reps: '8-8', weight: '50' });
+          state.routines = [routine]; state.settings.autoRest = false;
+          await seed(page, state);
+          await tap(button(page, 'Aloita harjoitus'));
+          assert.match(await page.locator('[data-key="s0-0"] .set-foot').innerText(), /Kirjaa 8 toistoa/);
+          await tap(page.locator('[data-key="s0-0"]'));
+          assert.equal((await saved(page)).session.exercises[0].sets[0].actualReps, '8');
+          await page.reload();
+          await tap(page.locator('[data-key="s0-0"]'));
+          assert.equal((await saved(page)).session.exercises[0].sets[0].done, false);
+          await tap(page.locator('[data-key="s0-0"]'));
+          await tap(button(page, 'Tallenna harjoitus'));
+          assert.equal((await saved(page)).history.length, 1);
+          assert.equal((await saved(page)).history[0].exercises[0].sets[0].actualReps, '8');
+          assert.deepEqual((await saved(page)).routines, state.routines);
+          await tap(button(page, 'Ennätykset'));
+          assert.match(await page.locator('.record-estimate').innerText(), /1RM ~63,3 kg/);
+        });
+
+        await run('completion-only history is recoverable directly from records without guessing results or changing the program', async (page) => {
+          const state = core.defaultState(), routine = statisticsRoutine();
+          routine.exercises = [routine.exercises[0]];
+          Object.assign(routine.exercises[0], { sets: 2, reps: '8', weight: '50' });
+          delete routine.exercises[0].tracking;
+          const s = core.startSession(routine, Date.now() - 3600000);
+          s.exercises[0].sets.forEach((set) => { set.done = true; });
+          const h = { ...core.summarize(s, Date.now() - 1000), id: 'old-completion' };
+          state.history = [...Array.from({ length: 11 }, (_, i) => ({ id: `legacy-${i}`, name: 'Vanha', startedAt: 1000, endedAt: Date.now() - i, setsDone: 1, setsTotal: 1 })), h];
+          // Present-day program values must never be used to repair this older snapshot.
+          routine.exercises[0].weight = '200'; routine.exercises[0].reps = '1';
+          routine.exercises[0].tracking = { sourceId: '', category: '', equipment: '', loadType: 'per-hand', variant: '' }; state.routines = [routine];
+          await seed(page, state);
+          const before = await saved(page);
+          await tap(button(page, 'Ennätykset'));
+          assert.match(await page.locator('.record-estimate').innerText(), /^1RM —/);
+          await tap(button(page, 'Täydennä tulos: Penkkipunnerrus'));
+          assert.equal(await page.locator('h1').innerText(), 'Historia');
+          await page.locator('[data-hist="old-completion"] .history-editor').waitFor();
+          assert.deepEqual(await saved(page), before, 'opening recovery must not modify history');
+          const confirm = () => page.locator('[data-key="hconfirm-old-completion-0"]');
+          await tapConfirm(confirm(), false);
+          assert.deepEqual(await saved(page), before, 'cancelling confirmation must not infer reps');
+          await page.evaluate(() => {
+            window.originalRecordSetItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function (key, value) {
+              if (key === 'gym-tracker-v1') throw new DOMException('quota', 'QuotaExceededError');
+              return window.originalRecordSetItem.call(this, key, value);
+            };
+          });
+          await tapConfirm(confirm());
+          assert.deepEqual(await saved(page), before, 'failed confirmation must retain the original saved workout');
+          await page.evaluate(() => { Storage.prototype.setItem = window.originalRecordSetItem; });
+          await tapConfirm(confirm());
+          assert.equal((await saved(page)).history.find((x) => x.id === h.id).exercises[0].sets[0].actualReps, '8');
+          const menu = page.locator('[data-key="hload-old-completion-0"]');
+          await menu.click();
+          await page.locator('[data-key="hload-old-completion-0-external"]').check(); await idle(page);
+          await page.setViewportSize({ width: 320, height: 740 });
+          const result = await new AxeBuilder({ page }).analyze();
+          assert.deepEqual(result.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), []);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+          const after = await saved(page), expected = structuredClone(before);
+          const updated = expected.history.find((x) => x.id === h.id);
+          updated.exercises[0].sets.forEach((set) => { set.actualReps = '8'; });
+          updated.exercises[0].tracking = { sourceId: '', category: '', equipment: '', loadType: 'external', variant: '' };
+          updated.editedAt = after.history.find((x) => x.id === h.id).editedAt;
+          assert.deepEqual(after, expected, 'only the explicitly confirmed historical fields may change');
+          await tap(button(page, 'Harjoituksiin')); await tap(button(page, 'Ennätykset'));
+          assert.match(await page.locator('.record-estimate').innerText(), /1RM ~63,3 kg/);
+          await page.reload(); await tap(button(page, 'Ennätykset'));
+          assert.match(await page.locator('.record-estimate').innerText(), /1RM ~63,3 kg/);
+          assert.deepEqual(await saved(page), after);
         });
 
         await run('statistics modules are cached together and usable after an offline relaunch', async (page, context) => {
