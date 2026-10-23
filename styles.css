@@ -97,6 +97,18 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .routine-variants { display: flex; gap: var(--control-gap); margin-top: var(--control-gap); }
 .routine-variants .btn { flex: 1; width: auto; flex-direction: column; gap: 2px; padding-block: 8px; line-height: 1.2; }
 .variant-note { font-size: 12px; font-weight: 500; color: var(--muted); }
+.variant-title .icon { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+.routine-variants .btn { position: relative; overflow: hidden; isolation: isolate; }
+.variant-light::before, .variant-super::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+.variant-light { border-color: #5fb4f066; }
+.variant-light .icon { color: #4aa8ee; }
+.variant-light::before { background: radial-gradient(90% 130% at 20% 0%, #8fd3ff2e, transparent 65%), linear-gradient(110deg, transparent 35%, #ffffff26 50%, transparent 65%); background-size: 100% 100%, 250% 100%; background-position: 0 0, 160% 0; background-repeat: no-repeat; animation: variant-shimmer 7s ease-in-out infinite; }
+.variant-super { border-color: #ff8a3d73; }
+.variant-super .icon { color: #ff7a2f; }
+.variant-super::before { background: radial-gradient(100% 95% at 50% 135%, #ff6a1f38, #ff9d3a1a 45%, transparent 72%); transform-origin: bottom; animation: variant-flicker 2.4s ease-in-out infinite alternate; }
+@keyframes variant-shimmer { 0%, 30% { background-position: 0 0, 160% 0; } 70%, 100% { background-position: 0 0, -60% 0; } }
+@keyframes variant-flicker { from { opacity: .7; transform: scaleY(.92); } to { opacity: 1; transform: scaleY(1.05); } }
+@media (prefers-reduced-motion: reduce) { .variant-light::before, .variant-super::before { animation: none; } }
 .history-log { padding-inline: 12px; font-size: 12px; overflow-wrap: anywhere; }
 .history-log li { margin-block: 8px; }
 .routine-details > summary { display: grid; align-content: center; gap: 6px; min-height: 56px; padding-right: 76px; list-style: none; cursor: pointer; }
