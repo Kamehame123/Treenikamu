@@ -147,6 +147,7 @@ let updateCheck = null;
 let updateTimer;
 let offeredWorker = null;
 let releaseNotes = [];
+let buildNumber = '';
 let reloadPending = false;
 let wakeLock = null;
 let wakePending = false;
@@ -537,6 +538,12 @@ async function registerUpdates() {
       offlineReady = true;
       const status = document.getElementById('connection');
       if (status) status.textContent = connectionText();
+      askWorker(navigator.serviceWorker.controller || registration.active).then((info) => {
+        if (!info?.version) return;
+        buildNumber = String(info.version);
+        const el = document.getElementById('build-number');
+        if (el) el.textContent = `Versio ${buildNumber}`;
+      });
     });
     await checkForUpdates();
   } catch {
@@ -829,7 +836,7 @@ function homeView() {
         <label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>
         <label class="check"><span>Ruotsalaiset kannustukset<small>Näyttää sarjan kirjaamisen jälkeen lyhyen ruotsinkielisen kannustuksen.</small></span><input type="checkbox" role="switch" data-action="cheers" data-key="cheers" ${state.settings.cheers !== false ? 'checked' : ''} aria-label="Näytä ruotsalaiset kannustukset"></label>
         ${hrSettings()}${backupCompact()}
-        <section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}</section>
+        <section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}<p class="small-copy" id="build-number">${buildNumber ? `Versio ${esc(buildNumber)}` : ''}</p></section>
       </div>
     </details></div></div>${hint}<footer>${icon('shield')} Vain tällä laitteella. Ei tiliä. Ei seurantaa.<span>Tietosi pysyvät laitteellasi. Muista varmuuskopio.</span>${updateReady ? '<p>Päivitys on valmis. Sulje sovelluksen välilehdet ja avaa uudelleen.</p>' : ''}</footer>`;
 }

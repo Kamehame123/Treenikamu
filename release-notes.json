@@ -1,4 +1,7 @@
 [
+  { "version": 76, "date": "2026-10-23", "changes": [
+    "Asetuksissa Jaa sovellus -painikkeen alla näkyy nyt version numero. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 75, "date": "2026-10-23", "changes": [
     "Sarja-painikkeet (− ja +) näyttävät nyt samalta kuin RIR-numerot: sana Sarja ensin ja alla isompi lihavoitu merkki. Tallennetut treenit ja historia säilyvät."
   ] },
