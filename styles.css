@@ -533,6 +533,6 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .timer-card p { margin: 0; }
 .timer-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--control-gap); }
 .timer-controls .btn { min-height: 56px; }
-.timer-run-controls { grid-template-columns: repeat(2, minmax(0, 190px)); justify-content: center; gap: var(--space-4); }
-.timer-run-controls .btn { aspect-ratio: 1; min-height: 0; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border-radius: 28px; font-size: 22px; font-weight: 800; }
-.timer-run-controls .icon { width: 44px; height: 44px; }
+.timer-run-controls { grid-template-columns: repeat(3, minmax(0, 150px)); justify-content: center; gap: var(--space-3); }
+.timer-run-controls .btn { aspect-ratio: 1; min-height: 0; flex-direction: column; gap: var(--space-2); padding: var(--space-2); border-radius: 24px; font-size: 20px; font-weight: 800; }
+.timer-run-controls .icon { width: 36px; height: 36px; }

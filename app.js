@@ -727,7 +727,7 @@ function timerRunView(timer) {
     ? `<section class="card timer-card" aria-label="Ajastin valmis"><span class="eyebrow accent">${icon('check')} Valmis</span><p class="timer-label">${timer.repeats} ${timer.repeats === 1 ? 'kierros' : 'kierrosta'} tehty</p><p class="muted">${esc(timer.name)} · yhteensä ${formatLength(totalSeconds(timer))}</p></section>
       <div class="timer-controls"><button class="btn" data-action="timerstop" data-key="timer-close">Sulje</button><button class="btn primary" data-action="timerstart" data-id="${esc(timer.id)}" data-key="timer-again">Aloita alusta</button></div>`
     : `<section class="card timer-card" aria-label="Ajastin käynnissä"><span class="timer-round" id="trun-round">${snap.round}</span><strong class="timer-clock" id="trun-time">${snap.time}</strong><p class="timer-label"><span id="trun-label">${esc(snap.label)}</span> <span class="timer-step" id="trun-step">${snap.step}</span></p><p class="timer-next muted" id="trun-next" ${snap.next ? '' : 'hidden'}>${esc(snap.next)}</p></section>
-      <div class="timer-controls timer-run-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">${icon('stop')}Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')}Jatka</button>` : `<button class="btn primary" data-action="timerpause" data-key="timer-pause">${icon('pause')}Tauko</button>`}</div>`;
+      <div class="timer-controls timer-run-controls"><button class="btn" data-action="timerstop" data-key="timer-stop">${icon('stop')}Lopeta</button>${timerRun.pausedAt ? `<button class="btn primary" data-action="timerresume" data-key="timer-pause">${icon('play')}Jatka</button>` : `<button class="btn primary" data-action="timerpause" data-key="timer-pause">${icon('pause')}Tauko</button>`}<button class="btn" data-action="timerskip" data-key="timer-skip">${icon('arrow')}Ohita</button></div>`;
   return timerChrome('', `<div class="stat-heading"><h1 tabindex="-1">${esc(timer.name)}</h1></div>${body}`);
 }
 
@@ -1421,6 +1421,14 @@ const actions = {
     if (!timerRun?.pausedAt) return;
     prepareAudio();
     timerRun.pausedMs += Date.now() - timerRun.pausedAt; timerRun.pausedAt = null; rememberTimerRun(); render(); announce('Ajastin jatkuu.');
+  },
+  timerskip() {
+    const timer = timerRun && (state.timers ?? []).find((x) => x.id === timerRun.id);
+    if (!timer) return;
+    const phase = phaseAt(timer, runElapsed(timerRun, Date.now()));
+    if (phase.done) return;
+    timerRun.startedAt -= phase.remainingMs; rememberTimerRun(); render();
+    announce('Siirryttiin seuraavaan intervalliin.');
   },
   async timerstop() {
     if (timerRun && !timerRun.done && !await askConfirm('Lopetetaanko ajastin?', 'Lopeta')) return;

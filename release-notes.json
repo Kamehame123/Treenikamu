@@ -1,4 +1,7 @@
 [
+  { "version": 79, "date": "2026-10-23", "changes": [
+    "Ajastimessa on uusi Ohita-painike, jolla siirryt suoraan seuraavaan intervalliin odottamatta ajan loppumista. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 78, "date": "2026-10-23", "changes": [
     "Ajastimessa intervallin nimen perässä näkyy vain (x/y) ilman sanaa Liike. Tallennetut treenit ja historia säilyvät."
   ] },

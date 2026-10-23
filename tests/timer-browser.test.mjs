@@ -100,7 +100,7 @@ try {
           assert.ok(await page.locator('#trun-round').evaluate((el) => parseFloat(getComputedStyle(el).fontSize)) >= 36, 'the round text is large');
           const [stop, pause] = await Promise.all([button(page, 'Lopeta'), button(page, 'Tauko')].map(async (b) => ({ box: await b.boundingBox(), radius: await b.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius)) })));
           for (const { box, radius } of [stop, pause]) {
-            assert.ok(Math.abs(box.width - box.height) <= 2 && box.width >= 120, `big square button, got ${box.width}x${box.height}`);
+            assert.ok(Math.abs(box.width - box.height) <= 2 && box.width >= 100, `big square button, got ${box.width}x${box.height}`);
             assert.ok(radius >= 16 && radius < box.width / 2, `rounded square, radius ${radius}`);
           }
           await page.waitForFunction(() => /Kierros 2\/2/i.test(document.getElementById('trun-round')?.textContent ?? ''), null, { timeout: 6000 });
@@ -154,6 +154,24 @@ try {
           assert.equal(await page.locator('#trun-next').count(), 0);
           assert.deepEqual(await saved(page), before);
           assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-v1')), rawBefore);
+        });
+
+        await run('Ohita jumps to the next interval, also while paused, and finishes on the last one', async (page) => {
+          await openTimer(page);
+          await createSequence(page, { repeats: '2', intervals: [['Työ', '', '20'], ['Lepo', '', '20']] });
+          await tap(button(page, 'Käynnistä: Sarja 1'));
+          assert.equal(await text(page, 'trun-label'), 'Työ');
+          await tap(button(page, 'Ohita'));
+          assert.equal(await text(page, 'trun-label'), 'Lepo');
+          assert.equal(await text(page, 'trun-time'), '0:20');
+          await tap(button(page, 'Tauko'));
+          await tap(button(page, 'Ohita'));
+          assert.equal(await text(page, 'trun-round'), 'Kierros 2/2');
+          assert.equal(await text(page, 'trun-label'), 'Työ');
+          await tap(button(page, 'Jatka'));
+          await tap(button(page, 'Ohita'));
+          await tap(button(page, 'Ohita'));
+          await page.locator('[aria-label="Ajastin valmis"]').waitFor();
         });
 
         await run('single-interval repeats preview the same escaped name, but a final interval has no next', async (page) => {
