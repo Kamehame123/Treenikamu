@@ -1,4 +1,7 @@
 [
+  { "version": 72, "date": "2026-10-23", "changes": [
+    "Kevennetty- ja Super-painikkeiden ruudunlukijanimi alkaa nyt painikkeen näkyvällä tekstillä. Muutos ei vaikuta tallennettuihin treeneihin tai historiaan."
+  ] },
   { "version": 71, "date": "2026-10-23", "changes": [
     "Tarkista seuraava treeni automaattisesti -valinnan alla ollut selitysteksti on poistettu. Valinta toimii ennallaan, ja tallennetut treenit ja historia säilyvät."
   ] },

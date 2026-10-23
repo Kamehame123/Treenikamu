@@ -128,8 +128,8 @@ try {
           await seedProgram(p);
           await expandRoutines(p);
           const normal = p.getByRole('button', { name: 'Aloita harjoitus', exact: true });
-          const light = p.getByRole('button', { name: 'Kevennetty treeni: Kasvu', exact: true });
-          const boosted = p.getByRole('button', { name: 'Super treeni: Kasvu', exact: true });
+          const light = p.getByRole('button', { name: 'Kevennetty Toistot ja painot -15 %: Kasvu', exact: true });
+          const boosted = p.getByRole('button', { name: 'Super Lisäsarja liikkeisiin: Kasvu', exact: true });
           assert.match(await light.innerText(), /^Kevennetty\n/);
           assert.match(await boosted.innerText(), /^Super\n/);
           assert.match(await light.innerText(), /Toistot ja painot -15 %/);
@@ -148,7 +148,7 @@ try {
 
         await run('the Super workout adds one set per exercise and leaves the program, load and recovery flag alone', async (p) => {
           await seedProgram(p);
-          await tap(p.getByRole('button', { name: 'Super treeni: Kasvu', exact: true }));
+          await tap(p.getByRole('button', { name: 'Super Lisäsarja liikkeisiin: Kasvu', exact: true }));
           await p.locator('.ex').first().waitFor();
           const { session, routines } = await saved(p);
           assert.equal('fatigued' in session, false);

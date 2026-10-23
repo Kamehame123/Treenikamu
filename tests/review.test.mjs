@@ -226,7 +226,9 @@ try {
           await p.clock.install();
           await p.goto(url); await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
           await tap(p.locator('[data-key="s0-0"]'));
-          await p.clock.fastForward(100000);
+          // The "rest is over" notice dismisses itself after 5 s, so land just inside that window.
+          const left = await p.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).restEnd - Date.now());
+          await p.clock.fastForward(left + 1000);
           await p.getByRole('button', { name: 'Sulje', exact: true }).focus();
           await p.clock.fastForward(1500);
           assert.equal(await p.getByRole('button', { name: 'Sulje', exact: true }).evaluate((e) => e === document.activeElement), true);
