@@ -1,4 +1,7 @@
 [
+  { "version": 73, "date": "2026-10-23", "changes": [
+    "Tarkista seuraava treeni -painike ja Auto-valinta ovat nyt samalla rivillä, ja Miten tavoitteita tarkistetaan -ruutu vie vähemmän tilaa. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 72, "date": "2026-10-23", "changes": [
     "Kevennetty- ja Super-painikkeiden ruudunlukijanimi alkaa nyt painikkeen näkyvällä tekstillä. Muutos ei vaikuta tallennettuihin treeneihin tai historiaan."
   ] },

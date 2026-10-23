@@ -80,6 +80,10 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .revision-report li { margin-block: 12px; }
 .revision-report li p { margin-top: 4px; }
 .coaching-guide { margin-bottom: var(--section-gap); }
+.progression-row { display: flex; align-items: center; gap: var(--control-gap); }
+.progression-row .btn { flex: 1; width: auto; }
+.progression-row .check { margin: 0; justify-content: flex-end; gap: 4px; }
+.progression-controls .coaching-guide { margin: 0; padding-block: 0; }
 .coaching-guide summary, .exercise-log summary, .exercise-actions summary, .progression-editor summary, .history-log summary { cursor: pointer; min-height: 48px; padding-block: 14px; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
 .coaching-guide p { margin-block: 10px; }
 .coaching-guide a { color: var(--accent); }
