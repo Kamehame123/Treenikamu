@@ -524,6 +524,27 @@ try {
           assert.deepEqual(parsed.state.history, after.history);
         });
 
+        await run('rep and weight buttons never resize the set box or move the controls', async (p) => {
+          await p.setViewportSize({ width: 360, height: 800 });
+          await seedWorkout(p, { setReps: ['8', '8', '8'], weight: '85 kg', autoRest: false });
+          const geometry = () => p.evaluate(() => {
+            const entry = document.querySelector('#exercise-0 .set-entry');
+            const box = entry.querySelector('.set').getBoundingClientRect();
+            const first = entry.querySelector('.set-steppers .stepper').getBoundingClientRect();
+            const key = (k) => document.querySelector(`[data-key="${k}"]`).getBoundingClientRect();
+            return { boxHeight: box.height, boxTop: box.top, stepperTop: first.top, plusTop: key('reps-plus-0-0').top, weightTop: key('weight-plus-0-0').top, scrollY: window.scrollY, overflow: document.documentElement.scrollWidth > innerWidth };
+          });
+          await p.locator('#exercise-0 .set-entry').first().scrollIntoViewIfNeeded();
+          const before = await geometry();
+          for (let i = 0; i < 15; i++) await tap(p.locator('[data-key="reps-plus-0-0"]'));
+          for (let i = 0; i < 20; i++) await tap(p.locator('[data-key="weight-plus-0-0"]'));
+          const after = await geometry();
+          assert.ok(Number(await p.locator('#exercise-0 .set-entry').first().locator('.rep-adjust b').innerText()) >= 23);
+          assert.equal(after.boxHeight, before.boxHeight, 'set box height is constant');
+          for (const field of ['boxTop', 'stepperTop', 'plusTop', 'weightTop', 'scrollY']) assert.ok(Math.abs(after[field] - before[field]) <= 1, `${field} moved from ${before[field]} to ${after[field]}`);
+          assert.equal(after.overflow, false);
+        });
+
         await run('rep controls respect bounds, ranges, keyboard input and timed sets', async (p) => {
           await seedWorkout(p, { setReps: ['1', '8–12', '45 s'], autoRest: false });
           const minus = p.locator('[data-key="reps-minus-0-0"]');

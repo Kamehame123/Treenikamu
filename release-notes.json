@@ -1,4 +1,7 @@
 [
+  { "version": 80, "date": "2026-10-23", "changes": [
+    "Sarjan + ja − -painikkeet eivät enää anna kortin tai sivun valua alaspäin: vasen Sarja-laatikko pysyy aina samankokoisena ja on aiempaa leveämpi. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 79, "date": "2026-10-23", "changes": [
     "Ajastimessa on uusi Ohita-painike, jolla siirryt suoraan seuraavaan intervalliin odottamatta ajan loppumista. Tallennetut treenit ja historia säilyvät."
   ] },

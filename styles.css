@@ -271,8 +271,8 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .badge.done-badge { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--control-gap); }
 .sets > .cheer { grid-column: 1 / -1; margin: 0; }
-.set-entry { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 8px; min-width: 0; }
-.set { width: 100%; min-width: 0; min-height: 108px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1.5px solid var(--line-hi); border-radius: 20px; padding: 6px 4px; background: var(--input); color: var(--text); text-align: center; transition: transform .1s; }
+.set-entry { display: grid; grid-template-columns: minmax(108px, min(36%, 150px)) minmax(0, 1fr); gap: 8px; min-width: 0; }
+.set { width: 100%; min-width: 0; height: 116px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1.5px solid var(--line-hi); border-radius: 20px; padding: 6px 4px; background: var(--input); color: var(--text); text-align: center; transition: transform .1s; }
 .set-planned { max-width: 100%; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .set-foot { display: inline-flex; align-items: center; gap: 4px; }
 .exercise-rir { display: grid; gap: 6px; margin-top: 12px; min-width: 0; }
@@ -295,7 +295,7 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .step-value { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; min-height: 48px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; line-height: 1.15; text-align: center; cursor: text; }
 .step-value:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .step-input { width: 100%; min-width: 0; height: 44px; padding: 0 4px; border: 0; border-radius: 12px; background: var(--surface); color: inherit; font: inherit; font-size: 19px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
-.step-value b { max-width: 100%; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.step-value b { max-width: 100%; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .step-value small { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
 .set.next { border: 2px solid var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-ring); }
 .set.next .set-foot { color: var(--accent); font-weight: 800; }
@@ -455,7 +455,7 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 #library-empty .btn { margin-top: 12px; }
 @media (max-width: 800px) {
 	#app.view-workout { padding-right: calc(68px + env(safe-area-inset-right)); }
-	.view-workout .set-entry { grid-template-columns: 84px minmax(0, 1fr); gap: 6px; }
+	.view-workout .set-entry { grid-template-columns: minmax(84px, min(34%, 132px)) minmax(0, 1fr); gap: 6px; }
 }
 @media (max-width: 700px) {
 	#app { max-width: 540px; }
@@ -476,7 +476,7 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 	.exercise-heading h2 { font-size: 16px; }
 	.badge { padding: 3px 6px; font-size: 10px; }
 	.set-entry { grid-template-columns: 100px minmax(0, 1fr); gap: 6px; }
-	.view-workout .set-entry { grid-template-columns: 66px minmax(0, 1fr); gap: 4px; }
+	.view-workout .set-entry { grid-template-columns: minmax(66px, 32%) minmax(0, 1fr); gap: 4px; }
 	.view-workout .stepper { gap: 0; padding: 1px; border-width: 1px; }
 	.step-value b { font-size: 15px; }
 	.rest { padding: 10px 12px; gap: 8px; }
