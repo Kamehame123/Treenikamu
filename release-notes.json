@@ -1,4 +1,7 @@
 [
+  { "version": 69, "date": "2026-10-23", "changes": [
+    "Jos automaattisen varmuuskopion kansio jää käyttöönottamatta, sovellus kertoo nyt syyn: selain ei saanut lupaa tallentaa kansioon. Valitse kansio uudelleen ja salli tiedostojen muokkaus, kun selain kysyy. Tallennetut treenit ja historia säilyvät ennallaan."
+  ] },
   { "version": 68, "date": "2026-10-23", "changes": [
     "Automaattisen varmuuskopion kansion valinta kertoo nyt, jos selain hylkää kansion (esimerkiksi Asiakirjat, Lataukset tai Työpöytä), sen sijaan että kytkin vain palaisi pois päältä. Valitse tällöin uusi alikansio. Tallennetut treenit ja historia säilyvät ennallaan."
   ] },

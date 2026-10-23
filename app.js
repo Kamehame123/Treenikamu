@@ -392,7 +392,7 @@ async function chooseAutoFolder() {
   const ab = autoBackup;
   let handle;
   try { handle = await autobackup.pickFolder(); } catch (error) {
-    if (error?.name === 'AbortError') { if (!ab.enabled) ab.error = ''; }
+    if (error?.name === 'AbortError') { if (!ab.enabled) ab.error = 'Kansiota ei otettu käyttöön. Jos valitsit kansion, selain ei saanut lupaa tallentaa siihen: valitse kansio uudelleen ja vastaa selaimen kysymykseen Muokkaa tiedostoja / Salli. Käytä Chromea tai Edgeä.'; }
     else if (error?.name === 'SecurityError') ab.error = 'Selain ei salli tätä kansiota (esimerkiksi Asiakirjat, Lataukset, Työpöytä tai kotikansio). Luo uusi tyhjä alikansio ja valitse se.';
     else ab.error = `Kansion valinta ei onnistunut (${error?.name || 'tuntematon virhe'}).`;
     paintAutoBackup(); return;

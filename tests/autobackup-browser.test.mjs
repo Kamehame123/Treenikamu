@@ -185,9 +185,9 @@ try {
           await toggle(page).click();
           await page.getByText(/Selain ei salli tätä kansiota/).waitFor();
           assert.equal(await toggle(page).isChecked(), false);
-          await page.evaluate(() => { window.showDirectoryPicker = async () => { throw new DOMException('cancel', 'AbortError'); }; });
+          await page.evaluate(() => { window.showDirectoryPicker = async () => { throw new DOMException('denied edit permission', 'AbortError'); }; });
           await toggle(page).click();
-          await page.waitForFunction(() => !document.getElementById('autobackup-status').textContent.includes('Selain ei salli'));
+          await page.getByText(/selain ei saanut lupaa tallentaa/).waitFor();
           assert.equal(await toggle(page).isChecked(), false);
         });
 
