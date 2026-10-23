@@ -856,7 +856,7 @@ function setEntry(e, ei, si, nextSi) {
   const range = set.actualReps === undefined && core.isRepRange(e, set);
   const value = core.setTargetLabel(range ? set.reps ?? e.reps : count ?? set.reps ?? e.reps, set.actualWeight || e.weight);
   const showTarget = logged || value !== target;
-  const status = set.done ? 'Tehty' : count === null || range ? 'Kirjaa' : `Kirjaa ${count} toistoa`;
+  const status = set.done ? 'Tehty!' : 'Klikkaa tehdyksi';
   const weight = core.setWeightValue(e, set);
   const step = String(core.weightStepFor(e)).replace('.', ',');
   const adjustment = `<div class="set-steppers">${count === null ? '' : stepper({ kind: 'reps', cls: 'rep-adjust', ei, si, e, value: count, unit: 'toistoa', group: 'toteutuneet toistot', down: 'Vähennä toisto', up: 'Lisää toisto', canDown: count > 0, canUp: count < core.MAX_REPS })}${stepper({ kind: 'weight', cls: 'weight-adjust', ei, si, e, value: weight === null ? set.actualWeight || e.weight : String(weight).replace('.', ','), unit: weight === null ? '' : 'kg', group: 'toteutunut paino', down: `Vähennä painoa ${step} kg`, up: `Lisää painoa ${step} kg`, canDown: weight > 0, canUp: weight !== null && weight < 10000 })}</div>`;
