@@ -1,4 +1,7 @@
 [
+  { "version": 78, "date": "2026-10-23", "changes": [
+    "Ajastimessa intervallin nimen perässä näkyy vain (x/y) ilman sanaa Liike. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 77, "date": "2026-10-23", "changes": [
     "Ajastimessa nykyisen intervallin nimen perässä näkyy (Liike x/y), eli monesko intervalli kierroksella on menossa. Tallennetut treenit ja historia säilyvät."
   ] },

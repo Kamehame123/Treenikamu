@@ -715,7 +715,7 @@ function timerRunSnapshot(timer) {
     round: `Kierros ${phase.round}/${timer.repeats}`,
     time: formatClock(phase.remainingMs),
     label: intervalLabel(timer, phase.index),
-    step: `(Liike ${phase.index + 1}/${timer.intervals.length})`,
+    step: `(${phase.index + 1}/${timer.intervals.length})`,
     next: hasNext ? `Seuraavaksi - ${intervalLabel(timer, (phase.index + 1) % timer.intervals.length)}` : '',
   };
 }
