@@ -1,0 +1,67 @@
+{
+  "format": "gym-tracker-backup",
+  "formatVersion": 1,
+  "exportedAt": "2026-10-23T07:09:34.852Z",
+  "data": {
+    "v": 1,
+    "routines": [
+      {
+        "id": "0e918a14-0e27-44f6-9a60-503848fbfd43",
+        "name": "Koko keho A",
+        "exercises": [
+          {
+            "id": "158060d7-17b9-41d4-a333-8dd06ac60363",
+            "name": "Takakyykky",
+            "sets": 3,
+            "reps": "5",
+            "weight": "",
+            "setReps": null
+          },
+          {
+            "id": "c8e22089-a67a-411d-8a75-453d7a6ecb79",
+            "name": "Penkkipunnerrus",
+            "sets": 3,
+            "reps": "5",
+            "weight": "",
+            "setReps": null
+          },
+          {
+            "id": "d8caf4a3-fb11-40bb-956a-5fcb690aca93",
+            "name": "Kulmasoutu tangolla",
+            "sets": 3,
+            "reps": "8",
+            "weight": "",
+            "setReps": null
+          },
+          {
+            "id": "15020340-c6b0-46a6-9d4c-ec7184b216f4",
+            "name": "Pystypunnerrus tangolla",
+            "sets": 3,
+            "reps": "8",
+            "weight": "",
+            "setReps": null
+          },
+          {
+            "id": "bec789e4-f404-4f09-843d-797d868b7227",
+            "name": "Lankku",
+            "sets": 3,
+            "reps": "45 s",
+            "weight": "",
+            "setReps": null
+          }
+        ],
+        "autoProgress": false
+      }
+    ],
+    "session": null,
+    "customExercises": [],
+    "history": [],
+    "settings": {
+      "restSeconds": 90,
+      "autoRest": true,
+      "restMode": "auto",
+      "advancedLogging": false,
+      "cheers": false
+    }
+  }
+}

@@ -179,6 +179,18 @@ try {
           assert.equal(await toggle(page).isChecked(), false);
         });
 
+        await run('a folder the browser refuses leaves the switch off and explains why', async (page) => {
+          await seed(page);
+          await page.evaluate(() => { window.showDirectoryPicker = async () => { throw new DOMException('system folder', 'SecurityError'); }; });
+          await toggle(page).click();
+          await page.getByText(/Selain ei salli tätä kansiota/).waitFor();
+          assert.equal(await toggle(page).isChecked(), false);
+          await page.evaluate(() => { window.showDirectoryPicker = async () => { throw new DOMException('cancel', 'AbortError'); }; });
+          await toggle(page).click();
+          await page.waitForFunction(() => !document.getElementById('autobackup-status').textContent.includes('Selain ei salli'));
+          assert.equal(await toggle(page).isChecked(), false);
+        });
+
         await run('an empty history never replaces the latest copy', async (page) => {
           await seed(page, core.defaultState());
           await toggle(page).check();

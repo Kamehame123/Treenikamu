@@ -325,6 +325,7 @@ const autoNeedsGrant = () => autoBackup.enabled && autoBackup.permission !== 'gr
 function autoBackupText() {
   const ab = autoBackup;
   if (!ab.supported) return 'Tämä selain ei voi tallentaa kansioon (esimerkiksi iPhone). Käytä "Vie varmuuskopio" -painiketta. Toimii tietokoneen Chromessa ja Edgessä sekä uusimmassa Androidin Chromessa.';
+  if (!ab.enabled && ab.error) return ab.error;
   if (!ab.enabled) return `Tallentaa tiedot itsestään valitsemaasi kansioon, kun sovellus on auki: viimeisin kopio sekä yksi kopio päivässä (${autobackup.KEEP_DAYS} viimeisintä päivää). Kopiot pysyvät vain tällä laitteella.`;
   const where = `Kansio: ${ab.handle?.name ?? ''}.`;
   if (ab.error) return `${where} ${ab.error}`;
@@ -391,11 +392,13 @@ async function chooseAutoFolder() {
   const ab = autoBackup;
   let handle;
   try { handle = await autobackup.pickFolder(); } catch (error) {
-    if (error?.name !== 'AbortError') ab.error = 'Kansion valinta ei onnistunut.';
+    if (error?.name === 'AbortError') { if (!ab.enabled) ab.error = ''; }
+    else if (error?.name === 'SecurityError') ab.error = 'Selain ei salli tätä kansiota (esimerkiksi Asiakirjat, Lataukset, Työpöytä tai kotikansio). Luo uusi tyhjä alikansio ja valitse se.';
+    else ab.error = `Kansion valinta ei onnistunut (${error?.name || 'tuntematon virhe'}).`;
     paintAutoBackup(); return;
   }
-  try { await autobackup.saveConfig({ handle, enabled: true, lastAt: 0 }); } catch {
-    ab.error = 'Valintaa ei voitu tallentaa tälle selaimelle.'; paintAutoBackup(); return;
+  try { await autobackup.saveConfig({ handle, enabled: true, lastAt: 0 }); } catch (error) {
+    ab.error = `Valintaa ei voitu tallentaa tälle selaimelle (${error?.name || 'tuntematon virhe'}). Yksityisessä ikkunassa kansiota ei voi muistaa.`; paintAutoBackup(); return;
   }
   Object.assign(ab, { handle, enabled: true, permission: 'granted', error: '', lastAt: 0, pending: true });
   paintAutoBackup();
