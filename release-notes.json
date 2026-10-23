@@ -1,4 +1,7 @@
 [
+  { "version": 75, "date": "2026-10-23", "changes": [
+    "Sarja-painikkeet (− ja +) näyttävät nyt samalta kuin RIR-numerot: sana Sarja ensin ja alla isompi lihavoitu merkki. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 74, "date": "2026-10-23", "changes": [
     "Kevennetty-painikkeessa on pehmeä valoefekti ja Super-painikkeessa liekkigrafiikka. Tallennetut treenit ja historia säilyvät."
   ] },

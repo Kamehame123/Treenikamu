@@ -311,6 +311,8 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .mini .btn { font-size: 12px; padding-inline: 10px; background: var(--surface); border-color: var(--line); border-radius: 10px; }
 .exercise-footer .mini { gap: 2px; }
 .exercise-footer .btn { min-width: 48px; min-height: 48px; gap: 2px; padding: var(--space-1) 2px; font-size: 11px; }
+.exercise-footer .mini .btn { flex-direction: column; gap: 0; background: var(--input); border: 1.5px solid var(--line-hi); border-radius: 12px; color: var(--text); font-weight: 750; line-height: 1.1; }
+.set-control-sign { font-size: 20px; font-weight: 800; line-height: 1; }
 @media (max-width: 380px) {
 	.exercise-footer .btn { min-width: 24px; }
 	.set-control-label { display: none; }
