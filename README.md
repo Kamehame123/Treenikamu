@@ -18,6 +18,29 @@ Backup reminders and export remain inside
 existing browser storage, training history, imports and active sessions are
 unchanged; no migration or reset is needed.
 
+## Appearance
+
+**Asetukset > Ulkoasu** lets you switch between **Dark mode** (moon icon, the
+default and the original look) and **Aurora** (sun icon, a bright, colorful skin
+with gradients, tinted routine cards and a subtle entrance animation). Dark mode
+is always used unless Aurora has been chosen, regardless of the operating
+system's light/dark preference.
+
+- The choice is a per-device preference stored under its own key,
+  `gym-tracker-appearance-v1`. It is not part of the training state, backups or
+  imports, so changing it never touches training data and no migration is needed.
+  An unreadable stored value falls back to Dark without overwriting it.
+- `appearance.js` is an external script in `<head>` that applies the theme
+  before first paint (the strict CSP forbids inline scripts), so a reload never
+  flashes the wrong look. Changes made in another tab are picked up live.
+- All Aurora styling lives in `aurora.css`, scoped to `html[data-theme="aurora"]`,
+  so Dark mode renders exactly as before.
+- With reduced motion enabled, every Aurora animation and transition is removed;
+  forced-colors mode keeps the system palette.
+- Run `npm run test:appearance` (and `node --test tests/appearance-browser.test.mjs`)
+  for the unit and Chromium/WebKit checks, including accessibility/contrast and
+  the Dark finished-set color regression.
+
 ## Layout spacing
 
 Shared spacing tokens in `styles.css` keep screen sections 16 px apart and

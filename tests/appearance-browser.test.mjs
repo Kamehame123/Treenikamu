@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import * as core from '../core.js';
 import { chromium, webkit, devices, AxeBuilder, startServer, openSettings, expandRoutines } from './support.mjs';
 import { configuredState } from './statistics-fixtures.mjs';
+import { buildTimer } from '../timer.js';
 
 const { server, url } = await startServer();
 const KEY = 'gym-tracker-appearance-v1';
 const raw = (page) => page.evaluate(() => localStorage.getItem('gym-tracker-v1'));
 const theme = (page) => page.evaluate(() => document.documentElement.dataset.theme);
 
-async function seed(browserContext, { appearance = null, state = configuredState(Date.now()) } = {}) {
+async function seed(browserContext, { appearance = null, state = configuredState(Date.now()), ready = '.routine' } = {}) {
   const page = await browserContext.newPage();
   await page.goto(url);
   await page.evaluate(([s, a, key]) => {
@@ -17,7 +18,7 @@ async function seed(browserContext, { appearance = null, state = configuredState
     if (a) localStorage.setItem(key, a); else localStorage.removeItem(key);
   }, [state, appearance, KEY]);
   await page.reload();
-  await page.locator('.routine').first().waitFor();
+  await page.locator(ready).first().waitFor();
   return page;
 }
 
@@ -104,7 +105,9 @@ try {
         });
 
         await run('Aurora passes accessibility, contrast, touch-size and overflow checks on every main view', async (context) => {
-          const page = await seed(context, { appearance: 'aurora' });
+          const seeded = configuredState(Date.now());
+          seeded.timers = [buildTimer({ id: null, name: 'Sarja 1', repeats: '2', intervals: [{ id: 'a', label: 'Juoksu', min: '1', sec: '' }, { id: 'b', label: 'Kävely', min: '', sec: '30' }] }, []).timer];
+          const page = await seed(context, { appearance: 'aurora', state: seeded });
           const check = async (label) => {
             await page.waitForTimeout(350);
             const violations = (await new AxeBuilder({ page }).analyze()).violations;
@@ -127,7 +130,6 @@ try {
           state.restEnd = Date.now() + 90000;
           await page.evaluate((s) => localStorage.setItem('gym-tracker-v1', JSON.stringify(s)), state);
           await page.reload();
-          await page.locator('[data-action="resume"]').click();
           await page.locator('.ex').first().waitFor();
           await check('workout');
           assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('button, input, summary')].filter((e) => {
@@ -158,8 +160,7 @@ try {
           state.settings.autoRest = false;
           state.session = core.startSession(state.routines[0]);
           state.session.exercises[0].sets.forEach((set) => { set.done = true; });
-          const page = await seed(context, { state });
-          await page.locator('[data-action="resume"]').click();
+          const page = await seed(context, { state, ready: '.ex' });
           const colors = await page.locator('.track-box.done').first().evaluate((b) => { const s = getComputedStyle(b); return [s.backgroundColor, s.color]; });
           assert.deepEqual(colors, ['rgb(168, 240, 156)', 'rgb(0, 0, 0)']);
         }, { colorScheme: 'light' });

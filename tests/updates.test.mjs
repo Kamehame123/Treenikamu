@@ -10,10 +10,11 @@ import { chromium, webkit, devices, AxeBuilder, root, tap } from './support.mjs'
 let release = 1;
 let failDownload = false;
 let numericVersions = false;
+let failAsset = 'progression.js';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
   const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
-  if (!/^[\w.-]+$/.test(name) || (failDownload && name === 'progression.js')) { res.writeHead(503); res.end(); return; }
+  if (!/^[\w.-]+$/.test(name) || (failDownload && name === failAsset)) { res.writeHead(503); res.end(); return; }
   try {
     let body = await readFile(join(root, name));
     if (name === 'sw.js') body = body.toString().replace(/const VERSION = '[^']+';/, `const VERSION = '${numericVersions ? (release === 1 ? 34 : 38) : `update-test-${release}`}';`);
@@ -69,7 +70,7 @@ try {
     try {
       await test(`${name}: installed-app updates`, async (t) => {
         const run = async (title, work) => t.test(title, { timeout: 45000 }, async () => {
-          release = 1; failDownload = false; numericVersions = false;
+          release = 1; failDownload = false; numericVersions = false; failAsset = 'progression.js';
           const context = await browser.newContext({ ...devices[device], reducedMotion: 'reduce' });
           const page = await context.newPage();
           page.setDefaultTimeout(8000);
@@ -283,6 +284,41 @@ try {
           await button(page, 'Päivitä nyt').waitFor();
           await updated(page);
           assert.deepEqual(await saved(page), before);
+        });
+
+        await run('the appearance choice and a cache from before the themes existed survive an update', async (page) => {
+          await ready(page);
+          await page.evaluate(async () => {
+            localStorage.setItem('gym-tracker-appearance-v1', 'aurora');
+            const cache = await caches.open('gym-tracker-vupdate-test-1');
+            await cache.delete('./aurora.css'); await cache.delete('./appearance.js');
+          });
+          const before = await saved(page);
+          await page.reload();
+          assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora');
+          await offer(page);
+          await updated(page);
+          assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora');
+          assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-appearance-v1')), 'aurora');
+          assert.deepEqual(await saved(page), before);
+          assert.equal(await page.evaluate(async () => (await caches.match('./aurora.css')) !== undefined && (await caches.match('./appearance.js')) !== undefined), true);
+        });
+
+        await run('a failed download of the new theme files retains the old version and the saved choice', async (page) => {
+          await ready(page);
+          await page.evaluate(() => localStorage.setItem('gym-tracker-appearance-v1', 'aurora'));
+          const before = await saved(page);
+          release = 2; failDownload = true; failAsset = 'aurora.css';
+          await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r.update()));
+          await page.locator('#update-notice').getByText(/Uuden version lataus ei valmistunut/).waitFor();
+          assert.equal(await page.evaluate(() => globalThis.testRelease), 1);
+          assert.equal(await page.evaluate(() => localStorage.getItem('gym-tracker-appearance-v1')), 'aurora');
+          assert.deepEqual(await saved(page), before);
+          failDownload = false;
+          await tap(button(page, 'Yritä uudelleen'));
+          await button(page, 'Päivitä nyt').waitFor();
+          await updated(page);
+          assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora');
         });
 
         await run('the popup lists the changes of every version newer than the running one, in order', async (page) => {
