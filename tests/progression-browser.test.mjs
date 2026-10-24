@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
@@ -163,7 +163,7 @@ try {
           assert.match(await page.locator('.progression-controls').getByRole('status').filter({ hasText: 'jo tarkistettu' }).innerText(), /jo tarkistettu/);
           assert.deepEqual((await saved(page)).history, original.history);
           await tap(button(page, 'Aloita harjoitus'));
-          assert.deepEqual(await page.locator('.set-value').allTextContents(), ['10 x 100kg', '10 x 100kg', '10 x 100kg']);
+          assert.deepEqual(await page.locator('.set').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label').match(/ (\d+ x [\d.,]+kg)/)[1])), ['10 x 100kg', '10 x 100kg', '10 x 100kg']);
         });
 
         await run('automatic switch is per routine, persists, and revises atomically on finish', async (page) => {
@@ -229,7 +229,7 @@ try {
           assert.equal(result.routines[0].exercises[0].reps, '13');
           assert.equal(result.history[0].exercises[0].weight, '100 kg');
           await tap(button(page, 'Aloita harjoitus'));
-          assert.deepEqual(await page.locator('.set-value').allTextContents(), ['13 x 102.5kg', '13 x 102.5kg', '13 x 102.5kg']);
+          assert.deepEqual(await page.locator('.set').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label').match(/ (\d+ x [\d.,]+kg)/)[1])), ['13 x 102.5kg', '13 x 102.5kg', '13 x 102.5kg']);
         });
 
         await run('pain is reported without an increase or a fatigue deload', async (page) => {

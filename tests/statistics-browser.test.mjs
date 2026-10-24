@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as core from '../core.js';
 import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
@@ -252,7 +252,7 @@ try {
           state.routines = [routine]; state.settings.autoRest = false;
           await seed(page, state);
           await tap(button(page, 'Aloita harjoitus'));
-          assert.match(await page.locator('[data-key="s0-0"] .set-foot').innerText(), /^Klikkaa tehdyksi$/);
+          assert.match(await page.locator('[data-key="s0-0"] .set-foot').innerText(), /^Klikkaa\s+tehdyksi$/);
           await tap(page.locator('[data-key="s0-0"]'));
           assert.equal((await saved(page)).session.exercises[0].sets[0].actualReps, '8');
           await page.reload();
@@ -275,7 +275,7 @@ try {
           state.routines = [routine]; state.settings.autoRest = false;
           await seed(page, state);
           await tap(button(page, 'Aloita harjoitus'));
-          assert.match(await page.locator('[data-key="s0-1"] .set-foot').innerText(), /^Klikkaa tehdyksi$/);
+          assert.match(await page.locator('[data-key="s0-1"] .set-foot').innerText(), /^Klikkaa\s+tehdyksi$/);
           const menu = page.locator('[data-key="sload-0"]');
           await menu.click();
           await page.locator('[data-key="sload-0-external"]').check(); await idle(page);

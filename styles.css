@@ -270,7 +270,7 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .badge { display: inline-flex; align-items: center; flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 750; font-variant-numeric: tabular-nums; }
 .badge.now { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .badge.done-badge { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--control-gap); }
+.sets { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--control-gap); }
 .sets > .cheer { grid-column: 1 / -1; margin: 0; }
 .set-entry { display: grid; grid-template-columns: minmax(108px, min(36%, 150px)) minmax(0, 1fr); gap: 8px; min-width: 0; }
 .set { width: 100%; min-width: 0; height: 116px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 3px; border: 1.5px solid var(--line-hi); border-radius: 20px; padding: 6px 4px; background: var(--input); color: var(--text); text-align: center; transition: transform .1s; }
@@ -304,6 +304,7 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .set-value { font-size: 14px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; max-width: 100%; }
 .set-foot .icon { height: 16px; width: 16px; stroke-width: 2.4; }
 .set-foot { font-size: 12px; font-weight: 650; color: var(--muted); }
+.set-foot-idle { display: block; font-size: 15px; line-height: 1.25; text-align: center; }
 .set.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .set.done .set-foot, .set.done .set-label { color: var(--accent); font-weight: 750; }
 .exercise-footer { display: flex; align-items: center; gap: var(--space-1); }
