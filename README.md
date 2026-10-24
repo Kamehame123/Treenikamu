@@ -460,7 +460,17 @@ strength from completed-set counts, diagnose overtraining, or insist on failure.
 
 ## Data compatibility and recovery
 
-This is an additive schema-1 update. The existing `gym-tracker-v1` storage key,
+Functional training (**Toiminnallinen treeni**) moved the saved data to schema 2.
+Schema 2 only adds optional fields. Routines may now have `type: 'functional'`,
+`warmup`, `wods` and `cooldown`. Sessions and completed history records may have
+`wods` with their logged results. Schema-1 data is never rewritten: the 1 → 2
+migration only changes the version number, and schema-1 browser data and backups of
+any age still load and import. The version was raised so that an older, cached copy
+of the app treats schema-2 data as newer and keeps it read-only. Without the bump, it
+could save the data back without the WOD parts and their results. Update every open
+tab and device; an older copy shows the read-only notice until it updates.
+
+The progression features below were added as additive schema-1 updates. The existing `gym-tracker-v1` storage key,
 user identity, origin and backup envelope are unchanged. Older routines acquire
 `autoProgress: false`; missing repetition limits are selected from the exercise
 and its existing prescription, while explicit saved limits remain untouched.

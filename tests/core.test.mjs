@@ -602,7 +602,7 @@ test('duplicate ids are repaired so template selection is unambiguous', () => {
 });
 
 test('an older app cannot overwrite a newer schema', () => {
-  const future = JSON.stringify({ ...c.defaultState(), v: 2, futureFeature: { important: true } });
+  const future = JSON.stringify({ ...c.defaultState(), v: c.SCHEMA + 1, futureFeature: { important: true } });
   const store = mem([[c.STORAGE_KEY, future]]);
   assert.equal(c.saveState(store, c.defaultState()), false);
   assert.equal(store.getItem(c.STORAGE_KEY), future);
@@ -673,6 +673,27 @@ test('migrations run in order, from the data version, without mutating the input
   assert.deepEqual(c.migrateData({ v: 2, a: 5 }, migrations, 3), { v: 3, a: 5, b: 6 });
   assert.equal(c.migrateData({ v: 3, x: 1 }, migrations, 3).x, 1);
   assert.throws(() => c.migrateData({ v: 1 }, { }, 2));
+});
+
+test('schema 1 data and backups upgrade to schema 2 with nothing else changed', () => {
+  const st = sample();
+  st.session = c.startSession(st.routines[0]);
+  const v1 = JSON.parse(JSON.stringify({ ...st, v: 1 }));
+  const before = JSON.stringify(v1);
+  assert.equal(c.SCHEMA, 2);
+  assert.deepEqual(c.migrateData(v1), { ...v1, v: 2 });
+  assert.equal(JSON.stringify(v1), before, 'the input is not modified');
+  assert.deepEqual(c.sanitizeState(v1), c.sanitizeState({ ...v1, v: 2 }));
+  const parsed = c.parseBackup(JSON.stringify({ format: c.BACKUP_FORMAT, formatVersion: 1, data: v1 }));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.meta.fromVersion, 1);
+  assert.equal(parsed.state.v, 2);
+  assert.deepEqual(parsed.state.routines, c.sanitizeState(v1).routines);
+  assert.deepEqual(parsed.state.history, c.sanitizeState(v1).history);
+  const store = mem([[c.STORAGE_KEY, JSON.stringify(v1)]]);
+  assert.equal(c.storageProblem(store.getItem(c.STORAGE_KEY)), null, 'schema 1 data on this device is read, not refused');
+  assert.equal(c.saveState(store, c.sanitizeState(v1)), true);
+  assert.equal(JSON.parse(store.getItem(c.STORAGE_KEY)).v, 2);
 });
 
 test('files from a newer app or envelope are refused with a clear message', () => {

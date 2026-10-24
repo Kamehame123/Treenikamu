@@ -73,7 +73,7 @@ try {
           await tap(p.getByRole('button', { name: 'Aloita harjoitus', exact: true }));
           const future = await p.evaluate(() => {
             const saved = JSON.parse(localStorage.getItem('gym-tracker-v1'));
-            saved.v = 2; saved.futureFeature = { important: true };
+            saved.v += 1; saved.futureFeature = { important: true };
             const raw = JSON.stringify(saved); localStorage.setItem('gym-tracker-v1', raw); return raw;
           });
           await p.reload();
@@ -107,7 +107,7 @@ try {
           const other = await ctx.newPage(); await other.goto(url);
           const future = await other.evaluate(() => {
             const saved = JSON.parse(localStorage.getItem('gym-tracker-v1'));
-            saved.v = 2; saved.futureFeature = 'preserve me';
+            saved.v += 1; saved.futureFeature = 'preserve me';
             const raw = JSON.stringify(saved); localStorage.setItem('gym-tracker-v1', raw); return raw;
           });
           await p.getByRole('alert').waitFor();

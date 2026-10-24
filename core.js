@@ -1,11 +1,13 @@
 // Pure logic: no DOM access. Shared by the app and the tests.
 //
 // DATA COMPATIBILITY RULES (read before changing the saved shape)
-// - Additive change (new optional field/setting): add it to normalizeState with a default.
-//   Old data and old backups lack it and simply receive the default. No version bump.
+// - Additive change: add it to normalizeState with a default.
+//   Old data and old backups lack it and simply receive the default. No version bump unless
+//   losing the new data in an older app would be serious (see the next rule).
 // - Per-set targets are additive: routine.setReps defaults to null (shared reps), and
 //   session sets may have their own reps. Existing records and storage keys are unchanged.
-// - Breaking change (rename, move, change meaning/type): bump SCHEMA by 1 and add
+// - Breaking change (rename, move, change meaning/type), or an addition an older app must not
+//   save back without (schema 2: functional training): bump SCHEMA by 1 and add
 //   MIGRATIONS[oldVersion] = (data) => newData. Migrations are pure, run in order from the
 //   data's own version, and are NEVER edited or removed once released. Old backups of any
 //   version therefore keep importing.
@@ -20,7 +22,7 @@ import { sanitizeTimers, sanitizeDefaults } from './timer.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 export const MAX_SETS = 20;
 export const MAX_CUSTOM_EXERCISES = 500;
 export const BACKUP_FORMAT = 'gym-tracker-backup';
@@ -30,8 +32,13 @@ const MAX_ROUTINES = 100;
 export const MAX_HISTORY = 10000;
 export { MAX_REPS };
 
-// MIGRATIONS[n] upgrades schema n data to schema n + 1. Empty until the first breaking change.
-export const MIGRATIONS = {};
+// MIGRATIONS[n] upgrades schema n data to schema n + 1.
+// 1 -> 2: functional training (routine type/warmup/wods/cooldown, session and history wods).
+//   Schema 1 data is already valid schema 2 data, so the step changes nothing. The bump makes
+//   older apps refuse the data instead of saving it back without the WOD parts and results.
+export const MIGRATIONS = {
+  1: (data) => data,
+};
 
 export const uid = () =>
   (globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(16).slice(2)}`);
