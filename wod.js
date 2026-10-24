@@ -138,6 +138,9 @@ export function sanitizeWod(raw) {
 export const sanitizeWods = (raw) => uniqueIds((Array.isArray(raw) ? raw : [])
   .filter((w) => w && typeof w === 'object').slice(0, MAX_WODS).map(sanitizeWod));
 
+// Name of a WOD part in the editor and in messages: "WOD", or "WOD 1", "WOD 2" when there are several.
+export const wodPartLabel = (index, count) => count > 1 ? `WOD ${index + 1}` : 'WOD';
+
 // Warm-up and cool-down: free instructions and planned minutes. Null when both are empty.
 export function sanitizeBlock(raw, { session = false } = {}) {
   if (!raw || typeof raw !== 'object') return null;

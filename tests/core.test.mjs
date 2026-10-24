@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as c from '../core.js';
+import * as w from '../wod.js';
+import { reviseRoutine } from '../progression.js';
 
 const routine = () => ({ id: 'r', name: 'A', exercises: [{ id: 'e1', name: 'Squat', sets: 3, reps: '5' }, { id: 'e2', name: 'Row', sets: 2, reps: '8' }] });
 const mem = (init) => { const m = new Map(init); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; };
@@ -913,4 +915,217 @@ test('editedAt survives normalization and is dropped when invalid', () => {
   const bad = c.buildBackup(finished());
   bad.data.history[0].editedAt = 'x';
   assert.equal('editedAt' in c.parseBackup(JSON.stringify(bad)).state.history[0], false);
+});
+
+// ---- Functional training ("Toiminnallinen treeni") ----
+
+const fran = () => ({
+  id: 'w1', name: 'Fran', template: 'fran', format: 'fortime', scheme: '21-15-9', minutes: 10, score: 'time',
+  movements: [
+    { id: 'm1', name: 'Kyykkypunnerrus tangolla', load: '43/29 kg', scaled: { load: '30/20 kg' }, sourceId: 'lib-kyykkypunnerrus-tangolla' },
+    { id: 'm2', name: 'Leuanveto myötäotteella', scaled: { name: 'Leuanveto kuminauhalla' }, sourceId: 'lib-leuanveto-myotaotteella' },
+  ],
+});
+const functional = (extra = {}) => ({
+  id: 'f', name: 'Perjantai-WOD', type: 'functional',
+  warmup: { text: '3 kierrosta:\n10 kyykkyä\n200 m juoksu', minutes: 10 },
+  exercises: [{ id: 'e1', name: 'Takakyykky', sets: 5, reps: '5', weight: '80 kg' }],
+  wods: [fran()],
+  cooldown: { text: 'Venyttely', minutes: 5 },
+  ...extra,
+});
+
+test('gym programs, workouts and history keep exactly their earlier shape', () => {
+  const r = c.sanitizeRoutine(routine());
+  assert.deepEqual(Object.keys(r), ['id', 'name', 'exercises', 'autoProgress']);
+  const s = c.startSession(r, 1000);
+  assert.deepEqual(Object.keys(s), ['id', 'routineId', 'name', 'startedAt', 'exercises']);
+  assert.deepEqual(c.sanitizeSession(s), s);
+  s.exercises[0].sets[0].done = true;
+  assert.deepEqual(c.progress(s), { done: 1, total: 5, wodsDone: 0, wodsTotal: 0, pct: 20 });
+  assert.deepEqual(Object.keys(c.summarize(s, 2000)), ['id', 'name', 'startedAt', 'endedAt', 'setsDone', 'setsTotal', 'routineId', 'exercises']);
+  assert.equal(c.sessionHasWork(s), true);
+  assert.equal(c.sessionHasWork(c.startSession(r, 1000)), false);
+  assert.deepEqual(c.validateRoutine({ name: 'X', exercises: [] }), ['Lisää vähintään yksi nimetty liike.']);
+  assert.deepEqual(c.validateRoutine({ name: 'X', exercises: [{ name: '', sets: 1, reps: '5' }] }), ['Liike 1: lisää nimi.']);
+});
+
+test('a functional program keeps its warm-up, WOD parts and cool-down, and may have only WODs', () => {
+  const r = c.sanitizeRoutine(functional());
+  assert.equal(r.type, 'functional');
+  assert.deepEqual(r.warmup, { text: '3 kierrosta:\n10 kyykkyä\n200 m juoksu', minutes: 10 });
+  assert.deepEqual(r.cooldown, { text: 'Venyttely', minutes: 5 });
+  assert.deepEqual([r.wods.length, r.wods[0].scheme, r.wods[0].rounds], [1, '21-15-9', 3]);
+  assert.deepEqual(c.sanitizeRoutine(r), r, 'sanitizing is stable');
+  assert.deepEqual(c.validateRoutine(r), []);
+  const wodOnly = c.sanitizeRoutine(functional({ id: 'g', exercises: [], warmup: null, cooldown: { text: ' ', minutes: 0 } }));
+  assert.deepEqual(wodOnly.exercises, []);
+  assert.equal('warmup' in wodOnly, false);
+  assert.equal('cooldown' in wodOnly, false);
+  assert.deepEqual(c.validateRoutine(wodOnly), []);
+  const st = c.sanitizeState({ routines: [r, wodOnly] });
+  assert.deepEqual(st.routines, [r, wodOnly]);
+});
+
+test('functional validation needs a WOD part and names each part as the editor shows it', () => {
+  assert.deepEqual(c.validateRoutine(functional({ wods: [] })), ['Lisää vähintään yksi WOD-osa.']);
+  assert.deepEqual(c.validateRoutine(functional({ exercises: [{ name: '', sets: 0, reps: '' }] })), [
+    'Voima / taito, liike 1: lisää nimi.',
+    'Voima / taito, liike 1: sarjojen määrän on oltava kokonaisluku 1–20.',
+    'Voima / taito, liike 1: lisää toistotavoite tai kesto.',
+  ]);
+  assert.deepEqual(c.validateRoutine(functional({
+    warmup: { text: 'x', minutes: 61 },
+    wods: [fran(), { format: 'amrap', minutes: 12, movements: [] }],
+    cooldown: { minutes: 'abc' },
+  })), ['Lämmittely: keston on oltava 0–60 minuuttia.', 'WOD 2: lisää vähintään yksi liike.', 'Loppuverryttely: keston on oltava 0–60 minuuttia.']);
+  assert.deepEqual(c.validateRoutine(functional({ wods: [{ ...fran(), scheme: '21-x' }] })), ['WOD: kirjoita toistokaava muodossa 21-15-9 (2–20 lukua, kukin 1–999).']);
+  assert.ok(c.validateRoutine(functional({ wods: [fran(), fran(), fran(), fran()] })).includes('WOD-osia voi olla enintään 3.'));
+});
+
+test('a functional workout starts with every part; Kevennetty and Super never change the WOD', () => {
+  const r = c.sanitizeRoutine(functional());
+  const s = c.startSession(r, 1000);
+  assert.equal(s.type, 'functional');
+  assert.deepEqual(s.warmup, { ...r.warmup, done: false });
+  assert.deepEqual(s.cooldown, { ...r.cooldown, done: false });
+  assert.equal(s.exercises.length, 1);
+  const { key, division, ...plan } = s.wods[0];
+  assert.deepEqual(plan, r.wods[0]);
+  assert.equal(key, w.wodKey(r.wods[0]));
+  assert.equal(division, 'rx');
+  assert.deepEqual(c.sanitizeSession(s), s, 'a started workout is already clean');
+  s.wods[0].movements[0].name = 'Muutettu';
+  assert.equal(r.wods[0].movements[0].name, 'Kyykkypunnerrus tangolla', 'the workout does not share objects with the program');
+  const light = c.startSession(r, 1000, { mode: 'light' });
+  assert.equal(light.fatigued, true);
+  assert.equal(light.wods[0].division, 'scaled');
+  assert.deepEqual(light.wods[0].movements, r.wods[0].movements);
+  assert.equal(light.exercises[0].reps, '4');
+  const boosted = c.startSession(r, 1000, { mode: 'super' });
+  assert.equal(boosted.exercises[0].sets.length, 6);
+  assert.deepEqual(boosted.wods[0].movements, r.wods[0].movements);
+  assert.equal(boosted.wods[0].division, 'rx');
+});
+
+test('each WOD part starts in the division of its previous result', () => {
+  const r = c.sanitizeRoutine(functional());
+  const key = w.wodKey(r.wods[0]);
+  const history = [
+    { id: 'h2', endedAt: 9000, wods: [{ key: 'other', result: { kind: 'time', seconds: 200, division: 'rx' } }] },
+    { id: 'h1', endedAt: 5000, wods: [{ key, result: { kind: 'time', seconds: 300, division: 'scaled' } }] },
+  ];
+  assert.equal(c.startSession(r, 10000, { history }).wods[0].division, 'scaled');
+  history.unshift({ id: 'h3', endedAt: 9500, wods: [{ key, result: { kind: 'time', seconds: 280, division: 'rx' } }] });
+  assert.equal(c.startSession(r, 10000, { history }).wods[0].division, 'rx');
+  assert.equal(c.startSession(r, 10000, { history, mode: 'light' }).wods[0].division, 'scaled');
+});
+
+test('a WOD-only workout is saved with its result and survives reload, backup and merge', () => {
+  const r = c.sanitizeRoutine(functional({ exercises: [] }));
+  const s = c.startSession(r, 1000);
+  assert.deepEqual(s.exercises, []);
+  assert.deepEqual(c.progress(s), { done: 0, total: 0, wodsDone: 0, wodsTotal: 1, pct: 0 });
+  assert.equal(c.sessionHasWork(s), false);
+  s.wods[0].result = { kind: 'time', seconds: 245, division: 'rx', rpe: 9 };
+  assert.deepEqual(c.progress(s), { done: 0, total: 0, wodsDone: 1, wodsTotal: 1, pct: 100 });
+  assert.equal(c.sessionHasWork(s), true);
+  const st = c.defaultState();
+  st.routines = [r];
+  st.session = s;
+  const store = mem();
+  assert.equal(c.saveState(store, st), true);
+  const reloaded = c.loadState(store);
+  assert.deepEqual(reloaded.session, s, 'a running WOD-only workout survives a reload');
+  const h = c.summarize(reloaded.session, 1000 + 20 * 60000);
+  assert.equal('exercises' in h, false);
+  assert.equal(h.type, 'functional');
+  assert.deepEqual([h.setsDone, h.setsTotal], [0, 0]);
+  assert.deepEqual(h.wods, [{
+    id: 'w1', key: s.wods[0].key, name: 'Fran', format: 'fortime', score: 'time',
+    board: w.boardText(s.wods[0], 'rx'), result: { kind: 'time', seconds: 245, division: 'rx', rpe: 9 },
+  }]);
+  reloaded.history = [h];
+  reloaded.session = null;
+  assert.deepEqual(c.sanitizeState(reloaded).history, [h], 'history normalization keeps the WOD parts');
+  const back = c.parseBackup(JSON.stringify(c.buildBackup(reloaded)));
+  assert.equal(back.ok, true);
+  assert.deepEqual(back.state.history, [h]);
+  assert.deepEqual(back.state.routines, [r]);
+  const local = c.defaultState();
+  local.routines = [c.sanitizeRoutine({ ...r, wods: [{ ...r.wods[0], minutes: 12 }] })];
+  const merged = c.mergeState(local, back.state);
+  assert.deepEqual(merged.result, { routines: 1, history: 1, skipped: 0, session: false });
+  const copy = merged.state.routines.find((x) => x.name === 'Perjantai-WOD (tuotu)');
+  assert.deepEqual({ ...copy, id: r.id, name: r.name }, r, 'the imported copy keeps its type and WOD parts');
+  assert.equal(merged.state.history[0].routineId, copy.id);
+  assert.deepEqual(c.mergeState(merged.state, back.state).result, { routines: 0, history: 0, skipped: 0, session: false });
+});
+
+test('the last exercise of a workout with WOD parts can be removed', () => {
+  const s = c.startSession(c.sanitizeRoutine(functional()), 1000);
+  assert.equal(c.removeSessionExercise(s, 'e1').ok, true);
+  assert.deepEqual(s.exercises, []);
+  assert.deepEqual(c.sanitizeSession(s), s);
+  assert.equal(c.removeSessionExercise(s, 'e1').ok, false);
+});
+
+test('a WOD result in history can be corrected or cleared, never with another score type', () => {
+  const st = c.defaultState();
+  st.history = [c.summarize(c.startSession(c.sanitizeRoutine(functional({ exercises: [] })), 1000), 2000)];
+  const id = st.history[0].id;
+  assert.equal('result' in st.history[0].wods[0], false, 'a WOD without a result is kept so it can be filled in later');
+  assert.equal(c.editHistoryWod(st, id, 0, { kind: 'time', seconds: 300, division: 'scaled' }, 777).ok, true);
+  assert.deepEqual(st.history[0].wods[0].result, { kind: 'time', seconds: 300, division: 'scaled' });
+  assert.equal(st.history[0].editedAt, 777);
+  const before = JSON.stringify(st);
+  assert.equal(c.editHistoryWod(st, id, 0, { kind: 'reps', value: 50 }).ok, false);
+  assert.equal(c.editHistoryWod(st, id, 0, { kind: 'time', seconds: 0 }).ok, false);
+  assert.equal(c.editHistoryWod(st, id, 1, null).ok, false);
+  assert.equal(c.editHistoryWod(st, 'missing', 0, null).ok, false);
+  assert.equal(c.editHistorySet(st, id, 0, 0, 'done', true).ok, false, 'there are no sets to edit');
+  assert.equal(JSON.stringify(st), before);
+  assert.equal(c.editHistoryWod(st, id, 0, null, 888).ok, true);
+  assert.equal('result' in st.history[0].wods[0], false);
+  assert.equal(st.history[0].editedAt, 888);
+  assert.equal(c.parseBackup(JSON.stringify(c.buildBackup(st))).state.history[0].wods.length, 1);
+});
+
+test('progression review ignores WOD parts: WOD-only workouts are not reviewed and WODs are kept', () => {
+  const st = c.defaultState();
+  const wodOnly = c.sanitizeRoutine(functional({ exercises: [], autoProgress: true }));
+  st.routines = [wodOnly];
+  const s = c.startSession(wodOnly, 1000);
+  s.wods[0].result = { kind: 'time', seconds: 245, division: 'rx' };
+  st.history = [c.summarize(s, 2000)];
+  const before = JSON.stringify(st.routines);
+  assert.equal(reviseRoutine(st, 'f', 3000).ok, false);
+  assert.equal(JSON.stringify(st.routines), before);
+  const mixed = c.sanitizeRoutine(functional({ id: 'g', autoProgress: true }));
+  st.routines = [mixed];
+  const s2 = c.startSession(mixed, 1000);
+  s2.exercises[0].sets.forEach((set) => { set.done = true; set.actualReps = '5'; });
+  s2.exercises[0].rir = '3';
+  st.history = [c.summarize(s2, 2000)];
+  assert.equal(reviseRoutine(st, 'g', 3000).ok, true);
+  assert.deepEqual(st.routines[0].wods, mixed.wods);
+  assert.equal(st.routines[0].type, 'functional');
+  assert.deepEqual(c.sanitizeRoutine(st.routines[0]), st.routines[0]);
+});
+
+test('hostile functional data is cleaned without losing the valid parts', () => {
+  const st = c.sanitizeState({
+    routines: [{ id: 'x', name: 'X', type: 'evil', wods: 'nope', warmup: 5, cooldown: { text: 7 }, exercises: [{ name: 'Curl' }] }],
+    session: { id: 's', name: 'S', exercises: 'x', warmup: { text: 'a', minutes: 99, done: 'yes' },
+      wods: [{ format: 'amrap', minutes: 999, movements: [{ name: 'Burpee' }, { name: '' }], result: { kind: 'roundsReps', rounds: 5, reps: 3 } }] },
+    history: [{ id: 'h', name: 'H', startedAt: 1, endedAt: 2, type: 'x', wods: [{ name: 'no key' }, { key: 'k1', format: 'amrap', score: 'roundsReps', result: { kind: 'roundsReps', rounds: -1, reps: 0 } }] }],
+  });
+  assert.deepEqual(Object.keys(st.routines[0]), ['id', 'name', 'exercises', 'autoProgress']);
+  assert.deepEqual(st.session.exercises, []);
+  assert.deepEqual(st.session.warmup, { text: 'a', minutes: 60, done: false });
+  assert.deepEqual([st.session.wods[0].minutes, st.session.wods[0].movements.length], [180, 1]);
+  assert.deepEqual(st.session.wods[0].result, { kind: 'roundsReps', rounds: 5, reps: 3, division: 'rx' });
+  assert.equal('type' in st.history[0], false);
+  assert.deepEqual(st.history[0].wods.map((x) => [x.key, 'result' in x]), [['k1', false]]);
+  assert.equal(c.sanitizeSession({ id: 's', exercises: [], wods: [] }), null, 'a workout needs exercises or WOD parts');
 });

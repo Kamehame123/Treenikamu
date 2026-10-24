@@ -6,6 +6,10 @@
 //   losing the new data in an older app would be serious (see the next rule).
 // - Per-set targets are additive: routine.setReps defaults to null (shared reps), and
 //   session sets may have their own reps. Existing records and storage keys are unchanged.
+// - Functional programs (schema 2) add routine.type 'functional' and optional warmup/wods/cooldown.
+//   Their sessions may have `exercises: []`, and their history entries carry `wods` and may lack
+//   `exercises`. A gym program, session or history entry keeps exactly its schema 1 shape.
+//   wod.js wodKey() links results of the same WOD across edits; never change how it is computed.
 // - Breaking change (rename, move, change meaning/type), or an addition an older app must not
 //   save back without (schema 2: functional training): bump SCHEMA by 1 and add
 //   MIGRATIONS[oldVersion] = (data) => newData. Migrations are pure, run in order from the
@@ -19,6 +23,7 @@ import { MAX_REPS, progressionConfig, targetReps, recommendedRestSeconds, classi
 import { sanitizeTracking, sanitizeIndex, exerciseKey, libraryTracking, LOAD_TYPES } from './statistics.js';
 import { sanitizeHr } from './heartrate.js';
 import { sanitizeTimers, sanitizeDefaults } from './timer.js';
+import { MAX_WODS, sanitizeWods, sanitizeBlock, sanitizeSessionWods, sanitizeHistoryWods, sanitizeResult, validateWod, validateBlock, wodKey, historyWod, previousResult, wodPartLabel } from './wod.js';
 export { recommendedRestSeconds, classifyExercise, automaticWeightStep };
 
 export const STORAGE_KEY = 'gym-tracker-v1';
@@ -127,12 +132,19 @@ function sanitizeExercises(raw) {
   return uniqueIds(exercises);
 }
 
+// A functional program ("Toiminnallinen treeni") adds type, warm-up, WOD parts and cool-down; its
+// strength/skill part stays in `exercises` (possibly empty) so sets, progression and records work as before.
 export function sanitizeRoutine(r) {
   const revision = r?.revision;
+  const warmup = sanitizeBlock(r?.warmup), wods = sanitizeWods(r?.wods), cooldown = sanitizeBlock(r?.cooldown);
   return {
     id: cleanText(r?.id, 80) || uid(), name: cleanText(r?.name) || 'Harjoitus',
     exercises: sanitizeExercises(r?.exercises),
     autoProgress: r?.autoProgress === true,
+    ...(r?.type === 'functional' ? { type: 'functional' } : {}),
+    ...(warmup ? { warmup } : {}),
+    ...(wods.length ? { wods } : {}),
+    ...(cooldown ? { cooldown } : {}),
     ...(revision && Array.isArray(revision.before) && Array.isArray(revision.after) ? {
       revision: {
         sourceId: cleanText(revision.sourceId, 80),
@@ -150,34 +162,45 @@ export function sanitizeRoutine(r) {
   };
 }
 
+const sanitizeSessionExercises = (list) => uniqueIds(list.slice(0, 60).map((e) => ({
+  id: cleanText(e?.id, 80) || uid(),
+  name: cleanText(e?.name) || 'Liike',
+  reps: cleanText(e?.reps, 20) || '10',
+  weight: cleanText(e?.weight, 20),
+  ...(sanitizeTracking(e?.tracking) ? { tracking: sanitizeTracking(e.tracking) } : {}),
+  ...(Number(e?.weightStep) >= 0.01 && Number(e.weightStep) <= 100 ? { weightStep: Number(e.weightStep) } : {}),
+  ...(cleanText(e?.rir, 20) ? { rir: cleanText(e.rir, 20) } : {}),
+  ...(e?.pain === true ? { pain: true } : {}),
+  ...(e?.deload === true ? { deload: true } : {}),
+  sets: (Array.isArray(e?.sets) && e.sets.length ? e.sets : [{}]).slice(0, MAX_SETS).map((x) => ({
+    done: x?.done === true,
+    ...(cleanText(x?.reps, 20) ? { reps: cleanText(x.reps, 20) } : {}),
+    ...(cleanText(x?.actualReps, 20) ? { actualReps: cleanText(x.actualReps, 20) } : {}),
+    ...(cleanText(x?.actualWeight, 20) ? { actualWeight: cleanText(x.actualWeight, 20) } : {}),
+    ...(['working', 'warmup'].includes(x?.kind) ? { kind: x.kind } : {}),
+    ...(cleanText(x?.setRir, 20) ? { setRir: cleanText(x.setRir, 20) } : {}),
+    ...(cleanText(x?.actualSeconds, 20) ? { actualSeconds: cleanText(x.actualSeconds, 20) } : {}),
+  })),
+})));
+
+// A session needs exercises or WOD parts; a functional workout may have only WODs.
 export function sanitizeSession(s) {
-  if (!s || !Array.isArray(s.exercises) || !s.exercises.length) return null;
+  if (!s || typeof s !== 'object') return null;
+  const exercises = Array.isArray(s.exercises) ? sanitizeSessionExercises(s.exercises) : [];
+  const wods = sanitizeSessionWods(s.wods);
+  if (!exercises.length && !wods.length) return null;
+  const warmup = sanitizeBlock(s.warmup, { session: true }), cooldown = sanitizeBlock(s.cooldown, { session: true });
   return {
     id: cleanText(s.id, 80) || uid(),
     routineId: cleanText(s.routineId, 80),
     name: cleanText(s.name) || 'Harjoitus',
     startedAt: timestamp(s.startedAt, Date.now()),
     ...(s.fatigued === true ? { fatigued: true } : {}),
-    exercises: uniqueIds(s.exercises.slice(0, 60).map((e) => ({
-      id: cleanText(e?.id, 80) || uid(),
-      name: cleanText(e?.name) || 'Liike',
-      reps: cleanText(e?.reps, 20) || '10',
-      weight: cleanText(e?.weight, 20),
-      ...(sanitizeTracking(e?.tracking) ? { tracking: sanitizeTracking(e.tracking) } : {}),
-      ...(Number(e?.weightStep) >= 0.01 && Number(e.weightStep) <= 100 ? { weightStep: Number(e.weightStep) } : {}),
-      ...(cleanText(e?.rir, 20) ? { rir: cleanText(e.rir, 20) } : {}),
-      ...(e?.pain === true ? { pain: true } : {}),
-      ...(e?.deload === true ? { deload: true } : {}),
-      sets: (Array.isArray(e?.sets) && e.sets.length ? e.sets : [{}]).slice(0, MAX_SETS).map((x) => ({
-        done: x?.done === true,
-        ...(cleanText(x?.reps, 20) ? { reps: cleanText(x.reps, 20) } : {}),
-        ...(cleanText(x?.actualReps, 20) ? { actualReps: cleanText(x.actualReps, 20) } : {}),
-        ...(cleanText(x?.actualWeight, 20) ? { actualWeight: cleanText(x.actualWeight, 20) } : {}),
-        ...(['working', 'warmup'].includes(x?.kind) ? { kind: x.kind } : {}),
-        ...(cleanText(x?.setRir, 20) ? { setRir: cleanText(x.setRir, 20) } : {}),
-        ...(cleanText(x?.actualSeconds, 20) ? { actualSeconds: cleanText(x.actualSeconds, 20) } : {}),
-      })),
-    }))),
+    ...(s.type === 'functional' ? { type: 'functional' } : {}),
+    ...(warmup ? { warmup } : {}),
+    exercises,
+    ...(wods.length ? { wods } : {}),
+    ...(cooldown ? { cooldown } : {}),
   };
 }
 
@@ -228,7 +251,8 @@ function normalizeState(raw) {
     history: (Array.isArray(raw.history) ? raw.history : [])
       .filter((h) => h && typeof h === 'object')
       .slice(0, MAX_HISTORY)
-      .map((h) => ({
+      .map((h) => ({ h, wods: sanitizeHistoryWods(h.wods) }))
+      .map(({ h, wods }) => ({
         id: cleanText(h.id, 80) || uid(),
         name: cleanText(h.name) || 'Harjoitus',
         startedAt: timestamp(h.startedAt, 0),
@@ -239,7 +263,9 @@ function normalizeState(raw) {
         ...(h.fatigued === true ? { fatigued: true } : {}),
         ...(timestamp(h.editedAt, 0) ? { editedAt: timestamp(h.editedAt, 0) } : {}),
         ...(sanitizeHr(h.hr) ? { hr: sanitizeHr(h.hr) } : {}),
-        ...(Array.isArray(h.exercises) && h.exercises.length ? { exercises: sanitizeSession({ ...h, exercises: h.exercises }).exercises } : {}),
+        ...(h.type === 'functional' ? { type: 'functional' } : {}),
+        ...(Array.isArray(h.exercises) && h.exercises.length ? { exercises: sanitizeSessionExercises(h.exercises) } : {}),
+        ...(wods.length ? { wods } : {}),
       })),
     settings: {
       restSeconds: clampInt(raw.settings?.restSeconds, 10, 600, 90),
@@ -421,16 +447,21 @@ function boostRoutine(routine) {
 }
 
 // mode: 'light' (poor recovery: lighter and kept out of progression) or 'super' (one extra set); anything else is normal.
-export function startSession(routine, now = Date.now(), { mode = 'normal' } = {}) {
+// WOD parts are never changed by the mode. Each starts in Skaalattu for a light workout, otherwise in the
+// division of its previous result in `history` (Rx when there is none).
+export function startSession(routine, now = Date.now(), { mode = 'normal', history = [] } = {}) {
   const clean = sanitizeRoutine(routine);
   const r = mode === 'light' ? sanitizeRoutine(lightenRoutine(clean)) : mode === 'super' ? boostRoutine(clean) : clean;
-  if (!r.exercises.length) return null;
+  const wods = clean.wods ?? [];
+  if (!r.exercises.length && !wods.length) return null;
   return {
     id: uid(),
     routineId: r.id,
     name: r.name,
     startedAt: now,
     ...(mode === 'light' ? { fatigued: true } : {}),
+    ...(clean.type ? { type: clean.type } : {}),
+    ...(clean.warmup ? { warmup: { ...clean.warmup, done: false } } : {}),
     exercises: r.exercises.map((e) => ({
       id: e.id,
       name: e.name,
@@ -445,6 +476,12 @@ export function startSession(routine, now = Date.now(), { mode = 'normal' } = {}
         ...(e.setReps ? { reps: e.setReps[i] } : {}),
       })),
     })),
+    ...(wods.length ? { wods: wods.map((w) => {
+      const key = wodKey(w);
+      const division = mode === 'light' ? 'scaled' : previousResult(history, key)?.result.division ?? 'rx';
+      return { ...structuredClone(w), key, division };
+    }) } : {}),
+    ...(clean.cooldown ? { cooldown: { ...clean.cooldown, done: false } } : {}),
   };
 }
 
@@ -626,24 +663,27 @@ export function insertSessionExercise(session, entry) {
   return { ok: true, index };
 }
 
-// The last exercise stays: a session without exercises cannot exist.
+// The last exercise stays unless the workout has WOD parts: a session without any part cannot exist.
 export function removeSessionExercise(session, exerciseId) {
   const index = session?.exercises.findIndex((e) => e.id === exerciseId) ?? -1;
   if (index < 0) return { ok: false, error: 'Poistettavaa liikettä ei enää löytynyt. Tarkista harjoitus.' };
-  if (session.exercises.length < 2) return { ok: false, error: 'Viimeistä liikettä ei voi poistaa. Hylkää harjoitus, jos et halua tehdä sitä.' };
+  if (session.exercises.length < 2 && !session.wods?.length) return { ok: false, error: 'Viimeistä liikettä ei voi poistaa. Hylkää harjoitus, jos et halua tehdä sitä.' };
   session.exercises.splice(index, 1);
   return { ok: true, index };
 }
 
 export const loggedSetCount = (exercise) => exercise?.sets.filter((s) => s.done).length ?? 0;
 
+// done/total count sets (also what history stores); pct also counts each WOD part with a logged result.
 export function progress(session) {
   let done = 0, total = 0;
   for (const e of session?.exercises ?? []) {
     total += e.sets.length;
     done += e.sets.filter((s) => s.done).length;
   }
-  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+  const wods = session?.wods ?? [], wodsDone = wods.filter((w) => w.result).length;
+  const parts = total + wods.length;
+  return { done, total, wodsDone, wodsTotal: wods.length, pct: parts ? Math.round(((done + wodsDone) / parts) * 100) : 0 };
 }
 
 export const exerciseDone = (e) => e.sets.length > 0 && e.sets.every((s) => s.done);
@@ -655,14 +695,20 @@ export function summarize(session, now = Date.now(), hr = null) {
   const { done, total } = progress(session);
   const snapshot = sanitizeSession(session);
   const heart = sanitizeHr(hr);
+  const wods = (snapshot.wods ?? []).map(historyWod);
   return {
     id: session.id, name: session.name, startedAt: session.startedAt, endedAt: now,
     setsDone: done, setsTotal: total, routineId: session.routineId,
-    exercises: snapshot.exercises,
+    ...(snapshot.type ? { type: snapshot.type } : {}),
+    ...(snapshot.exercises.length ? { exercises: snapshot.exercises } : {}),
+    ...(wods.length ? { wods } : {}),
     ...(snapshot.fatigued ? { fatigued: true } : {}),
     ...(heart ? { hr: heart } : {}),
   };
 }
+
+// A finished workout is worth saving once a set is done or a WOD part has a result.
+export const sessionHasWork = (session) => progress(session).done > 0 || (session?.wods ?? []).some((w) => w.result);
 
 // ---- Completed workouts: delete and correct (always on a transaction copy of the state) ----
 
@@ -732,6 +778,22 @@ export function editHistorySet(state, id, ei, si, field, value, now = Date.now()
   return { ok: true };
 }
 
+// Sets (or with null clears) the logged result of one WOD part of a completed workout.
+export function editHistoryWod(state, id, wi, result, now = Date.now()) {
+  const entry = state.history.find((h) => h.id === id);
+  if (!entry) return NOT_FOUND;
+  const wod = entry.wods?.[wi];
+  if (!wod) return { ok: false, error: 'WOD-osaa ei löytynyt.' };
+  if (result === null) delete wod.result;
+  else {
+    const clean = sanitizeResult(result);
+    if (!clean || clean.kind !== wod.score) return { ok: false, error: 'Tarkista tulos.' };
+    wod.result = clean;
+  }
+  entry.editedAt = now;
+  return { ok: true };
+}
+
 // A forgotten finish makes a workout look hours long; the end can only be moved earlier.
 export function shortenHistoryDuration(state, id, minutes, now = Date.now()) {
   const entry = state.history.find((h) => h.id === id);
@@ -753,29 +815,39 @@ export function formatDuration(ms) {
   return h ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
 }
 
+// Messages follow the editor from top to bottom. A gym program needs an exercise; a functional program
+// needs a WOD part and its exercises (the strength/skill part) are optional.
 export function validateRoutine(r) {
   const errors = [];
   if (!cleanText(r?.name)) errors.push('Anna harjoitukselle nimi.');
+  const functional = r?.type === 'functional';
   const exercises = Array.isArray(r?.exercises) ? r.exercises : [];
-  if (!exercises.length) errors.push('Lisää vähintään yksi nimetty liike.');
+  const wods = Array.isArray(r?.wods) ? r.wods : [];
+  if (!functional && !exercises.length) errors.push('Lisää vähintään yksi nimetty liike.');
+  errors.push(...validateBlock(r?.warmup, 'Lämmittely'));
   for (const [i, e] of exercises.entries()) {
-    if (!cleanText(e?.name)) errors.push(`Liike ${i + 1}: lisää nimi.`);
-    if (!Number.isInteger(Number(e?.sets)) || Number(e?.sets) < 1 || Number(e?.sets) > MAX_SETS) errors.push(`Liike ${i + 1}: sarjojen määrän on oltava kokonaisluku 1–${MAX_SETS}.`);
-    if (!cleanText(e?.reps, 20)) errors.push(`Liike ${i + 1}: lisää toistotavoite tai kesto.`);
+    const label = functional ? `Voima / taito, liike ${i + 1}` : `Liike ${i + 1}`;
+    if (!cleanText(e?.name)) errors.push(`${label}: lisää nimi.`);
+    if (!Number.isInteger(Number(e?.sets)) || Number(e?.sets) < 1 || Number(e?.sets) > MAX_SETS) errors.push(`${label}: sarjojen määrän on oltava kokonaisluku 1–${MAX_SETS}.`);
+    if (!cleanText(e?.reps, 20)) errors.push(`${label}: lisää toistotavoite tai kesto.`);
     if (e?.progression) {
       const config = progressionConfig(e);
       const minReps = e.progression.minReps ?? config.minReps;
       const maxReps = e.progression.maxReps ?? config.maxReps;
       const weightStep = e.progression.weightStep ?? config.weightStep;
-      if (!Number.isInteger(Number(minReps)) || !Number.isInteger(Number(maxReps)) || Number(minReps) < 1 || Number(maxReps) > 30 || Number(minReps) > Number(maxReps)) errors.push(`Liike ${i + 1}: kehitysalueen on oltava 1–30 toistoa, alaraja enintään yläraja.`);
-      if (!Number.isFinite(Number(weightStep)) || Number(weightStep) < 0.01 || Number(weightStep) > 100) errors.push(`Liike ${i + 1}: painoaskeleen on oltava 0,01–100 kg.`);
+      if (!Number.isInteger(Number(minReps)) || !Number.isInteger(Number(maxReps)) || Number(minReps) < 1 || Number(maxReps) > 30 || Number(minReps) > Number(maxReps)) errors.push(`${label}: kehitysalueen on oltava 1–30 toistoa, alaraja enintään yläraja.`);
+      if (!Number.isFinite(Number(weightStep)) || Number(weightStep) < 0.01 || Number(weightStep) > 100) errors.push(`${label}: painoaskeleen on oltava 0,01–100 kg.`);
     }
     if (Array.isArray(e?.setReps)) {
       for (let si = 0; si < clampInt(e.sets, 1, MAX_SETS, 3); si++) {
-        if (!cleanText(e.setReps[si], 20)) errors.push(`Liike ${i + 1}, sarja ${si + 1}: lisää toistotavoite tai kesto.`);
+        if (!cleanText(e.setReps[si], 20)) errors.push(`${label}, sarja ${si + 1}: lisää toistotavoite tai kesto.`);
       }
     }
   }
+  if (functional && !wods.length) errors.push('Lisää vähintään yksi WOD-osa.');
+  if (wods.length > MAX_WODS) errors.push(`WOD-osia voi olla enintään ${MAX_WODS}.`);
+  for (const [i, w] of wods.slice(0, MAX_WODS).entries()) errors.push(...validateWod(w, wodPartLabel(i, wods.length)));
+  errors.push(...validateBlock(r?.cooldown, 'Loppuverryttely'));
   return errors;
 }
 
