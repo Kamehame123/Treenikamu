@@ -68,6 +68,7 @@ export function defaultState() {
   const ex = (name, sets, reps, weight = '') => ({ id: uid(), name, sets, reps, weight, setReps: null });
   return {
     v: SCHEMA,
+    userId: uid(),
     routines: [
       {
         id: uid(),
@@ -240,8 +241,10 @@ function normalizeState(raw) {
   const session = sanitizeSession(raw.session);
   const timers = sanitizeTimers(raw.timers);
   const timerDefaults = sanitizeDefaults(raw.timerDefaults);
+  const userId = cleanText(raw.userId, 80);
   return {
     v: SCHEMA,
+    ...(userId.length >= 8 ? { userId } : {}),
     routines,
     session,
     customExercises: sanitizeCustomExercises(raw.customExercises),
@@ -283,6 +286,8 @@ export function sanitizeState(raw) {
   if (!raw || typeof raw !== 'object') return d;
   const state = normalizeState(migrateData(raw));
   if (!state.routines.length) state.routines = d.routines;
+  // Anonymous, random, device-generated id: lets future aggregation tell users apart without accounts.
+  if (!state.userId) state.userId = d.userId;
   return state;
 }
 
