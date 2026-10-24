@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
 import { configuredState } from './statistics-fixtures.mjs';
-import { chromium, webkit, startServer, tap } from './support.mjs';
+import { chromium, webkit, startServer, tap, tapConfirm } from './support.mjs';
 
 const { server, url } = await startServer();
 
@@ -81,6 +81,7 @@ try {
             await fits(page, 'history');
             await page.locator('[data-key="history-back"]').click();
             await page.locator('[data-action="new"]').click();
+            await page.locator('[data-action="newgym"]').click();
             await gaps(page, '.edit > *', 12, 'exercise editor sections');
             await cardPadding(page, '.edit', padding);
             await fits(page, 'editor');
@@ -90,6 +91,20 @@ try {
             await fits(page, 'library');
             await page.locator('[data-action="backedit"]').click();
             await page.locator('[data-key="cancel"]').click();
+            await page.locator('[data-action="new"]').click();
+            await gaps(page, '.type-choices > li', 12, 'program type choices');
+            await cardPadding(page, '.type-choice', padding);
+            await fits(page, 'program type chooser');
+            await page.locator('[data-action="newfunctional"]').click();
+            await page.locator('[data-key="addblock-warmup"]').click();
+            await page.locator('.move-scaled > summary').first().click();
+            await gaps(page, '.wod-edit > *', 12, 'WOD editor sections');
+            await gaps(page, '.block-edit > *', 12, 'warm-up editor');
+            await gaps(page, '.wod-move > *', 12, 'WOD movement');
+            await gaps(page, '.editor-section > *', 12, 'strength section');
+            await cardPadding(page, '.wod-edit, .block-edit', padding);
+            await fits(page, 'functional editor');
+            await tapConfirm(page.locator('[data-key="cancel"]'));
             await page.getByRole('button', { name: 'Historia', exact: true }).click();
             await page.getByRole('button', { name: 'Tilastot', exact: true }).click();
             await gaps(page, '.statistics-content > *', 16, 'statistics sections');

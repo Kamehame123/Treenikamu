@@ -22,6 +22,8 @@ const WARMUP = Object.freeze({
   minutes: 10,
 });
 const COOLDOWN = Object.freeze({ text: 'Kävely tai kevyt pyöräily 2–3 min\nVenyttely ja rauhallinen hengitys', minutes: 5 });
+// The editor's "Lisää lämmittely" / "Lisää loppuverryttely" start from the same text.
+export { WARMUP as DEFAULT_WARMUP, COOLDOWN as DEFAULT_COOLDOWN };
 
 // group 'format': a WOD structure to fill with your own movements; 'benchmark': a fixed workout to repeat and compare.
 export const TEMPLATES = Object.freeze([

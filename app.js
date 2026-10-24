@@ -8,6 +8,8 @@ import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from '.
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
+import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, parseScheme, wodPartLabel } from './wod.js';
+import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor } from './wod-ui.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -101,6 +103,7 @@ try {
   if (saved && typeof saved.id === 'string' && Array.isArray(saved.exercises)) {
     draft = saved;
     draft.exercises = draft.exercises.slice(0, 60).filter((e) => e && typeof e === 'object');
+    if (draft.type === 'functional') normalizeFunctionalDraft(draft);
   }
 } catch { /* Session storage is optional; the workout still works. */ }
 // A running interval timer survives a reload (sessionStorage); saved sequences live in state.timers.
@@ -157,6 +160,9 @@ const revisionMessages = new Map();
 const openLogs = new Set();
 const openExerciseActions = new Set();
 const openRoutines = new Set();
+// Functional editor disclosures (scaled versions by movement id, and the class-structure guide) survive redraws.
+const openScaled = new Set();
+let guideOpen = false;
 let logError = '';
 const byId = (id, source = state) => source.routines.find((r) => r.id === id);
 
@@ -991,13 +997,36 @@ function setTargetFields(e, i) {
   return Array.from({ length: core.clampInt(e.sets, 1, core.MAX_SETS, 3) }, (_, si) => `<label class="field">Sarja ${si + 1}: toistot / aika<input type="text" maxlength="20" value="${esc(e.setReps[si] ?? e.reps)}" data-f="setReps" data-i="${i}" data-s="${si}" data-key="setReps-${esc(e.id)}-${si}" placeholder="8–12 / 30 s"></label>`).join('');
 }
 
-function editView() {
-  const rows = draft.exercises.map((e, i) => {
+function exerciseRows() {
+  return draft.exercises.map((e, i) => {
     const individual = Array.isArray(e.setReps);
     const targets = individual ? setTargetFields(e, i) : '';
     return `<li class="card edit"><div class="row editor-row"><span class="eyebrow exercise-tag">LIIKE ${String(i + 1).padStart(2, '0')}</span><div class="mini"><button class="btn ghost icon-button" data-action="up" data-i="${i}" data-key="up-${esc(e.id)}" ${i === 0 ? 'disabled' : ''} aria-label="Siirrä ylös">↑</button><button class="btn ghost icon-button" data-action="down" data-i="${i}" data-key="down-${esc(e.id)}" ${i === draft.exercises.length - 1 ? 'disabled' : ''} aria-label="Siirrä alas">↓</button><button class="btn ghost danger-text" data-action="rmex" data-i="${i}" data-key="remove-${esc(e.id)}" aria-label="Poista liike ${i + 1}">Poista</button></div></div><div class="name-picker-row"><label class="field grow">Liikkeen nimi<input type="text" maxlength="60" value="${esc(e.name)}" data-f="name" data-i="${i}" data-key="name-${esc(e.id)}" autocomplete="off" placeholder="Esim. maljakyykky"></label><button class="btn secondary pick-exercise" data-action="pickex" data-id="${esc(e.id)}" data-key="pick-${esc(e.id)}">Valitse kirjastosta</button></div><div class="grid3"><label class="field">Sarjat<input type="number" inputmode="numeric" min="1" max="20" step="1" value="${esc(e.sets)}" data-f="sets" data-i="${i}" data-key="sets-${esc(e.id)}"></label><label class="field">${individual ? 'Oletustoistot / aika' : 'Toistot / aika'}<input type="text" maxlength="20" value="${esc(e.reps)}" data-f="reps" data-i="${i}" data-key="reps-${esc(e.id)}" placeholder="8–12 / 30 s"></label><label class="field">Paino <span class="optional">valinnainen</span><input type="text" maxlength="20" value="${esc(e.weight)}" data-f="weight" data-i="${i}" data-key="weight-${esc(e.id)}" placeholder="20 kg"></label></div><label class="check per-set-toggle"><span>Määritä toistot sarjakohtaisesti<small>${individual ? 'Uudet sarjat käyttävät oletustoistoja. Poista valinta käyttääksesi samaa tavoitetta kaikissa sarjoissa.' : 'Aseta jokaiselle sarjalle oma toistotavoite tai kesto.'}</small></span><input type="checkbox" data-f="individualReps" data-i="${i}" data-key="individualReps-${esc(e.id)}" ${individual ? 'checked' : ''}></label>${individual ? `<div class="set-targets">${targets}</div>` : ''}${progressionEditor(e, i)}</li>`;
   }).join('');
-  return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="cancel">${icon('back')} Peruuta</button><span class="eyebrow" id="draft-status" role="status">${draftOk ? 'LUONNOS SÄILYY TÄSSÄ VÄLILEHDESSÄ' : 'LUONNOS EI TALLENTUNUT — pidä välilehti auki'}</span></header>${warn()}<div class="editor-top"><p class="eyebrow accent">SUUNNITTELE HARJOITUKSESI</p><h1 tabindex="-1">${draft.isNew ? 'Uusi harjoitus' : 'Muokkaa harjoitusta'}</h1><p class="editor-copy">Valitse ${EXERCISES.length} liikkeestä tai lisää omasi. Aseta tavoitteet oman tasosi mukaan.</p></div><label class="field name-field">Harjoituksen nimi<input type="text" maxlength="60" value="${esc(draft.name)}" data-f="rname" data-key="rname" autocomplete="off" placeholder="Esim. ylävartalo A"></label><ul class="list editor-list">${rows}</ul><button class="btn secondary add-ex-btn" data-action="addex" data-key="addex" ${draft.exercises.length >= 60 ? 'disabled' : ''}>${icon('plus')} Lisää liike</button><p id="err" class="banner" role="alert" tabindex="-1" ${editError ? '' : 'hidden'}>${esc(editError)}</p><div class="editor-save"><button class="btn primary big" data-action="save" data-key="save">Tallenna harjoitus ${icon('check')}</button></div>${draft.isNew ? '' : '<button class="btn danger" data-action="delroutine" data-key="delroutine">Poista harjoitus</button>'}`;
+}
+function editorHeader() {
+  return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="cancel">${icon('back')} Peruuta</button><span class="eyebrow" id="draft-status" role="status">${draftOk ? 'LUONNOS SÄILYY TÄSSÄ VÄLILEHDESSÄ' : 'LUONNOS EI TALLENTUNUT — pidä välilehti auki'}</span></header>${warn()}`;
+}
+function editorFooter() {
+  return `<p id="err" class="banner" role="alert" tabindex="-1" ${editError ? '' : 'hidden'}>${esc(editError)}</p><div class="editor-save"><button class="btn primary big" data-action="save" data-key="save">Tallenna harjoitus ${icon('check')}</button></div>${draft.isNew ? '' : '<button class="btn danger" data-action="delroutine" data-key="delroutine">Poista harjoitus</button>'}`;
+}
+const editorTitle = () => `<h1 tabindex="-1">${draft.isNew ? 'Uusi harjoitus' : 'Muokkaa harjoitusta'}</h1>`;
+const nameField = (placeholder) => `<label class="field name-field">Harjoituksen nimi<input type="text" maxlength="60" value="${esc(draft.name)}" data-f="rname" data-key="rname" autocomplete="off" placeholder="${placeholder}"></label>`;
+
+function editView() {
+  if (draft.type === 'functional') return functionalEditView();
+  return `${editorHeader()}<div class="editor-top"><p class="eyebrow accent">SUUNNITTELE HARJOITUKSESI</p>${editorTitle()}<p class="editor-copy">Valitse ${EXERCISES.length} liikkeestä tai lisää omasi. Aseta tavoitteet oman tasosi mukaan.</p></div>${nameField('Esim. ylävartalo A')}<ul class="list editor-list">${exerciseRows()}</ul><button class="btn secondary add-ex-btn" data-action="addex" data-key="addex" ${draft.exercises.length >= 60 ? 'disabled' : ''}>${icon('plus')} Lisää liike</button>${editorFooter()}`;
+}
+
+// Fixed class order: warm-up, strength/skill (the gym exercise rows), 1–3 scored WOD parts, cool-down.
+function functionalEditView() {
+  const count = draft.wods.length;
+  const strength = `<section class="editor-section"><div class="section-head"><h2>Voima / taito</h2><span class="eyebrow">Valinnainen</span></div><p class="editor-copy">Esim. takakyykky 5 × 3 tai käsilläseisonnan harjoittelu. Sarjat kirjataan kuten kuntosalitreenissä.</p>${draft.exercises.length ? `<ul class="list editor-list">${exerciseRows()}</ul>` : ''}<button class="btn secondary add-ex-btn" data-action="addex" data-key="addex" ${draft.exercises.length >= 60 ? 'disabled' : ''}>${icon('plus')} Lisää voima- tai taitoliike</button></section>`;
+  return `${editorHeader()}<div class="editor-top"><p class="eyebrow accent">Toiminnallinen treeni</p>${editorTitle()}<p class="editor-copy">Rakenna tunti lämmittelystä loppuverryttelyyn. Vain WOD on pakollinen, muut osat ovat valinnaisia.</p></div>${nameField('Esim. Perjantain WOD')}${wodGuide(guideOpen)}${blockSection('warmup', draft.warmup, icon)}${strength}${draft.wods.map((w, wi) => wodEditor(w, wi, count, { icon, openScaled })).join('')}${count < MAX_WODS ? `<button class="btn secondary add-ex-btn" data-action="addwod" data-key="addwod">${icon('plus')} Lisää WOD-osa</button>` : ''}${blockSection('cooldown', draft.cooldown, icon)}${editorFooter()}`;
+}
+
+function newTypeView() {
+  return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="newtype-back">${icon('back')} Peruuta</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Uusi treeniohjelma</p><h1 tabindex="-1">Millainen ohjelma?</h1><p class="editor-copy">Molemmat tallentuvat, näkyvät historiassa ja kulkevat varmuuskopiossa samalla tavalla.</p></div>${typeChoices(icon)}`;
 }
 
 // Disclosure + native radios avoid mobile WebKit's CSP-blocked select shadow styles.
@@ -1011,15 +1040,15 @@ function hasLibraryFilters() { return !!(picker.query || picker.category || pick
 function libraryResults(rows) {
   return rows.slice(0, picker.limit).map((e) => {
     const added = picker.added.includes(e.id);
-    return `<li><button class="exercise-choice" data-action="chooseex" data-id="${esc(e.id)}" data-key="choice-${esc(e.id)}" ${added ? 'aria-disabled="true"' : ''}><span class="choice-icon">${icon('weight')}</span><span class="grow"><span class="sr">${added ? 'Lisätty harjoitukseen: ' : 'Valitse liike: '}</span><strong>${esc(e.name)}</strong><span class="choice-meta">${added ? 'Lisätty · ' : ''}${esc(e.category)} · ${esc(e.equipment)}${e.custom ? ' · Oma liike' : ''}</span></span>${icon(added ? 'check' : 'plus')}</button></li>`;
+    return `<li><button class="exercise-choice" data-action="chooseex" data-id="${esc(e.id)}" data-key="choice-${esc(e.id)}" ${added ? 'aria-disabled="true"' : ''}><span class="choice-icon">${icon('weight')}</span><span class="grow"><span class="sr">${added ? `Lisätty ${picker.mode === 'wod' ? 'WOD-osaan' : 'harjoitukseen'}: ` : 'Valitse liike: '}</span><strong>${esc(e.name)}</strong><span class="choice-meta">${added ? 'Lisätty · ' : ''}${esc(e.category)} · ${esc(e.equipment)}${e.custom ? ' · Oma liike' : ''}</span></span>${icon(added ? 'check' : 'plus')}</button></li>`;
   }).join('');
 }
 function libraryView() {
   const rows = libraryMatches(), own = customEntry();
-  return `<header class="editor-header"><button class="btn ghost back" data-action="backedit" data-key="backedit">${icon('back')} ${picker.mode === 'session' ? 'Takaisin treeniin' : 'Takaisin harjoitukseen'}</button><span class="eyebrow">${EXERCISES.length} + ${state.customExercises.length} OMAA</span></header>${warn()}<div class="library-top"><h1 tabindex="-1">Liikekirjasto</h1><p class="editor-copy">${picker.mode === 'session' ? (picker.target ? 'Valitse liike, joka korvaa nykyisen vain tässä treenissä. Ohjelma ei muutu. Sarjamäärä ja toistotavoitteet säilyvät, paino tyhjenee.' : 'Valitse treeniin lisättävä liike. Se tulee nykyisen liikkeen jälkeen eikä muuta ohjelmaa.') : !picker.adding ? 'Valitse liike tähän kohtaan. Tavoitteet säilyvät.' : picker.keepOpen ? 'Napauta liikkeitä lisätäksesi ne. Palaa lopuksi harjoitukseen.' : 'Valitse harjoitukseen lisättävä liike.'} Haku toimii myös englanniksi.</p>${picker.adding && picker.mode !== 'session' ? `<button class="btn library-multi" data-action="multiex" data-key="multiex" aria-pressed="${picker.keepOpen}">${icon(picker.keepOpen ? 'check' : 'plus')} Lisää useita peräkkäin</button>` : ''}</div>
+  return `<header class="editor-header"><button class="btn ghost back" data-action="backedit" data-key="backedit">${icon('back')} ${picker.mode === 'session' ? 'Takaisin treeniin' : 'Takaisin harjoitukseen'}</button><span class="eyebrow">${EXERCISES.length} + ${state.customExercises.length} OMAA</span></header>${warn()}<div class="library-top"><h1 tabindex="-1">Liikekirjasto</h1><p class="editor-copy">${picker.mode === 'session' ? (picker.target ? 'Valitse liike, joka korvaa nykyisen vain tässä treenissä. Ohjelma ei muutu. Sarjamäärä ja toistotavoitteet säilyvät, paino tyhjenee.' : 'Valitse treeniin lisättävä liike. Se tulee nykyisen liikkeen jälkeen eikä muuta ohjelmaa.') : picker.mode === 'wod' ? (!picker.adding ? 'Valitse liike tähän kohtaan. Määrä ja kuorma säilyvät.' : picker.keepOpen ? 'Napauta liikkeitä lisätäksesi ne WOD-osaan. Palaa lopuksi harjoitukseen.' : 'Valitse WOD-osaan lisättävä liike.') : !picker.adding ? 'Valitse liike tähän kohtaan. Tavoitteet säilyvät.' : picker.keepOpen ? 'Napauta liikkeitä lisätäksesi ne. Palaa lopuksi harjoitukseen.' : 'Valitse harjoitukseen lisättävä liike.'} Haku toimii myös englanniksi.</p>${picker.adding && picker.mode !== 'session' ? `<button class="btn library-multi" data-action="multiex" data-key="multiex" aria-pressed="${picker.keepOpen}">${icon(picker.keepOpen ? 'check' : 'plus')} Lisää useita peräkkäin</button>` : ''}</div>
     <div role="search" aria-label="Liikkeiden haku" class="library-filters card"><label class="field">Hae liikettä<input type="search" id="exercise-search" data-key="exercise-search" maxlength="120" value="${esc(picker.query)}" placeholder="Esim. kyykky, ylätalja tai bench press" aria-controls="library-results" autocomplete="off"></label><div class="filter-grid">${choiceMenu('library-category', 'Lihasryhmä', CATEGORIES, picker.category, 'Kaikki lihasryhmät')}${choiceMenu('library-equipment', 'Väline', EQUIPMENT, picker.equipment, 'Kaikki välineet')}</div><label class="check library-own"><span>Vain omat liikkeet</span><input type="checkbox" id="library-own" data-key="library-own" ${picker.customOnly ? 'checked' : ''}></label><button class="btn secondary library-reset" data-action="resetfilters" data-key="resetfilters" ${hasLibraryFilters() ? '' : 'hidden'}>Tyhjennä haku ja suodattimet</button></div>
-    <details class="custom-exercise card" ${customOpen ? 'open' : ''}><summary>Lisää oma liike ${icon('plus')}</summary><p class="small-copy muted">Oma liike tallentuu kirjastoon ja varmuuskopioon. Voit valita sen myöhemmin uudelleen.</p><form id="custom-exercise-form" novalidate><label class="field">Oman liikkeen nimi<input type="text" data-custom="name" data-key="custom-name" maxlength="60" value="${esc(own.name)}" required autocomplete="off"></label><div class="filter-grid">${choiceMenu('custom-category', 'Oman liikkeen lihasryhmä', CATEGORIES, own.category, '', true)}${choiceMenu('custom-equipment', 'Oman liikkeen väline', EQUIPMENT, own.equipment, '', true)}</div><label class="field">Oletustoistot / aika<input type="text" data-custom="reps" data-key="custom-reps" maxlength="20" value="${esc(own.reps)}" required></label><p id="custom-error" role="alert" tabindex="-1" class="banner" ${customError ? '' : 'hidden'}>${esc(customError)}</p><button type="submit" class="btn primary big">${picker.mode === 'session' ? 'Tallenna ja valitse' : 'Tallenna ja lisää harjoitukseen'} ${icon('plus')}</button></form></details>
-    <div class="section-head library-count"><h2>Liikkeet</h2><span id="library-count" class="muted small-copy" role="status">${rows.length} hakutulosta</span></div><ul id="library-results" class="list library-results">${libraryResults(rows)}</ul><div id="library-empty" class="empty-state" ${rows.length ? 'hidden' : ''}><h3>Liikettä ei löytynyt</h3><p>Kokeile toista hakusanaa tai lisää oma liike.</p><button class="btn secondary" data-action="newcustom" data-key="newcustom">Lisää haettu nimi omana liikkeenä</button></div><button class="btn secondary library-more" data-action="moreex" data-key="moreex" ${rows.length <= picker.limit ? 'hidden' : ''}>Näytä lisää liikkeitä</button>${picker.keepOpen ? `<div class="library-done"><p class="small-copy muted" role="status">${picker.added.length} lisätty harjoitukseen${draftOk ? '' : ' · Luonnos ei tallentunut. Pidä välilehti auki.'}</p><button class="btn primary big" data-action="backedit" data-key="library-done">Valmis · takaisin harjoitukseen ${icon('check')}</button></div>` : ''}`;
+    <details class="custom-exercise card" ${customOpen ? 'open' : ''}><summary>Lisää oma liike ${icon('plus')}</summary><p class="small-copy muted">Oma liike tallentuu kirjastoon ja varmuuskopioon. Voit valita sen myöhemmin uudelleen.</p><form id="custom-exercise-form" novalidate><label class="field">Oman liikkeen nimi<input type="text" data-custom="name" data-key="custom-name" maxlength="60" value="${esc(own.name)}" required autocomplete="off"></label><div class="filter-grid">${choiceMenu('custom-category', 'Oman liikkeen lihasryhmä', CATEGORIES, own.category, '', true)}${choiceMenu('custom-equipment', 'Oman liikkeen väline', EQUIPMENT, own.equipment, '', true)}</div><label class="field">Oletustoistot / aika<input type="text" data-custom="reps" data-key="custom-reps" maxlength="20" value="${esc(own.reps)}" required></label><p id="custom-error" role="alert" tabindex="-1" class="banner" ${customError ? '' : 'hidden'}>${esc(customError)}</p><button type="submit" class="btn primary big">${picker.mode === 'session' ? 'Tallenna ja valitse' : picker.mode === 'wod' ? 'Tallenna ja lisää WOD-osaan' : 'Tallenna ja lisää harjoitukseen'} ${icon('plus')}</button></form></details>
+    <div class="section-head library-count"><h2>Liikkeet</h2><span id="library-count" class="muted small-copy" role="status">${rows.length} hakutulosta</span></div><ul id="library-results" class="list library-results">${libraryResults(rows)}</ul><div id="library-empty" class="empty-state" ${rows.length ? 'hidden' : ''}><h3>Liikettä ei löytynyt</h3><p>Kokeile toista hakusanaa tai lisää oma liike.</p><button class="btn secondary" data-action="newcustom" data-key="newcustom">Lisää haettu nimi omana liikkeenä</button></div><button class="btn secondary library-more" data-action="moreex" data-key="moreex" ${rows.length <= picker.limit ? 'hidden' : ''}>Näytä lisää liikkeitä</button>${picker.keepOpen ? `<div class="library-done"><p class="small-copy muted" role="status">${picker.added.length} lisätty ${picker.mode === 'wod' ? 'WOD-osaan' : 'harjoitukseen'}${draftOk ? '' : ' · Luonnos ei tallentunut. Pidä välilehti auki.'}</p><button class="btn primary big" data-action="backedit" data-key="library-done">Valmis · takaisin harjoitukseen ${icon('check')}</button></div>` : ''}`;
 }
 function updateLibraryResults() {
   const rows = libraryMatches();
@@ -1029,8 +1058,8 @@ function updateLibraryResults() {
   document.querySelector('[data-action="moreex"]').hidden = rows.length <= picker.limit;
   document.querySelector('[data-action="resetfilters"]').hidden = !hasLibraryFilters();
 }
-function openLibrary(target = null, adding = true) {
-  picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target, adding, keepOpen: false, added: [], mode: 'draft' };
+function openLibrary(target = null, adding = true, wod = null) {
+  picker = { query: '', category: '', equipment: '', customOnly: false, limit: 40, target, adding, keepOpen: false, added: [], mode: wod ? 'wod' : 'draft', wod };
   customOpen = false; customError = ''; view = 'library'; rememberDraft(); render();
 }
 // Swap (target = exercise id) starts filtered to the muscle group of the exercise being replaced.
@@ -1067,6 +1096,7 @@ async function chooseSessionExercise(entry) {
 }
 function chooseExercise(exercise) {
   if (picker.mode === 'session') return chooseSessionExercise(exercise);
+  if (picker.mode === 'wod') return chooseWodMovement(exercise);
   if (!exercise || !draft || picker.added.includes(exercise.id)) return;
   let row = picker.target && draft.exercises.find((e) => e.id === picker.target);
   if (!row) {
@@ -1088,6 +1118,29 @@ function chooseExercise(exercise) {
   } else document.querySelector(`[data-key="name-${CSS.escape(row.id)}"]`)?.focus();
   announce(`${exercise.name} lisätty harjoitukseen.`);
 }
+// A library pick names a WOD movement; its amount, load and scaled version stay as they were.
+function chooseWodMovement(exercise) {
+  if (!exercise || !draft || picker.added.includes(exercise.id)) return;
+  const w = draft.wods?.find((x) => x.id === picker.wod);
+  if (!w) { view = 'edit'; render(); return; }
+  let m = picker.target && w.movements.find((x) => x.id === picker.target);
+  if (!m) {
+    if (w.movements.length >= MAX_MOVEMENTS) { announce(`WOD-osassa voi olla enintään ${MAX_MOVEMENTS} liikettä.`); return; }
+    m = editorMovement({}); w.movements.push(m);
+  }
+  m.name = exercise.name;
+  m.sourceId = exercise.id;
+  delete draft.customEntry;
+  picker.added.push(exercise.id);
+  if (picker.keepOpen) { picker.target = null; customOpen = false; }
+  else view = 'edit';
+  rememberDraft(); render();
+  if (picker.keepOpen) {
+    const target = document.querySelector(`[data-key="choice-${CSS.escape(exercise.id)}"]`) || document.querySelector('[data-key="library-done"]');
+    target?.focus({ preventScroll: true });
+  } else document.querySelector(`[data-key="mamount-${CSS.escape(m.id)}"]`)?.focus();
+  announce(`${exercise.name} lisätty WOD-osaan.`);
+}
 
 function render() {
   const previous = document.activeElement;
@@ -1103,7 +1156,7 @@ function render() {
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
   $app.toggleAttribute('data-entering', changed);
-  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : homeView();
+  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -1205,9 +1258,15 @@ function editorError(message) {
   editError = message; render(); document.getElementById('err')?.focus({ preventScroll: false });
 }
 function clearDraft() { draft = null; editError = ''; rememberDraft(); }
+// What "unsaved changes" compares. Gym drafts compare exactly what they always have.
+const draftSnapshot = (d) => JSON.stringify(d.type === 'functional'
+  ? { name: d.name, exercises: d.exercises, warmup: d.warmup, wods: d.wods, cooldown: d.cooldown }
+  : { name: d.name, exercises: d.exercises });
 function openDraft(r, isNew) {
   draft = { ...clone(r), isNew, base: isNew ? null : JSON.stringify(r) };
-  draft.initial = JSON.stringify({ name: draft.name, exercises: draft.exercises });
+  if (draft.type === 'functional') normalizeFunctionalDraft(draft);
+  draft.initial = draftSnapshot(draft);
+  openScaled.clear();
   view = 'edit'; editError = ''; rememberDraft(); render();
 }
 function swap(i, direction) {
@@ -1215,6 +1274,17 @@ function swap(i, direction) {
   if (target < 0 || target >= draft.exercises.length) return;
   [draft.exercises[i], draft.exercises[target]] = [draft.exercises[target], draft.exercises[i]];
   rememberDraft(); render(); announce(`Liike siirretty kohtaan ${target + 1}.`);
+}
+function moveMovement(t, direction) {
+  const w = draft?.wods?.[+t.dataset.w], i = +t.dataset.m, target = i + direction;
+  if (!w || target < 0 || target >= w.movements.length) return;
+  const id = w.movements[i].id, hadFocus = document.activeElement === t;
+  [w.movements[i], w.movements[target]] = [w.movements[target], w.movements[i]];
+  rememberDraft(); render();
+  // At the first or last place the pressed arrow turns disabled; keep focus on the moved movement.
+  const pressed = document.querySelector(`[data-key="${CSS.escape(`${direction < 0 ? 'mup' : 'mdown'}-${id}`)}"]`);
+  if (hadFocus && pressed?.disabled) document.querySelector(`[data-key="${CSS.escape(`${direction < 0 ? 'mdown' : 'mup'}-${id}`)}"]`)?.focus();
+  announce(`Liike siirretty kohtaan ${target + 1}.`);
 }
 function sessionOptions() { return { sessionId: state.session?.id }; }
 
@@ -1562,7 +1632,7 @@ const actions = {
   async home() {
     if (timerRun && !timerRun.done && !await askConfirm('Pysäytetäänkö ajastin?', 'Pysäytä')) return;
     timerRun = null; timerDraft = null; timerError = ''; rememberTimerRun();
-    if (draft && JSON.stringify({ name: draft.name, exercises: draft.exercises }) !== draft.initial && !await askConfirm('Hylätäänkö harjoituksen tallentamattomat muutokset?', 'Hylkää')) return;
+    if (draft && draftSnapshot(draft) !== draft.initial && !await askConfirm('Hylätäänkö harjoituksen tallentamattomat muutokset?', 'Hylkää')) return;
     clearDraft(); view = 'home'; render();
   },
   async retry() {
@@ -1689,7 +1759,9 @@ const actions = {
     try { localStorage.removeItem(HR_DEVICE_KEY); } catch { /* Auto-reconnect is optional. */ }
     void hr.disconnect();
   },
-  new() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
+  new() { view = 'newtype'; editError = ''; render(); },
+  newgym() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
+  newfunctional() { openDraft({ id: core.uid(), name: '', type: 'functional', exercises: [], warmup: null, wods: [newEditorWod()], cooldown: null }, true); },
   edit(t) { const r = byId(t.dataset.id); if (r) openDraft(r, false); },
   addex() { if (draft.exercises.length >= 60) return; openLibrary(draft.exercises.find((e) => !e.name.trim())?.id ?? null); },
   pickex(t) { openLibrary(t.dataset.id, false); },
@@ -1700,7 +1772,92 @@ const actions = {
       if (target) { const index = state.session?.exercises.findIndex((e) => e.id === target); if (index >= 0) showCurrentExercise({ index, instant: true }); }
       return;
     }
-    view = 'edit'; render(); document.querySelector(picker.target ? `[data-key="pick-${CSS.escape(picker.target)}"]` : '[data-key="addex"]')?.focus(); },
+    view = 'edit'; render();
+    if (picker.mode === 'wod') {
+      const w = draft?.wods?.find((x) => x.id === picker.wod), last = w?.movements.at(-1);
+      const back = picker.target && w?.movements.some((m) => m.id === picker.target) ? `pickmove-${picker.target}` : `addmovelib-${picker.wod}`;
+      (document.querySelector(`[data-key="${CSS.escape(back)}"]:not(:disabled)`) ?? (last && document.querySelector(`[data-key="${CSS.escape(`pickmove-${last.id}`)}"]`)))?.focus();
+      return;
+    }
+    document.querySelector(picker.target ? `[data-key="pick-${CSS.escape(picker.target)}"]` : '[data-key="addex"]')?.focus(); },
+  addwod() {
+    if (draft?.type !== 'functional' || draft.wods.length >= MAX_WODS) return;
+    const w = newEditorWod();
+    draft.wods.push(w);
+    rememberDraft(); render();
+    document.querySelector(`[data-key="${CSS.escape(`wodformat-${w.id}-${w.format}`)}"]`)?.focus();
+    announce(`${wodPartLabel(draft.wods.length - 1, draft.wods.length)} lisätty. Valitse muoto.`);
+  },
+  async rmwod(t) {
+    const w = draft?.wods?.[+t.dataset.w];
+    if (!w || draft.wods.length < 2) return;
+    const label = wodPartLabel(draft.wods.indexOf(w), draft.wods.length);
+    if (w.movements.some((m) => m.name.trim()) && !await askConfirm(`Poistetaanko ${label} liikkeineen?`, 'Poista')) return;
+    const at = draft?.wods?.indexOf(w) ?? -1;
+    if (at < 0) return;
+    draft.wods.splice(at, 1);
+    for (const m of w.movements) openScaled.delete(m.id);
+    rememberDraft(); render();
+    document.querySelector('[data-key="addwod"]')?.focus();
+    announce(`${label} poistettu.`);
+  },
+  addmove(t) {
+    const w = draft?.wods?.[+t.dataset.w];
+    if (!w || w.movements.length >= MAX_MOVEMENTS) return;
+    const m = editorMovement({});
+    w.movements.push(m);
+    rememberDraft(); render();
+    document.querySelector(`[data-key="${CSS.escape(`mname-${m.id}`)}"]`)?.focus();
+  },
+  addmovelib(t) {
+    const w = draft?.wods?.[+t.dataset.w];
+    if (w) openLibrary(w.movements.find((m) => !m.name.trim())?.id ?? null, true, w.id);
+  },
+  pickmove(t) {
+    const w = draft?.wods?.[+t.dataset.w];
+    if (w?.movements.some((m) => m.id === t.dataset.id)) openLibrary(t.dataset.id, false, w.id);
+  },
+  rmmove(t) {
+    const w = draft?.wods?.[+t.dataset.w], m = w?.movements[+t.dataset.m];
+    if (!m) return;
+    w.movements.splice(+t.dataset.m, 1);
+    openScaled.delete(m.id);
+    rememberDraft(); render();
+    document.querySelector(`[data-key="${CSS.escape(`addmove-${w.id}`)}"]`)?.focus();
+    announce(`Liike ${+t.dataset.m + 1} poistettu.`);
+  },
+  moveup(t) { moveMovement(t, -1); },
+  movedown(t) { moveMovement(t, 1); },
+  scheme(t) {
+    const w = draft?.wods?.[+t.dataset.w];
+    if (w?.format !== 'fortime') return;
+    const chosen = t.dataset.scheme, same = (parseScheme(w.scheme) ?? []).join('-') === chosen;
+    w.scheme = same ? '' : chosen;
+    rememberDraft(); render();
+    announce(same ? 'Toistokaava poistettu.' : `Toistokaava ${chosen}: ${parseScheme(chosen).length} kierrosta.`);
+  },
+  tabata(t) {
+    const w = draft?.wods?.[+t.dataset.w];
+    if (w?.format !== 'intervals') return;
+    Object.assign(w, { work: '20', rest: '10', rounds: '8' });
+    rememberDraft(); render();
+    announce('Tabata asetettu: 8 kierrosta, 20 s työtä ja 10 s lepoa.');
+  },
+  addblock(t) {
+    const kind = t.dataset.block;
+    if (draft?.type !== 'functional' || !BLOCK_KINDS.includes(kind) || draft[kind]) return;
+    draft[kind] = newBlock(kind);
+    rememberDraft(); render();
+    document.querySelector(`[data-key="btext-${kind}"]`)?.focus();
+  },
+  rmblock(t) {
+    const kind = t.dataset.block;
+    if (draft?.type !== 'functional' || !BLOCK_KINDS.includes(kind)) return;
+    draft[kind] = null;
+    rememberDraft(); render();
+    document.querySelector(`[data-key="addblock-${kind}"]`)?.focus();
+    announce(kind === 'warmup' ? 'Lämmittely poistettu.' : 'Loppuverryttely poistettu.');
+  },
   chooseex(t) { return chooseExercise([...EXERCISES, ...state.customExercises].find((e) => e.id === t.dataset.id)); },
   swapex(t) { openSessionLibrary(t.dataset.id); },
   addsessionex() { openSessionLibrary(null); },
@@ -1944,6 +2101,26 @@ document.addEventListener('input', (e) => {
     exercise.progression[t.dataset.progression] = t.value;
     rememberDraft(); return;
   }
+  if (draft?.type === 'functional' && (t.dataset.bf || t.dataset.mf || t.dataset.wf)) {
+    if (t.dataset.bf) {
+      const block = draft[t.dataset.block];
+      if (block && ['text', 'minutes'].includes(t.dataset.bf)) { block[t.dataset.bf] = t.value; rememberDraft(); }
+      return;
+    }
+    const wi = +t.dataset.w, w = draft.wods[wi];
+    if (!w) return;
+    if (t.dataset.mf) {
+      const m = w.movements[+t.dataset.m], field = t.dataset.mf;
+      if (!m) return;
+      if (['name', 'amount', 'load'].includes(field)) m[field] = t.value;
+      else if (['sname', 'samount', 'sload'].includes(field)) m.scaled[field.slice(1)] = t.value;
+      // A retyped name no longer refers to the library movement it was picked from.
+      if (field === 'name') delete m.sourceId;
+    } else if (!['radio', 'checkbox'].includes(t.type) && WOD_TEXT_FIELDS.includes(t.dataset.wf) && Object.hasOwn(w, t.dataset.wf)) w[t.dataset.wf] = t.value;
+    else return;
+    rememberDraft(); paintWodEditor(w, wi);
+    return;
+  }
   if (!t.dataset.f || !draft) return;
   if (t.dataset.f === 'rname') draft.name = t.value;
   else if (t.dataset.f === 'setReps') draft.exercises[+t.dataset.i].setReps[+t.dataset.s] = t.value;
@@ -2001,6 +2178,26 @@ document.addEventListener('change', async (e) => {
     if (t.dataset.tracking === 'loadType' && Object.hasOwn(LOAD_TYPES, t.value)) {
       exercise.tracking = sanitizeTracking({ ...exercise.tracking, loadType: t.value });
       rememberDraft();
+    }
+    return;
+  }
+  if (draft?.type === 'functional' && t.dataset.wf && ['radio', 'checkbox'].includes(t.type)) {
+    const wi = +t.dataset.w, w = draft.wods[wi], field = t.dataset.wf;
+    if (!w) return;
+    if (field === 'format' && t.checked && WOD_FORMATS.includes(t.value) && t.value !== w.format) {
+      draft.wods[wi] = switchFormat(w, t.value);
+      rememberDraft(); render();
+      announce(`${FORMAT_LABELS[t.value]}. ${FORMAT_HELP[t.value]}`);
+    } else if (field === 'score' && t.checked && FORMAT_SCORES[w.format].includes(t.value)) {
+      w.score = t.value;
+      const menu = t.closest('.choice-menu');
+      const value = menu && document.getElementById(`${menu.id}-value`);
+      if (value) value.textContent = SCORE_LABELS[t.value];
+      if (menu) { menu.open = false; menu.querySelector('summary').focus({ preventScroll: true }); }
+      rememberDraft(); paintWodEditor(w, wi);
+    } else if (['alternate', 'ascending'].includes(field) && w.format === 'emom') {
+      w[field] = t.checked;
+      rememberDraft(); paintWodEditor(w, wi);
     }
     return;
   }
@@ -2081,6 +2278,11 @@ document.addEventListener('toggle', (e) => {
   if (e.target.matches('.settings')) settingsOpen = e.target.open;
   if (e.target.matches('.backup-group')) backupOpen = e.target.open;
   if (e.target.matches('.custom-exercise')) customOpen = e.target.open;
+  if (e.target.matches('.move-scaled')) {
+    if (e.target.open) openScaled.add(e.target.dataset.scaled);
+    else openScaled.delete(e.target.dataset.scaled);
+  }
+  if (e.target.matches('.wod-guide')) guideOpen = e.target.open;
 }, true);
 window.addEventListener('storage', (e) => {
   if (e.key !== core.STORAGE_KEY && e.key !== null) return;

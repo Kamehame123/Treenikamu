@@ -126,6 +126,12 @@ html[data-theme="aurora"] .confirm::backdrop { background: #201b35a6; }
 html[data-theme="aurora"] .appearance-option { background: #ffffff; }
 html[data-theme="aurora"] .appearance-option:has(input:checked) { background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
 
+/* Functional training editor */
+html[data-theme="aurora"] .type-choice, html[data-theme="aurora"] .format-option, html[data-theme="aurora"] .chip, html[data-theme="aurora"] .move-scaled { background: #ffffff; }
+html[data-theme="aurora"] .format-option:has(input:checked) { background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
+html[data-theme="aurora"] .chip[aria-pressed="true"] { background: var(--accent-soft); }
+html[data-theme="aurora"] .wod-board { background: #ffffffcc; border-color: #b9a7f1; }
+
 /* Motion: short, opacity-only entrances on real view changes, and one check pop on an explicit set log.
    Never loops, and never applies transforms or filters to anything that contains fixed or sticky UI. */
 @keyframes aurora-rise { from { opacity: 0; } to { opacity: 1; } }

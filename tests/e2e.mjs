@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm, openSettings } from './support.mjs';
+import { SCHEMA } from '../core.js';
 
 const shots = join(tmpdir(), 'tracker-shots'); mkdirSync(shots, { recursive: true });
 const { server, url } = await startServer();
@@ -65,7 +66,7 @@ async function suite(name, type, device) {
     const file = await download;
     const backup = JSON.parse(readFileSync(await file.path(), 'utf8'));
     eq(backup.format, 'gym-tracker-backup', 'export envelope'); eq(backup.formatVersion, 1, 'export envelope version');
-    eq(backup.data.v, 1, 'export schema'); eq(backup.data.routines.length, 1, 'export contains plans');
+    eq(backup.data.v, SCHEMA, 'export schema'); eq(backup.data.routines.length, 1, 'export contains plans');
 
     const importFile = async (key, payload, asks = true) => {
       const before = await page.locator('#import-status').textContent().catch(() => null);
@@ -153,6 +154,8 @@ async function suite(name, type, device) {
     await page.reload(); eq(await histCount(), 2, 'completed history durable');
 
     await tap(button('Luo treeniohjelma'));
+    await views(page, name, 'newtype');
+    await tap(button('Kuntosalitreeni'));
     await tap(button('Tallenna harjoitus')); check(await page.locator('#err').isVisible(), 'validation errors visible');
     await page.locator('[data-f="rname"]').fill('<img src=x onerror=window.__xss=1>');
     await page.locator('[data-f="name"]').first().fill('Dumbbell curl');
@@ -185,6 +188,25 @@ async function suite(name, type, device) {
     await tapConfirm(button('Hylkää harjoitus')); eq(await histCount(), 2, 'discard adds no history');
     await tap(page.getByRole('button', { name: /Muokkaa: <img/ })); await tapConfirm(button('Poista harjoitus'));
     eq(await page.locator('.routine').count(), 1, 'delete template');
+
+    await tap(button('Luo treeniohjelma')); await tap(button('Toiminnallinen treeni'));
+    await page.locator('[data-f="rname"]').fill('Perjantain WOD');
+    await tap(button('Lisää lämmittely')); await tap(button('Lisää loppuverryttely'));
+    await page.locator('[data-mf="name"]').first().fill('Yleisliike');
+    await page.locator('[data-mf="amount"]').first().fill('10');
+    await page.locator('.move-scaled > summary').first().click();
+    await page.locator('.wod-guide > summary').click();
+    await views(page, name, 'functional-editor');
+    for (const format of ['fortime', 'emom', 'intervals']) {
+      await page.locator(`[data-wf="format"][value="${format}"]`).check();
+      for (const width of [390, 320]) { await page.setViewportSize({ width, height: 844 }); await audit(page, `${name}/functional-${format}/${width}`); }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    eq(await page.locator('[data-mf="name"]').first().inputValue(), 'Yleisliike', 'format switch keeps movements');
+    await tap(button('Tallenna harjoitus'));
+    eq(await page.locator('.routine').count(), 2, 'functional plan saved');
+    const fn = (await saved()).routines.find((r) => r.name === 'Perjantain WOD');
+    eq([fn?.type, fn?.wods?.[0]?.format, fn?.wods?.[0]?.movements?.[0]?.name, !!fn?.warmup, !!fn?.cooldown], ['functional', 'intervals', 'Yleisliike', true, true], 'functional plan stored');
 
     for (const bad of ['{nope', '{"routines":5,"session":{"exercises":"x"},"history":[1,null]}']) {
       await page.evaluate((value) => localStorage.setItem('gym-tracker-v1', value), bad); await page.reload();
