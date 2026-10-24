@@ -350,6 +350,12 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 
 ### Inputs and decision rules
 
+- Sets always stack vertically. Unfinished set buttons show "Klikkaa" above
+  "tehdyksi"; completed buttons show a small circular check badge with the set
+  number underneath, without a large outline or repeated result text. Their full
+  tap area stays the same size, and tapping again undoes completion. Screen
+  readers retain the completion state, reps, weight and target. This is a visual
+  change only; saved workouts, history and storage formats are unchanged.
 - Use the **- / + buttons below each set** in training mode to adjust actual reps
   one at a time, before or after marking the set done. The first adjustment starts
   from that set's target (the upper end for a rep range). Further adjustments use

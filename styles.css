@@ -305,8 +305,10 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .set-foot .icon { height: 16px; width: 16px; stroke-width: 2.4; }
 .set-foot { font-size: 12px; font-weight: 650; color: var(--muted); }
 .set-foot-idle { display: block; font-size: 15px; line-height: 1.25; text-align: center; }
-.set.done { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.set.done .set-foot, .set.done .set-label { color: var(--accent); font-weight: 750; }
+.set.done { background: transparent; border-color: transparent; color: var(--accent); gap: 8px; }
+.set-complete { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; background: var(--accent-soft); }
+.set-complete .icon { width: 26px; height: 26px; stroke-width: 2.4; }
+.set.done .set-label { color: var(--muted); font-weight: 650; letter-spacing: 0; }
 .exercise-footer { display: flex; align-items: center; gap: var(--space-1); }
 .exercise-footer::before { content: ""; width: 1px; height: 24px; flex-shrink: 0; background: var(--line-hi); }
 .mini { display: flex; align-items: center; gap: 6px; }

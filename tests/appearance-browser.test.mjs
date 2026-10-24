@@ -159,6 +159,64 @@ try {
           assert.equal(await page.evaluate(() => document.querySelectorAll('[style]').length), 0);
         });
 
+        for (const appearance of ['dark', 'aurora']) {
+          await run(`${appearance}: completed sets use a quiet check badge without changing pending buttons or stored results`, async (context) => {
+            const state = core.defaultState();
+            state.settings.autoRest = false;
+            state.settings.cheers = false;
+            state.session = core.startSession(state.routines[0]);
+            Object.assign(state.session.exercises[0].sets[0], { done: true, actualReps: '7', actualWeight: '42,5' });
+            const page = await seed(context, { appearance, state, ready: '.ex' });
+            const before = await raw(page);
+            const done = page.locator('[data-key="s0-0"]');
+            const pending = page.locator('[data-key="s0-1"]');
+            for (const width of [320, 390, 1040]) {
+              await page.setViewportSize({ width, height: 900 });
+              assert.equal((await done.innerText()).trim(), 'Sarja 1');
+              assert.equal(await done.getAttribute('aria-pressed'), 'true');
+              assert.match(await done.getAttribute('aria-label'), /Sarja 1 Tehty!\. 7 x 42.5kg/);
+              assert.equal(await done.locator('.set-complete[aria-hidden="true"] .icon').count(), 1);
+              assert.equal(await done.locator('.set-foot, .set-value, .set-planned').count(), 0);
+              assert.equal(await pending.innerText(), 'Klikkaa\ntehdyksi');
+              assert.equal(await pending.locator('.set-foot-idle').evaluate((el) => getComputedStyle(el).fontSize), '15px');
+              assert.equal(await pending.getAttribute('aria-pressed'), 'false');
+              assert.deepEqual(await done.evaluate((el) => {
+                const style = getComputedStyle(el);
+                const badge = el.querySelector('.set-complete');
+                const rect = badge.getBoundingClientRect();
+                return [style.backgroundColor, style.borderTopColor, rect.width, rect.height, getComputedStyle(badge).borderRadius];
+              }), ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)', 44, 44, '50%']);
+              const box = await done.boundingBox();
+              const nextBox = await pending.boundingBox();
+              assert.ok(box.width >= 48 && box.height >= 48, `${width}: full touch target`);
+              assert.equal(box.height, nextBox.height, `${width}: no layout jump on completion`);
+              assert.ok(nextBox.y >= box.y + box.height, `${width}: sets remain vertically stacked`);
+              assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+              assert.equal(await raw(page), before, 'resizing never rewrites training data');
+            }
+            const violations = (await new AxeBuilder({ page }).include('#exercise-0').analyze()).violations;
+            assert.deepEqual(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), []);
+            const results = () => page.evaluate(() => {
+              const state = JSON.parse(localStorage.getItem('gym-tracker-v1'));
+              return [state.session.exercises[0].sets[0], state.routines, state.history];
+            });
+            const original = await results();
+            await done.click();
+            await page.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+            assert.equal(await done.getAttribute('aria-pressed'), 'false');
+            assert.equal(await done.innerText(), 'Klikkaa\ntehdyksi');
+            assert.deepEqual(await results(), [{ ...original[0], done: false }, original[1], original[2]]);
+            await done.press('Enter');
+            await page.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+            assert.deepEqual(await results(), original, 'keyboard completion preserves logged reps and weight');
+            await page.reload();
+            await done.waitFor();
+            assert.equal((await done.innerText()).trim(), 'Sarja 1');
+            assert.equal(await done.getAttribute('aria-pressed'), 'true');
+            assert.deepEqual(await results(), original, 'completion and results survive reload');
+          }, { reducedMotion: 'reduce', serviceWorkers: 'block', bypassCSP: true });
+        }
+
         await run('Dark mode renders the finished-set rail color exactly as before', async (context) => {
           const state = core.defaultState();
           state.settings.autoRest = false;

@@ -80,8 +80,8 @@ html[data-theme="aurora"] .progress::-webkit-progress-value { background: linear
 html[data-theme="aurora"] .progress::-moz-progress-bar { background: linear-gradient(90deg, #6544d8, #1a9a7f); }
 html[data-theme="aurora"] .set { background: #ffffff; border-radius: 22px; box-shadow: 0 2px 8px #4b2fb314; }
 html[data-theme="aurora"] .set.next { background: var(--card-hi); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), 0 6px 16px #6544d826; }
-html[data-theme="aurora"] .set.done { background: var(--success-soft); border-color: var(--success); color: var(--success); box-shadow: none; }
-html[data-theme="aurora"] .set.done .set-foot, html[data-theme="aurora"] .set.done .set-label { color: var(--success); }
+html[data-theme="aurora"] .set.done { background: transparent; border-color: transparent; color: var(--success); box-shadow: none; }
+html[data-theme="aurora"] .set.done .set-complete { background: var(--success-soft); }
 html[data-theme="aurora"] .set.done .set-planned { color: var(--muted); }
 html[data-theme="aurora"] .stepper { background: var(--input); border-radius: 18px; }
 html[data-theme="aurora"] .step-btn { background: #ffffff; box-shadow: 0 1px 4px #4b2fb31f; }
@@ -140,7 +140,7 @@ html[data-theme="aurora"] .segmented [aria-pressed="true"], html[data-theme="aur
 html[data-theme="aurora"] #app[data-entering] :is(.stats > *, .routine-list > li, .home-aside > *, .statistics-content > *, .timer-card, .timer-item, .ex, .wod-card, .block-card, .history-list > li) { animation: aurora-rise .26s ease-out both; }
 html[data-theme="aurora"] #app[data-entering] :is(.stats > :nth-child(2), .routine-list > li:nth-child(2), .ex:nth-of-type(2)) { animation-delay: 40ms; }
 html[data-theme="aurora"] #app[data-entering] :is(.stats > :nth-child(3), .routine-list > li:nth-child(3), .ex:nth-of-type(3)) { animation-delay: 80ms; }
-html[data-theme="aurora"] .set.just-logged.done .set-foot .icon { animation: aurora-check .28s ease-out; }
+html[data-theme="aurora"] .set.just-logged.done .set-complete .icon { animation: aurora-check .28s ease-out; }
 html[data-theme="aurora"] .set, html[data-theme="aurora"] .btn, html[data-theme="aurora"] .step-btn, html[data-theme="aurora"] .appearance-option { transition: transform .12s, background-color .18s, border-color .18s, box-shadow .18s; }
 
 @media (prefers-reduced-motion: reduce) {

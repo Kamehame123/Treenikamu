@@ -1,4 +1,7 @@
 [
+  { "version": 86, "date": "2026-10-24", "changes": [
+    "Tehdyt sarjat näkyvät nyt pelkistettynä: pyöreä merkki ja pieni sarjanumero ilman suurta kehystä tai Tehty!-tekstiä. Klikkaa tehdyksi -painike ja sarjojen pystysuuntainen asettelu säilyvät ennallaan. Merkinnän voi perua napauttamalla. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 82, "date": "2026-10-24", "changes": [
     "Uusi ohjelmatyyppi Toiminnallinen treeni: luo lämmittelyn, voima- tai taito-osan ja WOD-osat (aikaa vastaan, AMRAP, EMOM, intervallit) tai aloita valmiista mallista ja tunnetuista vertailutreeneistä. WOD-kello laskee kierrokset, ääni ja värinä kertovat vaihdokset, ja tulos täyttyy kellon ajasta. Historia, ennätykset ja varmuuskopiot toimivat kuten kuntosaliohjelmissa. Päivitä sovellus kaikissa avoimissa välilehdissä ja laitteissa. Tallennetut treenit ja historia säilyvät."
   ] },
