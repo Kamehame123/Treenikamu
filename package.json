@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "icons": "node tools/gen-icons.mjs",
-    "test": "node --test tests/core.test.mjs tests/appearance.test.mjs tests/assets.test.mjs tests/library.test.mjs tests/progression.test.mjs tests/cheers.test.mjs tests/autobackup.test.mjs tests/heartrate.test.mjs tests/statistics.test.mjs tests/timer.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/appearance.test.mjs tests/assets.test.mjs tests/library.test.mjs tests/progression.test.mjs tests/cheers.test.mjs tests/autobackup.test.mjs tests/heartrate.test.mjs tests/statistics.test.mjs tests/timer.test.mjs tests/wod.test.mjs",
     "test:appearance": "node --test tests/appearance.test.mjs tests/appearance-browser.test.mjs",
     "test:launcher": "node --test tests/launcher.test.mjs",
     "test:setup": "playwright install chromium webkit",
