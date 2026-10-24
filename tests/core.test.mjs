@@ -182,14 +182,14 @@ test('quick weight adjustments use the exercise step, keep decimals and clear th
   r.exercises[0].weight = '22,5 kg';
   const s = c.startSession(r), exercise = s.exercises[0], set = exercise.sets[0];
   const step = c.weightStepFor(exercise);
-  assert.equal(step, 2);
+  assert.equal(step, 1);
   assert.equal(c.setWeightValue(exercise, set), 22.5);
-  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 24.5 });
-  assert.equal(set.actualWeight, '24,5');
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 23.5 });
+  assert.equal(set.actualWeight, '23,5');
   assert.equal(c.weightStepFor(exercise), step, 'the step is fixed by the plan, not by the logged weight');
   assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 22.5 });
   assert.equal('actualWeight' in set, false);
-  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 20.5 });
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 21.5 });
   assert.equal(exercise.weight, '22,5 kg');
   assert.equal(r.exercises[0].weight, '22,5 kg');
 });
@@ -205,7 +205,7 @@ test('a saved routine weight step wins over the automatic one and reaches the se
   assert.equal(c.sanitizeSession(s).exercises[0].weightStep, 1.25);
   s.exercises[0].weightStep = 'bad';
   assert.equal('weightStep' in c.sanitizeSession(s).exercises[0], false);
-  assert.equal(c.weightStepFor(s.exercises[0]), 2.5);
+  assert.equal(c.weightStepFor(s.exercises[0]), 1);
 });
 
 test('typed weights accept decimal commas and units, and report bad input without changing records', () => {
@@ -248,7 +248,7 @@ test('quick weight handles empty plans, bounds and non-numeric weights without c
   exercise.weight = '';
   assert.equal(c.setWeightValue(exercise, set), 0);
   assert.equal(c.adjustSetWeight(s, 0, 0, -1).ok, false);
-  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 2.5 });
+  assert.deepEqual(c.adjustSetWeight(s, 0, 0, 1), { ok: true, weight: 1 });
   assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 0 });
   exercise.weight = '0,2';
   assert.deepEqual(c.adjustSetWeight(s, 0, 0, -1), { ok: true, weight: 0 });

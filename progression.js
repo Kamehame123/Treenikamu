@@ -33,23 +33,8 @@ export function classifyExercise(exercise) {
   return { kind, category, equipment, isolation, lowerCompound, compound: kind === 'lowerCompound' || kind === 'upperCompound' };
 }
 
-export function automaticWeightStep(exercise, weightOverride = null) {
-  const weight = weightOverride ?? parseWeight(exercise?.weight);
-  if (!Number.isFinite(weight) || weight <= 0) return 2.5;
-  const { isolation } = classifyExercise(exercise);
-  if (isolation) {
-    if (weight < 5) return 0.25;
-    if (weight < 12) return 0.5;
-    if (weight < 20) return 1;
-    if (weight < 30) return 1.25;
-    return 2.5;
-  }
-  if (weight < 5) return 0.25;
-  if (weight < 10) return 0.5;
-  if (weight < 12.5) return 1;
-  if (weight < 20) return 1.25;
-  if (weight < 25) return 2;
-  return 2.5;
+export function automaticWeightStep() {
+  return 1;
 }
 
 export function recommendedRestSeconds(exercise, setIndex = null) {

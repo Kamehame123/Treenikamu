@@ -72,6 +72,19 @@ try {
           try { await work(page, context); assert.deepEqual(errors, []); } finally { await context.close(); }
         });
 
+        await run('the editor defaults to a 1 kg step and preserves it across reload', async (page) => {
+          const state = fixture();
+          state.session = null;
+          delete state.routines[0].exercises[0].progression;
+          await seed(page, state);
+          await tap(button(page, 'Muokkaa: Kasvu'));
+          assert.match(await page.locator('.progression-editor summary').innerText(), /askel 1 kg/);
+          assert.equal(await page.locator('[data-progression="weightStep"]').inputValue(), '1');
+          await page.reload();
+          assert.equal(await page.locator('[data-progression="weightStep"]').inputValue(), '1');
+          assert.equal((await saved(page)).routines[0].exercises[0].progression, undefined);
+        });
+
         await run('automatic selection progresses strength and higher-rep work without an 8-15 constraint', async (page) => {
           const strength = fixture({ reps: '5', autoProgress: true, complete: true });
           delete strength.routines[0].exercises[0].progression;

@@ -376,8 +376,8 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   its original target; adjustments never change the plan, mark the set done, or
   start a rest timer. Timed and nonnumeric targets have no rep-adjustment buttons.
 - A second **- / + stepper** on each set adjusts the weight by the exercise's weight
-  step: the step saved in the routine, otherwise the automatic step for the planned
-  weight (for example 2 kg at 22,5 kg, 2,5 kg at 100 kg). The step is fixed by the
+  step: the step saved in the routine, otherwise the default 1 kg.
+  The step is fixed by the
   plan, so it stays the same while tapping. Decimals such as 22,5 are kept. It
   starts from the planned weight (0 when none is planned) and stores an override
   only while it differs from the plan. Weights that are not plain kilograms (for
@@ -444,11 +444,11 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   increase cannot exceed 10%. Reduce reps according to the size of that step and
   the demonstrated repetitions (`ceil((30 + reps) * step / newWeight)`, at least
   one rep).
-- Load increments (`automaticWeightStep`) scale automatically with exercise
-  biomechanics and working weight (0.25-2.5 kg, or up to 2 steps when a large
-  repetition/set surplus is demonstrated while remaining <= 10% of load) so lighter
-  isolation movements and narrower strength ranges progress automatically without
-  manual step configuration. Numeric kg loads are supported. Bodyweight, compound
+- Load increments (`automaticWeightStep`) default to 1 kg; saved custom steps
+  remain unchanged. Automatic progression can choose a smaller practical step or
+  up to two default steps when a large repetition/set surplus is demonstrated,
+  while remaining <= 10% of load and within the repetition range.
+  Numeric kg loads are supported. Bodyweight, compound
   notation, other units, assisted/band movements, or disabled external-load
   progression never receive guessed load changes.
 - Poor recovery is reported **before** a workout: open a program and start it with

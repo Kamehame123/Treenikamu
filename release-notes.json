@@ -1,4 +1,7 @@
 [
+  { "version": 93, "date": "2026-10-24", "changes": [
+    "Automaattisen kehityksen oletuspainoaskel on nyt 1 kg. Omat tallennetut painoaskeleet ja harjoitustiedot säilyvät."
+  ] },
   { "version": 92, "date": "2026-10-24", "changes": [
     "Valmiisiin kuntosaliohjelmiin on lisätty Yläkroppa ja Core. Tallennetut treenit ja historia säilyvät."
   ] },

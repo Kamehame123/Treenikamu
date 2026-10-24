@@ -10,7 +10,7 @@ const fixture = (reps = '10', extra = {}) => ({
   routines: [core.sanitizeRoutine({
     id: 'routine', name: 'Voima',
     exercises: [{ id: 'exercise', name: 'Kyykky', sets: 3, reps, weight: '100 kg', ...extra,
-      progression: { minReps: 8, maxReps: 15, ...extra.progression } }],
+      progression: { minReps: 8, maxReps: 15, weightStep: 2.5, ...extra.progression } }],
   })],
 });
 function record(state, days = 0, options = {}) {
@@ -42,6 +42,20 @@ function automaticFixture(reps, extra = {}) {
   delete state.routines[0].exercises[0].progression;
   return state;
 }
+
+test('all default steps are 1 kg and saved custom steps survive reload', () => {
+  for (const name of ['Takakyykky', 'Vipunosto sivulle', 'Oma liike']) {
+    for (const weight of ['', '3 kg', '8 kg', '22,5 kg', '120 kg']) {
+      assert.equal(p.progressionConfig({ name, weight }).weightStep, 1);
+    }
+  }
+  const state = fixture('10', { progression: { weightStep: 1.25 } });
+  const store = memory();
+  core.saveState(store, state);
+  const restored = core.loadState(store);
+  assert.deepEqual(restored, state);
+  assert.equal(p.progressionConfig(exercise(restored)).weightStep, 1.25);
+});
 
 test('automatic ranges reflect existing strength, mixed and higher-rep work rather than 8-15', () => {
   for (const [reps, name, min, max, next] of [
@@ -76,15 +90,15 @@ test('automatic ceilings remain fixed through rep progression, new loads, reload
   record(state, 1); revise(state);
   assert.equal(exercise(state).weight, '100 kg');
   record(state); revise(state);
-  assert.equal(exercise(state).weight, '102.5 kg');
-  assert.equal(exercise(state).reps, '10');
+  assert.equal(exercise(state).weight, '101 kg');
+  assert.equal(exercise(state).reps, '11');
   const store = memory();
   core.saveState(store, state);
   const restored = core.loadState(store);
   assert.equal(p.progressionConfig(exercise(restored)).maxReps, 12);
   record(restored); revise(restored);
-  assert.equal(exercise(restored).reps, '11');
-  assert.equal(exercise(restored).weight, '102.5 kg');
+  assert.equal(exercise(restored).reps, '12');
+  assert.equal(exercise(restored).weight, '101 kg');
 });
 
 test('automatic selection preserves per-set targets and partial settings without inventing saved limits', () => {
@@ -308,12 +322,12 @@ test('extra repetitions and extra sets are accounted for scientifically in the n
   assert.equal(exercise(extraSetAtCeiling).sets, 3);
 });
 
-test('automatic weight steps and rest intervals adapt to exercise biomechanics, load and effort', () => {
+test('default weight steps are 1 kg while rest and safe load increments adapt to the exercise', () => {
   const lightIsolation = automaticFixture('12', { name: 'Vipunosto sivulle', weight: '8 kg' });
-  assert.equal(p.automaticWeightStep(exercise(lightIsolation)), 0.5);
+  assert.equal(p.automaticWeightStep(exercise(lightIsolation)), 1);
   assert.equal(p.recommendedRestSeconds(exercise(lightIsolation)), 90);
   const heavySquat = automaticFixture('5', { name: 'Takakyykky', weight: '120 kg' });
-  assert.equal(p.automaticWeightStep(exercise(heavySquat)), 2.5);
+  assert.equal(p.automaticWeightStep(exercise(heavySquat)), 1);
   assert.equal(p.recommendedRestSeconds(exercise(heavySquat)), 180);
   const corePlank = automaticFixture('45 s', { name: 'Lankku', weight: '' });
   assert.equal(p.recommendedRestSeconds(exercise(corePlank)), 60);
@@ -592,13 +606,13 @@ test('conflicting imported plans retain history/session relationships and re-imp
 test('progression settings are bounded defensively and invalid editor values are reported', () => {
   const starter = core.defaultState().routines[0];
   assert.equal(JSON.stringify(core.sanitizeRoutine(starter)), JSON.stringify(starter));
-  assert.deepEqual(p.progressionConfig({}), { minReps: 6, maxReps: 12, weightStep: 2.5, autoLoad: true });
+  assert.deepEqual(p.progressionConfig({}), { minReps: 6, maxReps: 12, weightStep: 1, autoLoad: true });
   const state = fixture();
   exercise(state).progression = { minReps: 15, maxReps: 8, weightStep: 0 };
   assert.equal(core.validateRoutine(state.routines[0]).length, 2);
   const sanitized = core.sanitizeRoutine(state.routines[0]);
   assert.equal(sanitized.exercises[0].progression.maxReps, 15);
-  assert.equal(sanitized.exercises[0].progression.weightStep, 2.5);
+  assert.equal(sanitized.exercises[0].progression.weightStep, 1);
 });
 
 test('re-revising after correcting the source workout recomputes instead of stacking the increase', () => {
