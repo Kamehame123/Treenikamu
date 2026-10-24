@@ -132,6 +132,8 @@ test('modalities come from the exercise library', () => {
   const wod = w.sanitizeWod({ format: 'amrap', minutes: 20, movements: [{ name: 'Kyykkypunnerrus tangolla' }, { name: 'yleisliike' }, { name: 'Juoksu' }, { name: 'Oma keksitty liike' }] });
   assert.deepEqual(w.modalities(wod), ['G', 'W', 'M']);
   assert.deepEqual(w.modalities(w.sanitizeWod({ format: 'amrap', movements: [{ name: 'Tuntematon' }] })), []);
+  assert.deepEqual(w.modalities(w.sanitizeWod({ format: 'amrap', movements: [{ name: 'Laatikkohyppy' }, { name: 'Tuplahyppy narulla' }, { name: 'Devil press' }] })), ['G', 'W', 'M']);
+  assert.deepEqual(w.modalities(w.sanitizeWod({ format: 'amrap', movements: [{ name: 'Oma nimi', sourceId: 'lib-varpaat-tankoon' }] })), ['G'], 'a renamed library movement keeps its source');
 });
 
 test('wodKey identifies the work, not the label', () => {

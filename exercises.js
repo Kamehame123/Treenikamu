@@ -3,7 +3,9 @@ export const CATEGORIES = Object.freeze(['Rinta', 'Selkä', 'Hartiat', 'Hauis', 
 export const EQUIPMENT = Object.freeze(['Levytanko', 'Käsipainot', 'Laite', 'Talja', 'Kehonpaino', 'Kahvakuula', 'Vastuskuminauha', 'Muu väline']);
 export const normalizeSearch = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fi-FI').replace(/[^a-z0-9]+/g, ' ').trim();
 
-// group, equipment, Finnish name | common search aliases. Each row is a real variation.
+// group, equipment, Finnish name | common search aliases [| default target, only where the rules
+// below would suggest a wrong one]. Each row is a real variation. Never rename a row: its id comes
+// from the name and saved exercises refer to it.
 const groups = [
   ['Rinta', 'Levytanko', `Penkkipunnerrus|bench press
 Vinopenkkipunnerrus tangolla|incline bench press
@@ -75,9 +77,12 @@ Leuanveto vastaotteella|chin up
 Leuanveto neutraalilla otteella|neutral grip pull up
 Negatiivinen leuanveto|eccentric pull up
 Lapaleuanveto|scapular pull up
-Käänteinen soutu|inverted row australian pull up
+Käänteinen soutu|inverted row australian pull up ring row
 Selänojennus penkissä|back extension hyperextension
-Supermiesliike|superman`],
+Supermiesliike|superman
+Rintatankoon leuanveto|chest to bar pull up c2b
+Kippausleuanveto|kipping pull up butterfly pull up
+Köysikiipeily|rope climb|3`],
   ['Selkä', 'Vastuskuminauha', `Soutu vastuskuminauhalla|band row
 Ylätaljaveto vastuskuminauhalla|band lat pulldown
 Kasvoveto vastuskuminauhalla|band face pull
@@ -111,7 +116,10 @@ Pystypunnerrus Smith-laitteessa|smith shoulder press`],
   ['Hartiat', 'Kehonpaino', `Haukipunnerrus|pike push up
 Käsilläseisontapunnerrus seinää vasten|wall handstand push up
 Olkapään kosketus lankussa|plank shoulder tap
-Seinäliuku|wall slide`],
+Seinäliuku|wall slide
+Käsilläseisonta seinää vasten|wall handstand hold|30 s
+Käsilläkävely|handstand walk
+Seinäkävely|wall walk|5`],
   ['Hauis', 'Levytanko', `Hauiskääntö tangolla|barbell curl
 Hauiskääntö mutkatangolla|ez bar curl
 Hauiskääntö vastaotteella tangolla|reverse barbell curl
@@ -154,7 +162,8 @@ JM-punnerrus|jm press`],
   ['Ojentajat', 'Kehonpaino', `Dippi|triceps dip
 Penkkidippi|bench dip
 Timanttipunnerrus|diamond push up
-Kapea etunojapunnerrus|close grip push up`],
+Kapea etunojapunnerrus|close grip push up
+Rengasdippi|ring dip`],
   ['Ojentajat', 'Laite', `Avustettu dippi|assisted dip
 Ojentajapunnerrus laitteessa|triceps extension machine`],
   ['Etureidet', 'Levytanko', `Takakyykky|back squat
@@ -182,7 +191,7 @@ Kyykky Smith-laitteessa|smith squat
 Askelkyykky Smith-laitteessa|smith lunge
 Vyökyykky|belt squat
 Pendulum-kyykky|pendulum squat`],
-  ['Etureidet', 'Kehonpaino', `Kehonpainokyykky|bodyweight squat
+  ['Etureidet', 'Kehonpaino', `Kehonpainokyykky|bodyweight squat air squat
 Askelkyykky|bodyweight lunge
 Askelkyykky taakse|reverse lunge
 Sivukyykky|lateral lunge
@@ -258,10 +267,14 @@ Polvien nosto roikkuen|hanging knee raise
 V-istunta|v sit
 Ontto pito|hollow body hold
 Vuorikiipeilijä|mountain climber
-Istumaannousu|sit up
+Istumaannousu|sit up abmat
 Kantapään kosketus maaten|heel touch
 Sivulankun lantionnosto|side plank hip lift
-Lankusta punnerrusasentoon|plank up down`],
+Lankusta punnerrusasentoon|plank up down
+Varpaat tankoon|toes to bar t2b
+Polvet kyynärpäihin|knees to elbows k2e
+GHD-istumaannousu|ghd sit up
+L-istunta|l sit|20 s`],
   ['Keskivartalo', 'Talja', `Vatsarutistus taljassa|cable crunch
 Pallof-punnerrus|pallof press
 Vartalon kierto taljassa|cable wood chop
@@ -277,7 +290,7 @@ Vartalon kierto kuntopallolla|medicine ball russian twist`],
 Vartalon kierto käsipainolla|dumbbell russian twist
 Matkalaukkukanto|suitcase carry
 Viljelijän kävely käsipainoilla|farmers walk`],
-  ['Koko keho', 'Kahvakuula', `Kahvakuulaheilautus|kettlebell swing
+  ['Koko keho', 'Kahvakuula', `Kahvakuulaheilautus|kettlebell swing american swing russian swing
 Yhden käden kahvakuulaheilautus|single arm swing
 Kahvakuularinnalleveto|kettlebell clean
 Kahvakuulatempaus|kettlebell snatch
@@ -298,13 +311,25 @@ Työntö|jerk
 Kyykkypunnerrus tangolla|barbell thruster
 Valakyykky|overhead squat
 Rinnallevetoveto|clean pull
-Tempausveto|snatch pull`],
+Tempausveto|snatch pull
+Rinnalleveto ja työntö|clean and jerk
+Saksaustyöntö|split jerk
+Työntö ilman saksausta|push jerk power jerk
+Sumoveto leukaan|sumo deadlift high pull sdhp`],
+  ['Koko keho', 'Käsipainot', `Tempaus käsipainolla|dumbbell snatch
+Kyykkypunnerrus käsipainoilla|dumbbell thruster
+Rinnalleveto käsipainoilla|dumbbell clean
+Devil press|dumbbell devil press`],
   ['Koko keho', 'Kehonpaino', `Yleisliike|burpee
 Kyykkyhyppy|squat jump
 Askelkyykkyhyppy|jump lunge
 Karhukävely|bear crawl
 Mittarimatokävely|inchworm
-Rapukävely|crab walk`],
+Rapukävely|crab walk
+Yleisliike laatikon yli|burpee box jump over
+Yleisliike tangon yli|bar facing burpee
+Lihasylösnousu renkailla|ring muscle up|3
+Lihasylösnousu tangolla|bar muscle up|3`],
   ['Koko keho', 'Muu väline', `Kelkan työntö|sled push
 Kelkan veto|sled drag
 Kuntopallon paiskaus|medicine ball slam
@@ -318,7 +343,7 @@ Kuntopyörä|stationary bike
 Soutulaite|rowing ergometer
 Crosstrainer|elliptical
 Porraskone|stair climber
-Ilmavastuspyörä|air bike assault bike
+Ilmavastuspyörä|air bike assault bike echo bike
 Hiihtolaite|ski erg
 Spinningpyörä|spin bike`],
   ['Kestävyys', 'Kehonpaino', `Kävely|walking
@@ -329,12 +354,14 @@ Haarahyppy|jumping jack
 Luisteluhyppy|skater hop
 Sivulaukka|lateral shuffle
 Varjonyrkkeily|shadow boxing
-Porrasnousu|stair walking`],
+Porrasnousu|stair walking
+Sukkulajuoksu|shuttle run`],
   ['Kestävyys', 'Muu väline', `Hyppynaru|jump rope skipping
 Pyöräily|cycling
 Uinti|swimming
 Hiihto|cross country skiing
-Soutu vesillä|outdoor rowing`],
+Soutu vesillä|outdoor rowing
+Tuplahyppy narulla|double under`],
   ['Liikkuvuus', 'Kehonpaino', `Lonkan koukistajan venytys|hip flexor stretch
 Takareiden venytys|hamstring stretch
 Etureiden venytys|quad stretch
@@ -369,9 +396,9 @@ function defaultExerciseReps(category, name, aliases) {
   return '8';
 }
 export const EXERCISES = Object.freeze(groups.flatMap(([category, equipment, rows]) => rows.split('\n').map((row) => {
-  const [name, aliases = ''] = row.split('|');
+  const [name, aliases = '', reps = ''] = row.split('|');
   return Object.freeze({ id: `lib-${normalizeSearch(name).replace(/ /g, '-')}`, name, category, equipment, aliases,
-    reps: defaultExerciseReps(category, name, aliases) });
+    reps: reps || defaultExerciseReps(category, name, aliases) });
 })));
 
 export function findExercises(query = '', { category = '', equipment = '', customOnly = false, custom = [] } = {}) {

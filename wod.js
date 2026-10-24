@@ -275,12 +275,14 @@ const LIBRARY_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));
 const LIBRARY_BY_NAME = new Map(EXERCISES.map((e) => [normalizeSearch(e.name), e]));
 
 // G = gymnastics (own body), W = weightlifting and objects, M = monostructural cardio. Unknown movements are skipped.
+// Library groups follow muscles and equipment; a box jump still counts as gymnastics in a WOD.
+const MODALITY_OVERRIDES = { 'lib-laatikkohyppy': 'G' };
 export function modalities(wod) {
   const found = new Set();
   for (const m of wod.movements ?? []) {
     const entry = LIBRARY_BY_ID.get(m.sourceId) ?? LIBRARY_BY_NAME.get(normalizeSearch(m.name));
     if (!entry || entry.category === 'Liikkuvuus') continue;
-    found.add(entry.category === 'Kestävyys' ? 'M' : entry.equipment === 'Kehonpaino' ? 'G' : 'W');
+    found.add(MODALITY_OVERRIDES[entry.id] ?? (entry.category === 'Kestävyys' ? 'M' : entry.equipment === 'Kehonpaino' ? 'G' : 'W'));
   }
   return ['G', 'W', 'M'].filter((k) => found.has(k));
 }

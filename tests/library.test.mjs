@@ -57,3 +57,28 @@ test('custom import deduplicates names and respects the durable library cap', ()
   assert.equal(merged.customExercises.length, core.MAX_CUSTOM_EXERCISES);
   assert.deepEqual(core.sanitizeState(merged).customExercises, merged.customExercises);
 });
+
+test('functional training movements are findable by their usual English names', () => {
+  const find = (query) => findExercises(query).map((e) => e.name);
+  for (const [query, name] of [
+    ['toes to bar', 'Varpaat tankoon'], ['t2b', 'Varpaat tankoon'], ['double under', 'Tuplahyppy narulla'], ['c2b', 'Rintatankoon leuanveto'],
+    ['ring muscle up', 'Lihasylösnousu renkailla'], ['bar muscle up', 'Lihasylösnousu tangolla'], ['wall walk', 'Seinäkävely'], ['handstand walk', 'Käsilläkävely'],
+    ['l-sit', 'L-istunta'], ['ghd', 'GHD-istumaannousu'], ['rope climb', 'Köysikiipeily'], ['ring dip', 'Rengasdippi'], ['clean and jerk', 'Rinnalleveto ja työntö'],
+    ['split jerk', 'Saksaustyöntö'], ['push jerk', 'Työntö ilman saksausta'], ['sdhp', 'Sumoveto leukaan'], ['dumbbell snatch', 'Tempaus käsipainolla'],
+    ['dumbbell thruster', 'Kyykkypunnerrus käsipainoilla'], ['devil press', 'Devil press'], ['burpee box jump over', 'Yleisliike laatikon yli'],
+    ['bar facing burpee', 'Yleisliike tangon yli'], ['shuttle run', 'Sukkulajuoksu'], ['air squat', 'Kehonpainokyykky'], ['abmat', 'Istumaannousu'],
+    ['echo bike', 'Ilmavastuspyörä'], ['ring row', 'Käänteinen soutu'], ['russian swing', 'Kahvakuulaheilautus'],
+  ]) assert.ok(find(query).includes(name), `${query} -> ${name}`);
+});
+
+test('library additions keep existing ids and defaults; explicit defaults fix holds and skills', () => {
+  const byId = new Map(EXERCISES.map((e) => [e.id, e]));
+  for (const [id, name, reps] of [['lib-kasillaseisontapunnerrus-seinaa-vasten', 'Käsilläseisontapunnerrus seinää vasten', '8'],
+    ['lib-kehonpainokyykky', 'Kehonpainokyykky', '8'], ['lib-istumaannousu', 'Istumaannousu', '12'], ['lib-kahvakuulaheilautus', 'Kahvakuulaheilautus', '8'],
+    ['lib-tyonto', 'Työntö', '5'], ['lib-hyppynaru', 'Hyppynaru', '5 min'], ['lib-leuanveto-myotaotteella', 'Leuanveto myötäotteella', '8']]) {
+    assert.deepEqual([byId.get(id)?.name, byId.get(id)?.reps], [name, reps], id);
+  }
+  const reps = (id) => byId.get(id).reps;
+  assert.deepEqual(['lib-kasillaseisonta-seinaa-vasten', 'lib-l-istunta', 'lib-seinakavely', 'lib-koysikiipeily', 'lib-lihasylosnousu-renkailla'].map(reps), ['30 s', '20 s', '5', '3', '3']);
+  for (const e of EXERCISES) assert.equal(e.id, `lib-${normalizeSearch(e.name).replace(/ /g, '-')}`, e.name);
+});
