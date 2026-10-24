@@ -14,6 +14,7 @@ import {
   SCHEME_CHIPS, MODALITY_LABELS, DIVISIONS, sanitizeWod, parseScheme, boardLines, modalities, movementLine, wodMinutes, wodPartLabel,
   wodTitle, formatScore, resultLabel, previousResult, bestResults, isPersonalRecord, clockFace,   formatTime, wodHeadline, wodKey, resultFields,
 } from './wod.js';
+import { GYM_PROGRAMS } from './gym-programs.js';
 import { DEFAULT_WARMUP, DEFAULT_COOLDOWN, TEMPLATES, TEMPLATE_GROUPS, SEXES, templateWod, templateRoutine } from './wod-templates.js';
 
 export const FORMAT_TAGLINES = Object.freeze({
@@ -93,7 +94,7 @@ export function normalizeFunctionalDraft(d) {
 export function typeChoices(icon) {
   // The note is the button's description, not part of its name, so voice control can say just the type.
   const choice = (action, glyph, name, note) => `<li><button class="type-choice" data-action="${action}" data-key="${action}" aria-describedby="${action}-note"><span class="choice-icon">${icon(glyph)}</span><span class="grow"><strong>${name}</strong><span class="choice-meta" id="${action}-note" aria-hidden="true">${note}</span></span>${icon('arrow')}</button></li>`;
-  return `<ul class="list type-choices">${choice('newgym', 'weight', 'Kuntosalitreeni', 'Liikkeet, sarjat, toistot ja painot. Tavoitteet kehittyvät tulostesi mukaan.')}${choice('newfunctional', 'stopwatch', 'Toiminnallinen treeni', 'Lämmittely, voima tai taito ja ajastettu WOD: aikaa vastaan, AMRAP, EMOM tai intervallit.')}${choice('newtemplate', 'board', 'Aloita mallista', 'Toiminnallinen treeni valmiista rakenteesta tai tunnetusta vertailutreenistä. Muokattavissa ennen tallennusta.')}</ul>`;
+  return `<ul class="list type-choices">${choice('newgym', 'weight', 'Kuntosalitreeni', 'Liikkeet, sarjat, toistot ja painot. Tavoitteet kehittyvät tulostesi mukaan.')}${choice('newfunctional', 'stopwatch', 'Toiminnallinen treeni', 'Lämmittely, voima tai taito ja ajastettu WOD: aikaa vastaan, AMRAP, EMOM tai intervallit.')}${choice('newgymprogram', 'weight', 'Valmis kuntosaliohjelma', 'Seitsemän yleistä perusohjelmaa: koko keho A ja B, työntävät, vetävät, jalat, yläkroppa ja core. Muokattavissa ennen tallennusta.')}${choice('newtemplate', 'board', 'Aloita mallista', 'Toiminnallinen treeni valmiista rakenteesta tai tunnetusta vertailutreenistä. Muokattavissa ennen tallennusta.')}</ul>`;
 }
 
 export function wodGuide(open = false) {
@@ -235,6 +236,11 @@ export function templateGallery(group, sex, icon) {
   const toggles = (action, attr, options, current, labelling) => `<div class="segmented" role="group" ${labelling}>${Object.entries(options).map(([value, text]) => `<button class="btn secondary" data-action="${action}" data-${attr}="${value}" data-key="${action}-${value}" aria-pressed="${current === value}">${text}</button>`).join('')}</div>`;
   const cards = TEMPLATES.filter((t) => t.group === group).map((t) => templateCard(t, sex, icon)).join('');
   return `<section class="card gallery-controls" aria-label="Mallien valinta">${toggles('templategroup', 'group', TEMPLATE_GROUPS, group, 'aria-label="Mallien ryhmä"')}<p class="field-hint">${GROUP_NOTES[group]}</p><div class="gallery-loads"><span class="eyebrow" id="gallery-loads">Ehdotetut kuormat</span>${toggles('templatesex', 'sex', SEXES, sex, 'aria-labelledby="gallery-loads"')}</div></section><ul class="list template-list" aria-label="${TEMPLATE_GROUPS[group]}">${cards}</ul>`;
+}
+
+export function gymProgramGallery(icon) {
+  const cards = GYM_PROGRAMS.map((p) => `<li class="card template-card"><h2>${esc(p.name)}</h2><p class="template-parts">${p.exercises.map((e) => esc(`${e.name} ${e.sets} × ${e.reps}`)).join(' · ')}</p><p class="field-hint">${esc(p.note)}</p><button class="btn secondary" data-action="usegymprogram" data-program="${esc(p.id)}" data-key="use-${esc(p.id)}">Käytä ohjelmaa<span class="sr"> ${esc(p.name)}</span> ${icon('arrow')}</button></li>`).join('');
+  return `<ul class="list template-list" aria-label="Valmiit kuntosaliohjelmat">${cards}</ul>`;
 }
 
 // ---- Running workout: warm-up, cool-down and WOD parts ----

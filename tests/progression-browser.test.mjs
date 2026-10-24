@@ -120,6 +120,52 @@ try {
           assert.equal(await page.locator('[data-progression="autoLoad"]').isChecked(), false);
         });
 
+        await run('progression editor keeps consistent spacing and aligned fields at mobile and desktop widths', async (page) => {
+          const state = fixture();
+          state.session = null;
+          await seed(page, state);
+          await tap(button(page, 'Muokkaa: Kasvu'));
+          const editor = page.locator('.progression-editor');
+          await editor.locator('summary').click();
+          for (const theme of ['dark', 'aurora']) {
+            await page.evaluate((theme) => window.TrackerAppearance.set(theme), theme);
+            for (const width of [320, 390, 960]) {
+              await page.setViewportSize({ width, height: 900 });
+              const layout = await editor.evaluate((el) => {
+                const rect = (selector) => el.querySelector(selector).getBoundingClientRect();
+                const description = rect('p'), action = rect('[data-action="autorange"]');
+                const grid = rect('.grid3'), toggle = rect('.check');
+                const inputs = [...el.querySelectorAll('.grid3 input')].map((input) => {
+                  const { top, width, height } = input.getBoundingClientRect();
+                  return { top, width, height };
+                });
+                return {
+                  descriptionGap: action.top - description.bottom,
+                  actionGap: grid.top - action.bottom,
+                  toggleGap: toggle.top - grid.bottom,
+                  bottomPadding: el.getBoundingClientRect().bottom - toggle.bottom,
+                  inputs,
+                  overflow: document.documentElement.scrollWidth > innerWidth,
+                };
+              });
+              const label = `${theme}, ${width}px`;
+              assert.ok(layout.descriptionGap >= 12, `${label}: description/button gap`);
+              assert.ok(layout.actionGap >= 16, `${label}: button/fields gap`);
+              assert.ok(layout.toggleGap >= 16, `${label}: fields/toggle gap`);
+              assert.ok(layout.bottomPadding >= 12, `${label}: panel bottom padding`);
+              assert.equal(layout.overflow, false, `${label}: no horizontal overflow`);
+              for (const input of layout.inputs) {
+                assert.ok(Math.abs(input.top - layout.inputs[0].top) < 1, `${label}: aligned inputs`);
+                assert.ok(Math.abs(input.width - layout.inputs[0].width) < 1, `${label}: equal columns`);
+                assert.ok(input.height >= 48, `${label}: touch target height`);
+              }
+            }
+          }
+          await editor.locator('summary').click();
+          assert.equal(await editor.locator('[data-action="autorange"]').isVisible(), false);
+          assert.deepEqual(await saved(page), state, 'layout changes do not modify training data');
+        });
+
         await run('stepper reps and loads, RIR zero and pain persist across reload', async (page) => {
           await seed(page, fixture());
           await tap(page.locator('[data-key="reps-minus-0-0"]'));

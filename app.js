@@ -9,7 +9,8 @@ import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDa
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
 import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, DIVISIONS, parseScheme, wodPartLabel, wodTitle, resultFields, buildResult, resultLabel, isPersonalRecord, clockFace, startClock, pauseClock, resumeClock, settleClock, stopClock, addLap, undoLap } from './wod.js';
-import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard, clockScreen, clockParts, clockStatus, isFunctionalRoutine, routineWodPills, routineLastResults, historyWork, historyWods, historyWodEditor } from './wod-ui.js';
+import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, gymProgramGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard, clockScreen, clockParts, clockStatus, isFunctionalRoutine, routineWodPills, routineLastResults, historyWork, historyWods, historyWodEditor } from './wod-ui.js';
+import { gymProgramById, gymProgramRoutine } from './gym-programs.js';
 import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateById, templateRoutine } from './wod-templates.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
@@ -1241,6 +1242,10 @@ function newTypeView() {
   return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="newtype-back">${icon('back')} Peruuta</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Uusi treeniohjelma</p><h1 tabindex="-1">Millainen ohjelma?</h1><p class="editor-copy">Kumpikin ohjelmatyyppi tallentuu, näkyy historiassa ja kulkee varmuuskopiossa samalla tavalla.</p></div>${typeChoices(icon)}`;
 }
 
+function gymGalleryView() {
+  return `<header class="editor-header"><button class="btn ghost back" data-action="galleryback" data-key="gallery-back">${icon('back')} Takaisin</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Valmis kuntosaliohjelma</p><h1 tabindex="-1">Valitse ohjelma</h1><p class="editor-copy">Yleisiä perusohjelmia aloittelijalle. Lisää painot itse ja muokkaa liikkeet ennen tallennusta.</p></div>${gymProgramGallery(icon)}`;
+}
+
 function galleryView() {
   return `<header class="editor-header"><button class="btn ghost back" data-action="galleryback" data-key="gallery-back">${icon('back')} Takaisin</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Aloita mallista</p><h1 tabindex="-1">Valitse malli</h1><p class="editor-copy">Malli avautuu toiminnallisena treeninä, jossa on valmiina lämmittely ja loppuverryttely. Voit muuttaa kaiken ennen tallennusta.</p></div>${templateGallery(galleryGroup, templateSex, icon)}`;
 }
@@ -1373,7 +1378,7 @@ function render() {
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
   $app.toggleAttribute('data-entering', changed);
-  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'wod' ? wodClockView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : view === 'gallery' ? galleryView() : homeView();
+  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'wod' ? wodClockView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : view === 'gallery' ? galleryView() : view === 'gymgallery' ? gymGalleryView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -2022,7 +2027,12 @@ const actions = {
   newgym() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
   newfunctional() { openDraft({ id: core.uid(), name: '', type: 'functional', exercises: [], warmup: null, wods: [newEditorWod()], cooldown: null }, true); },
   newtemplate() { view = 'gallery'; render(); },
-  galleryback() { view = 'newtype'; render(); document.querySelector('[data-key="newtemplate"]')?.focus(); },
+  newgymprogram() { view = 'gymgallery'; render(); },
+  usegymprogram(t) {
+    const program = gymProgramById(t.dataset.program);
+    if (program) openDraft(core.sanitizeRoutine(gymProgramRoutine(program, core.uid)), true);
+  },
+  galleryback() { const gym = view === 'gymgallery'; view = 'newtype'; render(); document.querySelector(`[data-key="${gym ? 'newgymprogram' : 'newtemplate'}"]`)?.focus(); },
   templategroup(t) {
     if (!isTemplateGroup(t.dataset.group) || t.dataset.group === galleryGroup) return;
     galleryGroup = t.dataset.group; render();

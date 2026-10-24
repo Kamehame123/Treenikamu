@@ -1,4 +1,10 @@
 [
+  { "version": 92, "date": "2026-10-24", "changes": [
+    "Valmiisiin kuntosaliohjelmiin on lisätty Yläkroppa ja Core. Tallennetut treenit ja historia säilyvät."
+  ] },
+  { "version": 91, "date": "2026-10-24", "changes": [
+    "Uusi treeniohjelma -valinnassa on nyt Valmis kuntosaliohjelma: viisi yleistä perusohjelmaa (koko keho A ja B, työntävät, vetävät ja jalat). Valitse ohjelma, lisää painot ja muokkaa liikkeet ennen tallennusta. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 90, "date": "2026-10-24", "changes": [
     "Ohjelmakortin avausnuoli on poistettu. Aloita-painikkeen vasemmalla puolella näkyvät nyt päälihasryhmien symbolit ja kunkin ryhmän liikkeiden määrä. Ohjelman tiedot avautuvat edelleen otsikkoa napauttamalla. Tallennetut treenit ja historia säilyvät."
   ] },
