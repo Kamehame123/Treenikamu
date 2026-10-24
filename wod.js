@@ -412,7 +412,7 @@ export function clockFace(wod, clock, now = Date.now()) {
   const at = clockAt(wod, clockElapsed(clock, now));
   const plan = at.plan, laps = clock?.laps ?? [];
   const face = { phase: at.phase, workMs: at.workMs, paused: !!clock && clock.pausedAt !== null && !clock.endedAt,
-    time: '', label: '', detail: '', target: '', round: 0, rounds: plan.rounds, cue: '', sound: null, say: '' };
+    time: '', label: '', detail: '', target: '', round: 0, rounds: plan.rounds, segment: '', cue: '', sound: null, say: '' };
   const tick = (slot, ms) => {
     const s = Math.ceil(ms / 1000);
     return s <= 3 ? { cue: `${slot}:${s}`, sound: 'tick' } : null;
@@ -442,7 +442,7 @@ export function clockFace(wod, clock, now = Date.now()) {
   }
   if (wod.format === 'intervals') {
     const work = at.segment === 'work', slot = `seg:${at.round}:${at.segment}`;
-    Object.assign(face, { round: at.round, time: formatClock(at.remainingMs), label: work ? 'TYÖ' : 'LEPO', detail: `Kierros ${at.round}/${plan.rounds}` });
+    Object.assign(face, { round: at.round, segment: at.segment, time: formatClock(at.remainingMs), label: work ? 'TYÖ' : 'LEPO', detail: `Kierros ${at.round}/${plan.rounds}` });
     return Object.assign(face, tick(slot, at.remainingMs) ?? { cue: slot, sound: work ? 'go' : 'rest',
       say: `${at.round === 1 && work ? 'Nyt! ' : ''}${work ? 'Työ' : 'Lepo'}, kierros ${at.round}/${plan.rounds}.` });
   }

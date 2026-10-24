@@ -12,7 +12,7 @@ import { escapeHtml as esc } from './statistics-ui.js';
 import {
   MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, FORMAT_DEFAULTS,
   SCHEME_CHIPS, MODALITY_LABELS, DIVISIONS, sanitizeWod, parseScheme, boardLines, modalities, movementLine, wodMinutes, wodPartLabel,
-  wodTitle, formatScore, resultLabel, previousResult, bestResults, isPersonalRecord,
+  wodTitle, formatScore, resultLabel, previousResult, bestResults, isPersonalRecord, clockFace, formatTime,
 } from './wod.js';
 import { DEFAULT_WARMUP, DEFAULT_COOLDOWN, TEMPLATES, TEMPLATE_GROUPS, SEXES, templateWod, templateRoutine } from './wod-templates.js';
 
@@ -126,9 +126,9 @@ const boardMeta = (wod) => {
   return `<p class="board-meta"><span>${minutes ? `Kesto noin ${decimal(minutes)} min` : 'Kesto riippuu tahdista'}</span>${modalities(wod).map((k) => `<span class="pill">${MODALITY_LABELS[k]}</span>`).join('')}</p>`;
 };
 // One version of the whiteboard. The headline is left out when the card title already says it.
-function wodBoard(wod, division, title) {
+function wodBoard(wod, division, title, { meta = true } = {}) {
   const [headline, ...lines] = boardLines(wod, division);
-  return `<div class="wod-board">${headline === title ? '' : `<p class="board-headline">${esc(headline)}</p>`}<ul class="board-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>${boardMeta(wod)}</div>`;
+  return `<div class="wod-board">${headline === title ? '' : `<p class="board-headline">${esc(headline)}</p>`}<ul class="board-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>${meta ? boardMeta(wod) : ''}</div>`;
 }
 
 // What the whiteboard will say, from the values the save would store.
@@ -288,13 +288,77 @@ function resultSummary(w, wi, history, cheer) {
   return `<div class="wod-result"><p class="wod-score"><span class="eyebrow">Tulos</span> <strong>${esc(formatScore(r, { long: true }))}</strong> <span class="badge">${DIVISIONS[r.division]}</span>${record ? ' <span class="badge done-badge">Uusi ennätys</span>' : ''}</p>${r.rpe ? `<p class="field-hint">RPE ${r.rpe}</p>` : ''}${r.notes ? `<p class="wod-notes">${esc(r.notes)}</p>` : ''}${cheer ? `<p class="cheer">${esc(cheer)}</p>` : ''}<button class="btn secondary" data-action="openresult" data-w="${wi}" data-key="openresult-${esc(w.id)}">Muokkaa tulosta<span class="sr"> (${esc(wodTitle(w))})</span></button></div>`;
 }
 
+// ---- WOD clock ----
+
+// Rounds are counted by tapping: always in an AMRAP, and in For Time when it has several rounds.
+export const countsRounds = (w) => w.format === 'amrap' || (w.format === 'fortime' && w.rounds > 1);
+
+// What the clock shows. A paused clock says so instead of its running label.
+export function clockParts(face) {
+  return { label: face.paused ? 'Tauolla' : face.label, time: face.time, target: face.target, detail: face.detail };
+}
+
+// The one-line clock status on a WOD card; app.js keeps a running one current.
+export function clockStatus(face) {
+  const { label, time, detail } = clockParts(face);
+  return [label, time, face.phase === 'done' ? detail : ''].filter(Boolean).join(' · ');
+}
+
+// Start the clock, follow a running one, or log what an ended one measured.
+// "Kirjaa tulos" without the clock is for a workout timed by the gym's own clock.
+function clockActions(w, wi, title, icon, now) {
+  const id = esc(w.id), sr = `<span class="sr"> (${esc(title)})</span>`;
+  const log = (kind) => `<button class="btn ${kind}" data-action="openresult" data-w="${wi}" data-key="openresult-${id}">Kirjaa tulos${sr} ${icon('arrow')}</button>`;
+  const start = (kind, text) => `<button class="btn ${kind}" data-action="clockstart" data-w="${wi}" data-key="clockstart-${id}">${text}${sr} ${icon('stopwatch')}</button>`;
+  if (!w.clock) return `<div class="wod-actions">${start('primary big', 'Käynnistä kello')}${log('secondary')}</div>`;
+  const status = `<p class="clock-status">Kello: <span id="wc-mini-${wi}">${esc(clockStatus(clockFace(w, w.clock, now)))}</span></p>`;
+  if (!w.clock.endedAt) return `${status}<button class="btn primary big" data-action="clockopen" data-w="${wi}" data-key="clockopen-${id}">Avaa kello${sr} ${icon('stopwatch')}</button>`;
+  return `${status}<div class="wod-actions">${log('primary big')}${start('secondary', 'Käynnistä kello uudelleen')}</div>`;
+}
+
 // One WOD part of a running workout. current: the part to do next; form: the open result form's fields.
-export function sessionWodCard(w, wi, { count, history = [], current = false, form = null, error = '', cheer = '', advanced = false, icon }) {
+export function sessionWodCard(w, wi, { count, history = [], current = false, form = null, error = '', cheer = '', advanced = false, icon, now = Date.now() }) {
   const id = esc(w.id), title = wodTitle(w), division = w.division === 'scaled' ? 'scaled' : 'rx';
   const badge = w.result ? '<span class="badge done-badge">Kirjattu</span>' : current ? '<span class="badge now">Vuorossa</span>' : '';
   const versions = `<div class="segmented" role="group" aria-label="Näytettävä versio: ${esc(title)}">${Object.entries(DIVISIONS).map(([value, text]) => `<button class="btn secondary" data-action="wodversion" data-w="${wi}" data-division="${value}" data-key="wodversion-${id}-${value}" aria-pressed="${division === value}">${text}</button>`).join('')}</div>`;
   const unwritten = division === 'scaled' && !w.movements.some((m) => m.scaled) ? '<p class="field-hint">Skaalattua versiota ei ole kirjoitettu. Kevennä kuormaa, määrää tai liikettä niin, että tuntuma säilyy.</p>' : '';
-  const result = form ? resultForm(w, wi, form, { error, advanced }) : w.result ? resultSummary(w, wi, history, cheer)
-    : `<button class="btn primary big" data-action="openresult" data-w="${wi}" data-key="openresult-${id}">Kirjaa tulos<span class="sr"> (${esc(title)})</span> ${icon('arrow')}</button>`;
+  // The form opened from an ended clock says what the clock measured; the fields are prefilled from it.
+  const measured = form && !w.result && w.clock?.endedAt ? `<p class="clock-status">Kello: ${esc(clockStatus(clockFace(w, w.clock, now)))}</p>` : '';
+  const result = form ? `${measured}${resultForm(w, wi, form, { error, advanced })}` : w.result ? resultSummary(w, wi, history, cheer) : clockActions(w, wi, title, icon, now);
   return `<li class="card wod-card${w.result ? ' complete' : ''}${current ? ' current' : ''}" id="wod-${wi}"><div class="exercise-heading"><span class="exercise-index">${wodPartLabel(wi, count)}</span><h2 class="grow">${esc(title)}</h2>${badge}</div>${versions}${unwritten}${wodBoard(w, division, title)}${w.stimulus ? `<p class="board-stimulus">${esc(w.stimulus)}</p>` : ''}${w.notes ? `<p class="wod-notes">${esc(w.notes)}</p>` : ''}${wodPast(w, history)}${result}</li>`;
+}
+
+// The round counter. On the last For Time round the tap target becomes a note of the same size,
+// so a quick double tap cannot count a round that does not exist; "Valmis" ends the workout.
+function lapArea(w, face) {
+  const laps = w.clock.laps, n = laps.length;
+  const final = w.format === 'fortime' && n >= w.rounds - 1;
+  const tapper = final
+    ? '<p class="clock-lap clock-lap-final" data-key="clocklap" tabindex="-1">Viimeinen kierros<small>Paina Valmis, kun kierros on tehty.</small></p>'
+    : `<button class="btn primary clock-lap" data-action="clocklap" data-key="clocklap" aria-disabled="${face.phase !== 'run' || face.paused}">+1 kierros</button>`;
+  const split = n ? formatTime((laps[n - 1] - (n > 1 ? laps[n - 2] : 0)) / 1000) : '';
+  const info = n ? `${n} ${n === 1 ? 'kierros' : 'kierrosta'} tehty · viimeisin ${split}` : 'Napauta +1 kierros aina, kun kierros on tehty.';
+  return `<div class="clock-laps">${tapper}<p class="clock-lap-info">${info}</p>${n ? '<button class="btn ghost" data-action="clockundo" data-key="clockundo">Peru viimeisin kierros</button>' : ''}</div>`;
+}
+
+// The WOD clock screen below the session header. app.js updates the wc-* ids in place every tick.
+export function clockScreen(w, wi, { count, history = [], icon, now = Date.now() }) {
+  const face = clockFace(w, w.clock, now), parts = clockParts(face), title = wodTitle(w);
+  const division = w.division === 'scaled' ? 'scaled' : 'rx', fortime = w.format === 'fortime';
+  const long = face.time.length > 5 ? ' long' : '';
+  const heading = `<div class="stat-heading"><p class="eyebrow accent">${wodPartLabel(wi, count)} · ${DIVISIONS[division]}</p><h1 tabindex="-1">${esc(title)}</h1></div>`;
+  const board = `<section class="card clock-board" aria-label="Taulu: ${esc(title)}">${wodBoard(w, division, title, { meta: false })}${w.stimulus ? `<p class="board-stimulus">${esc(w.stimulus)}</p>` : ''}${wodPast(w, history)}</section>`;
+  if (face.phase === 'done') {
+    return `${heading}<section class="card timer-card wod-clock" id="wod-clock" data-phase="done" aria-label="WOD-kello"><span class="eyebrow accent">${icon('check')} ${esc(face.label)}</span><strong class="timer-clock${long}">${face.time}</strong>${face.detail ? `<p class="timer-label">${esc(face.detail)}</p>` : ''}</section>`
+      + `<div class="timer-controls"><button class="btn" data-action="clockback" data-key="clockback-done">Harjoitukseen</button><button class="btn primary" data-action="clocklog" data-key="clocklog">${w.result ? 'Muokkaa tulosta' : 'Kirjaa tulos'}</button></div>${board}`;
+  }
+  const hidden = (text) => text ? '' : ' hidden';
+  const clock = `<section class="card timer-card wod-clock" id="wod-clock" data-phase="${face.phase}" data-segment="${face.segment}" data-paused="${face.paused}" aria-label="WOD-kello"><span class="timer-round" id="wc-label">${esc(parts.label)}</span><strong class="timer-clock${long}" id="wc-time">${face.time}</strong><p class="timer-label" id="wc-target"${hidden(parts.target)}>${esc(parts.target)}</p><p class="timer-next muted" id="wc-detail"${hidden(parts.detail)}>${esc(parts.detail)}</p></section>`;
+  const laps = countsRounds(w) ? lapArea(w, face) : '';
+  // "Valmis" leads once there is no round left to count.
+  const finishing = fortime && !(countsRounds(w) && w.clock.laps.length < w.rounds - 1);
+  const pause = face.paused ? `<button class="btn primary" data-action="clockresume" data-key="clock-pause">${icon('play')}Jatka</button>` : `<button class="btn" data-action="clockpause" data-key="clock-pause">${icon('pause')}Tauko</button>`;
+  const done = fortime ? `<button class="btn${finishing ? ' primary' : ''}" data-action="clockdone" data-key="clock-done" aria-disabled="${face.phase === 'preroll'}">${icon('check')}Valmis</button>` : '';
+  const controls = `<div class="timer-controls timer-run-controls${fortime ? '' : ' clock-controls-2'}"><button class="btn" data-action="clockstop" data-key="clock-stop">${icon('stop')}Lopeta</button>${pause}${done}</div>`;
+  return `${heading}${clock}${laps}${controls}${board}`;
 }

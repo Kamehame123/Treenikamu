@@ -239,8 +239,8 @@ test('a WOD card shows the whiteboard of the chosen version and the next step', 
   assert.match(html, /<li>Kyykkypunnerrus tangolla \(29 kg\)<\/li><li>Leuanveto myötäotteella<\/li>/);
   assert.match(html, /<p class="board-stimulus">/);
   assert.match(html, /<div class="wod-past"><p>Ensimmäinen kerta: tulos on lähtötasosi\.<\/p><\/div>/);
-  assert.match(html, new RegExp(`<button class="btn primary big" data-action="openresult" data-w="0" data-key="openresult-${wod.id}">Kirjaa tulos<span class="sr"> \\(Fran\\)</span> <svg data-icon="arrow"></svg></button></li>$`));
-  assert.doesNotMatch(html, /result-form|Skaalattua versiota ei ole|crossfit/i);
+  assert.match(html, new RegExp(`<div class="wod-actions"><button class="btn primary big" data-action="clockstart" data-w="0" data-key="clockstart-${wod.id}">Käynnistä kello<span class="sr"> \\(Fran\\)</span> <svg data-icon="stopwatch"></svg></button><button class="btn secondary" data-action="openresult" data-w="0" data-key="openresult-${wod.id}">Kirjaa tulos<span class="sr"> \\(Fran\\)</span> <svg data-icon="arrow"></svg></button></div></li>$`), 'the clock leads; a result timed elsewhere can still be logged');
+  assert.doesNotMatch(html, /result-form|clock-status|Skaalattua versiota ei ole|crossfit/i);
 
   const scaled = ui.sessionWodCard({ ...wod, division: 'scaled' }, 1, { count: 2, icon });
   assert.match(scaled, /^<li class="card wod-card" id="wod-1"><div class="exercise-heading"><span class="exercise-index">WOD 2<\/span><h2 class="grow">Fran<\/h2><\/div>/);
@@ -319,4 +319,106 @@ test('a logged WOD shows its score, version, a new record and the record cheer',
   const editing = ui.sessionWodCard(done, 0, { count: 1, history, form: w.resultFields(done), icon });
   assert.match(editing, /<form class="result-form"/);
   assert.doesNotMatch(editing, /wod-score/, 'the open form replaces the summary');
+});
+
+// ---- WOD clock ----
+
+const T0 = Date.UTC(2025, 2, 4, 12), PRE = w.PREROLL_MS;
+const timed = (wod, laps = [], extra = {}) => ({ ...wod, clock: { startedAt: T0, pausedAt: null, pausedMs: 0, laps, ...extra } });
+const templateWod = (id) => c.startSession(c.sanitizeRoutine(templateRoutine(templateById(id), 'women')), T0, { history: [] }).wods[0];
+
+test('the WOD card starts the clock, follows a running one and logs what an ended one measured', () => {
+  const wod = franWod(), id = wod.id;
+  const running = ui.sessionWodCard(timed(wod), 0, { count: 1, current: true, icon, now: T0 + PRE + 65000 });
+  assert.match(running, new RegExp(`<p class="clock-status">Kello: <span id="wc-mini-0">Aikaa vastaan · 1:05</span></p><button class="btn primary big" data-action="clockopen" data-w="0" data-key="clockopen-${id}">Avaa kello<span class="sr"> \\(Fran\\)</span> <svg data-icon="stopwatch"></svg></button></li>$`));
+  assert.doesNotMatch(running, /data-action="(clockstart|openresult)"/, 'a running clock is followed, not restarted or logged by hand');
+  assert.match(ui.sessionWodCard(timed(wod), 0, { count: 1, icon, now: T0 + 3000 }), /<span id="wc-mini-0">Valmistaudu · 7<\/span>/);
+  assert.match(ui.sessionWodCard(timed(wod, [], { pausedAt: T0 + PRE + 30000 }), 0, { count: 1, icon, now: T0 + PRE + 90000 }), /<span id="wc-mini-0">Tauolla · 0:30<\/span>/);
+
+  const ended = timed(wod, [], { endedAt: T0 + PRE + 272000 });
+  assert.match(ui.sessionWodCard(ended, 0, { count: 1, icon, now: T0 + 9e6 }), new RegExp(`<p class="clock-status">Kello: <span id="wc-mini-0">Valmis · 4:32</span></p><div class="wod-actions"><button class="btn primary big" data-action="openresult" data-w="0" data-key="openresult-${id}">Kirjaa tulos<span class="sr"> \\(Fran\\)</span> <svg data-icon="arrow"></svg></button><button class="btn secondary" data-action="clockstart" data-w="0" data-key="clockstart-${id}">Käynnistä kello uudelleen<span class="sr"> \\(Fran\\)</span> <svg data-icon="stopwatch"></svg></button></div></li>$`));
+  const form = ui.sessionWodCard(ended, 0, { count: 1, icon, form: w.resultFields(ended) });
+  assert.match(form, /<p class="clock-status">Kello: Valmis · 4:32<\/p><form class="result-form"/, 'the form says what the clock measured');
+  assert.match(form, /value="4" data-rf="min"[\s\S]*value="32" data-rf="sec"/);
+  const capped = timed(wod, [], { endedAt: T0 + PRE + 600000 });
+  assert.match(ui.sessionWodCard(capped, 0, { count: 1, icon, form: w.resultFields(capped) }), /Kello: Aikaraja · 10:00<\/p>[\s\S]*data-rf="capped"[^>]* checked>/);
+
+  const logged = { ...ended, result: { kind: 'time', seconds: 272, division: 'rx' } };
+  assert.doesNotMatch(ui.sessionWodCard(logged, 0, { count: 1, icon }), /clock-status|data-action="clock/, 'a logged part shows its result');
+  assert.doesNotMatch(ui.sessionWodCard(logged, 0, { count: 1, icon, form: w.resultFields(logged) }), /clock-status/, 'correcting a result does not repeat the clock');
+
+  const cindy = timed(templateWod('cindy'), [300000, 610000, 900000], { endedAt: T0 + PRE + 1200000 });
+  assert.match(ui.sessionWodCard(cindy, 0, { count: 1, icon }), /<span id="wc-mini-0">Aika loppui · 20:00 · 3 kierrosta<\/span>/);
+});
+
+test('the clock screen shows the pre-roll, the time with the round to do, and controls for the format', () => {
+  const fran = franWod(), screen = (wod, now, count = 1) => ui.clockScreen(wod, 0, { count, history: [], icon, now });
+  const pre = screen(timed(fran), T0 + 3000);
+  assert.match(pre, /^<div class="stat-heading"><p class="eyebrow accent">WOD · Rx<\/p><h1 tabindex="-1">Fran<\/h1><\/div><section class="card timer-card wod-clock" id="wod-clock" data-phase="preroll" data-segment="" data-paused="false" aria-label="WOD-kello">/);
+  assert.match(pre, /<span class="timer-round" id="wc-label">Valmistaudu<\/span><strong class="timer-clock" id="wc-time">7<\/strong><p class="timer-label" id="wc-target" hidden><\/p><p class="timer-next muted" id="wc-detail">21-15-9 aikaa vastaan · aikaraja 10 min<\/p><\/section>/);
+  assert.match(pre, /<div class="clock-laps"><button class="btn primary clock-lap" data-action="clocklap" data-key="clocklap" aria-disabled="true">\+1 kierros<\/button><p class="clock-lap-info">Napauta \+1 kierros aina, kun kierros on tehty\.<\/p><\/div>/);
+  assert.match(pre, /<div class="timer-controls timer-run-controls"><button class="btn" data-action="clockstop" data-key="clock-stop"><svg data-icon="stop"><\/svg>Lopeta<\/button><button class="btn" data-action="clockpause" data-key="clock-pause"><svg data-icon="pause"><\/svg>Tauko<\/button><button class="btn" data-action="clockdone" data-key="clock-done" aria-disabled="true"><svg data-icon="check"><\/svg>Valmis<\/button><\/div>/);
+  assert.match(pre, /<section class="card clock-board" aria-label="Taulu: Fran"><div class="wod-board"><p class="board-headline">21-15-9 aikaa vastaan · aikaraja 10 min<\/p>/);
+  assert.match(pre, /<p class="board-stimulus">Lyhyt ja erittäin kova[^<]*<\/p><div class="wod-past"><p>Ensimmäinen kerta: tulos on lähtötasosi\.<\/p><\/div><\/section>$/);
+  assert.doesNotMatch(pre, /board-meta|clockundo|crossfit/i, 'the board on the clock skips the duration and equipment');
+
+  const go = screen(timed(fran), T0 + PRE + 1000);
+  assert.match(go, /data-phase="run" data-segment="" data-paused="false"/);
+  assert.match(go, /id="wc-label">Nyt!<\/span><strong class="timer-clock" id="wc-time">0:01<\/strong><p class="timer-label" id="wc-target">Nyt: 21<\/p><p class="timer-next muted" id="wc-detail">Kierros 1\/3 · aikaraja 10:00<\/p>/);
+  assert.match(go, /data-action="clocklap" data-key="clocklap" aria-disabled="false">/);
+  assert.match(go, /<button class="btn" data-action="clockdone" data-key="clock-done" aria-disabled="false">/, 'with rounds left to count, the round counter leads');
+
+  const second = screen(timed(fran, [60000]), T0 + PRE + 90000);
+  assert.match(second, /id="wc-time">1:30<\/strong><p class="timer-label" id="wc-target">Nyt: 15<\/p><p class="timer-next muted" id="wc-detail">Kierros 2\/3 · aikaraja 10:00<\/p>/);
+  assert.match(second, /<p class="clock-lap-info">1 kierros tehty · viimeisin 1:00<\/p><button class="btn ghost" data-action="clockundo" data-key="clockundo">Peru viimeisin kierros<\/button><\/div>/);
+
+  const last = screen(timed(fran, [60000, 150000]), T0 + PRE + 200000);
+  assert.match(last, /<div class="clock-laps"><p class="clock-lap clock-lap-final" data-key="clocklap" tabindex="-1">Viimeinen kierros<small>Paina Valmis, kun kierros on tehty\.<\/small><\/p><p class="clock-lap-info">2 kierrosta tehty · viimeisin 1:30<\/p>/);
+  assert.match(last, /id="wc-target">Nyt: 9<\/p>/);
+  assert.match(last, /<button class="btn primary" data-action="clockdone" data-key="clock-done" aria-disabled="false"><svg data-icon="check"><\/svg>Valmis<\/button>/, 'on the last round, "Valmis" leads');
+  assert.doesNotMatch(last, /data-action="clocklap"/, 'a round that does not exist cannot be tapped');
+
+  const paused = screen(timed(fran, [60000], { pausedAt: T0 + PRE + 70000 }), T0 + PRE + 500000);
+  assert.match(paused, /data-phase="run" data-segment="" data-paused="true"/);
+  assert.match(paused, /id="wc-label">Tauolla<\/span><strong class="timer-clock" id="wc-time">1:10<\/strong>/);
+  assert.match(paused, /data-action="clocklap" data-key="clocklap" aria-disabled="true">/);
+  assert.match(paused, /<button class="btn primary" data-action="clockresume" data-key="clock-pause"><svg data-icon="play"><\/svg>Jatka<\/button>/);
+
+  const done = screen(timed(fran, [60000, 150000], { endedAt: T0 + PRE + 272000 }), T0 + 9e6);
+  assert.match(done, /<section class="card timer-card wod-clock" id="wod-clock" data-phase="done" aria-label="WOD-kello"><span class="eyebrow accent"><svg data-icon="check"><\/svg> Valmis<\/span><strong class="timer-clock">4:32<\/strong><\/section><div class="timer-controls"><button class="btn" data-action="clockback" data-key="clockback-done">Harjoitukseen<\/button><button class="btn primary" data-action="clocklog" data-key="clocklog">Kirjaa tulos<\/button><\/div><section class="card clock-board"/);
+  assert.doesNotMatch(done, /id="wc-|clock-laps|timer-run-controls/, 'an ended clock has nothing left to update or control');
+  assert.match(screen({ ...timed(fran, [], { endedAt: T0 + PRE + 272000 }), result: { kind: 'time', seconds: 272, division: 'rx' } }, T0), /data-key="clocklog">Muokkaa tulosta<\/button>/);
+  assert.match(ui.clockScreen({ ...timed(fran), division: 'scaled' }, 1, { count: 2, icon, now: T0 }), /<p class="eyebrow accent">WOD 2 · Skaalattu<\/p>[\s\S]*<li>Avustettu leuanveto<\/li>/);
+
+  const grace = screen(timed(templateWod('grace')), T0 + PRE + 5000);
+  assert.doesNotMatch(grace, /clock-laps/, 'one round has nothing to count');
+  assert.match(grace, /<button class="btn primary" data-action="clockdone"/);
+
+  const cindy = screen(timed(templateWod('cindy'), [100000, 200000]), T0 + PRE + 300000);
+  assert.match(cindy, /id="wc-label">AMRAP<\/span><strong class="timer-clock" id="wc-time">15:00<\/strong><p class="timer-label" id="wc-target" hidden><\/p><p class="timer-next muted" id="wc-detail">Kierros 3<\/p>/);
+  assert.match(cindy, /<p class="clock-lap-info">2 kierrosta tehty · viimeisin 1:40<\/p>/);
+  assert.match(cindy, /<div class="timer-controls timer-run-controls clock-controls-2"><button class="btn" data-action="clockstop"[^>]*>[\s\S]*Lopeta<\/button><button class="btn" data-action="clockpause"[^>]*>[\s\S]*Tauko<\/button><\/div>/, 'a time-capped format has no "Valmis"');
+  assert.match(screen(timed(templateWod('cindy'), [100000, 200000, 900000], { endedAt: T0 + PRE + 1200000 }), T0), /> Aika loppui<\/span><strong class="timer-clock">20:00<\/strong><p class="timer-label">3 kierrosta<\/p><\/section>/);
+
+  const emom = screen(timed(templateWod('emom-10')), T0 + PRE + 5000);
+  assert.match(emom, /id="wc-label">Minuutti 1\/10<\/span><strong class="timer-clock" id="wc-time">0:55<\/strong>/);
+  assert.doesNotMatch(emom, /clock-laps|clockdone/);
+  const tabata = timed(templateWod('tabata'));
+  assert.match(screen(tabata, T0 + PRE + 5000), /data-phase="run" data-segment="work"[\s\S]*id="wc-label">TYÖ</);
+  assert.match(screen(tabata, T0 + PRE + 25000), /data-phase="run" data-segment="rest"[\s\S]*id="wc-label">LEPO</);
+
+  assert.match(screen(timed({ ...fran, minutes: 0 }), T0 + PRE + 3600000), /<strong class="timer-clock long" id="wc-time">1:00:00<\/strong>/, 'an hour fits on a narrow screen');
+  const evil = '"><img src=x onerror=alert(1)>';
+  assert.doesNotMatch(screen(timed({ ...fran, name: evil, stimulus: evil, movements: [{ ...fran.movements[0], name: evil }] }), T0 + PRE + 1000), /<img/);
+});
+
+test('the clock status line names a paused clock and adds the score only once the clock has ended', () => {
+  assert.equal(ui.clockStatus({ phase: 'run', paused: false, label: 'AMRAP', time: '9:00', detail: 'Kierros 4' }), 'AMRAP · 9:00');
+  assert.equal(ui.clockStatus({ phase: 'run', paused: true, label: 'AMRAP', time: '9:00', detail: 'Kierros 4' }), 'Tauolla · 9:00');
+  assert.equal(ui.clockStatus({ phase: 'done', paused: false, label: 'Aika loppui', time: '12:00', detail: '6 kierrosta' }), 'Aika loppui · 12:00 · 6 kierrosta');
+  assert.deepEqual(ui.clockParts({ paused: true, label: 'TYÖ', time: '0:12', target: 'x', detail: 'y' }), { label: 'Tauolla', time: '0:12', target: 'x', detail: 'y' });
+  assert.equal(ui.countsRounds({ format: 'amrap' }), true);
+  assert.equal(ui.countsRounds({ format: 'fortime', rounds: 3 }), true);
+  assert.equal(ui.countsRounds({ format: 'fortime', rounds: 1 }), false);
+  assert.equal(ui.countsRounds({ format: 'emom', rounds: 10 }), false);
 });

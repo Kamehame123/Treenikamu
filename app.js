@@ -8,8 +8,8 @@ import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from '.
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
-import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, DIVISIONS, parseScheme, wodPartLabel, wodTitle, resultFields, buildResult, resultLabel, isPersonalRecord } from './wod.js';
-import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard } from './wod-ui.js';
+import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, DIVISIONS, parseScheme, wodPartLabel, wodTitle, resultFields, buildResult, resultLabel, isPersonalRecord, clockFace, startClock, pauseClock, resumeClock, settleClock, stopClock, addLap, undoLap } from './wod.js';
+import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard, clockScreen, clockParts, clockStatus } from './wod-ui.js';
 import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateById, templateRoutine } from './wod-templates.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
@@ -112,7 +112,13 @@ try {
 const TIMER_RUN_KEY = 'gym-tracker-timer-run-v1';
 let timerRun = null;
 try { timerRun = sanitizeRun(JSON.parse(sessionStorage.getItem(TIMER_RUN_KEY)), state.timers ?? []); } catch { /* A timer run is optional. */ }
-let view = draft ? 'edit' : timerRun ? 'timer' : state.session ? 'workout' : 'home';
+// A running WOD clock lives in the saved workout, so its screen comes back after a reload.
+// wodCue is the last cue played ("wodId|cue"); null means a restored clock, which stays silent until its next change.
+const runningClock = (s = state.session) => s?.wods?.find((w) => w.clock && !w.clock.endedAt) ?? null;
+let clockWodId = runningClock()?.id ?? null;
+let wodCue = null;
+let clockSettling = false;
+let view = draft ? 'edit' : timerRun ? 'timer' : clockWodId ? 'wod' : state.session ? 'workout' : 'home';
 const HOME_PERIODS = ['week', 'month', 'year'];
 const HOME_PERIOD_KEY = 'gym-tracker-home-period';
 let homePeriod = 'week';
@@ -765,18 +771,18 @@ function rememberTimerRun() {
 function prepareAudio() {
   try { audioContext ??= new (window.AudioContext || window.webkitAudioContext)(); void audioContext.resume(); } catch { audioContext = null; }
 }
-function beep(count) {
+function beep(count, { hz = count > 1 ? 1175 : 880, length = 0.22 } = {}) {
   if (!audioContext) return;
   try {
     const t0 = audioContext.currentTime + 0.02;
     for (let n = 0; n < count; n++) {
-      const osc = audioContext.createOscillator(), gain = audioContext.createGain(), at = t0 + n * 0.3;
-      osc.frequency.value = count > 1 ? 1175 : 880;
+      const osc = audioContext.createOscillator(), gain = audioContext.createGain(), at = t0 + n * (length + 0.08);
+      osc.frequency.value = hz;
       osc.connect(gain); gain.connect(audioContext.destination);
       gain.gain.setValueAtTime(0.0001, at);
       gain.gain.exponentialRampToValueAtTime(0.4, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
-      osc.start(at); osc.stop(at + 0.25);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + length);
+      osc.start(at); osc.stop(at + length + 0.03);
     }
   } catch { /* Vibration and the announcement still happen. */ }
 }
@@ -809,6 +815,124 @@ function paintTimer() {
     navigator.vibrate?.([200, 100, 200]); beep(1);
     announce(`${snap.round.replace('/', ' / ')}. ${snap.label} ${snap.step.replace('/', ' / ')}, ${formatLength(timer.intervals[snap.phase.index].seconds)}.${snap.next ? ` ${snap.next}.` : ''}`);
   }
+}
+
+// WOD clock sounds: short ticks for the last three seconds, a long high tone when work starts,
+// a low double tone when rest starts and three tones at the end.
+const CLOCK_SOUNDS = {
+  tick: () => { navigator.vibrate?.(60); beep(1); },
+  go: () => { navigator.vibrate?.([400]); beep(1, { hz: 1175, length: 0.6 }); },
+  rest: () => { navigator.vibrate?.([200, 100, 200]); beep(2, { hz: 660 }); },
+  done: () => { navigator.vibrate?.([300, 100, 300, 100, 300]); beep(3); },
+};
+
+// Called every tick, in every view: updates the clock screen and the WOD card status in place,
+// ends a clock whose time is up and cues each change of one clock once.
+function paintClock() {
+  const wods = state.session?.wods;
+  if (!wods) return;
+  const now = Date.now(), cued = wods.find((w) => w.id === clockWodId && w.clock && !w.clock.endedAt) ?? runningClock();
+  let due = false;
+  wods.forEach((w, wi) => {
+    if (!w.clock || w.clock.endedAt) return;
+    const face = clockFace(w, w.clock, now);
+    due ||= face.phase === 'done';
+    const mini = document.getElementById(`wc-mini-${wi}`);
+    if (mini) { const text = clockStatus(face); if (mini.textContent !== text) mini.textContent = text; }
+    if (view === 'wod' && w.id === clockWodId) paintClockScreen(face);
+    if (w === cued) cueClock(w, face);
+  });
+  if (due) settleClocks();
+}
+
+function paintClockScreen(face) {
+  const parts = clockParts(face);
+  for (const [id, value] of [['wc-label', parts.label], ['wc-time', parts.time], ['wc-target', parts.target], ['wc-detail', parts.detail]]) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (el.textContent !== value) el.textContent = value;
+    el.hidden = !value;
+  }
+  document.getElementById('wc-time')?.classList.toggle('long', face.time.length > 5);
+  const card = document.getElementById('wod-clock');
+  if (card) { card.dataset.phase = face.phase; card.dataset.segment = face.segment; }
+  const idle = String(face.phase !== 'run' || face.paused);
+  const lap = document.querySelector('button[data-action="clocklap"]');
+  if (lap && lap.getAttribute('aria-disabled') !== idle) lap.setAttribute('aria-disabled', idle);
+  const done = document.querySelector('[data-action="clockdone"]'), preroll = String(face.phase === 'preroll');
+  if (done && done.getAttribute('aria-disabled') !== preroll) done.setAttribute('aria-disabled', preroll);
+}
+
+function cueClock(w, face) {
+  const key = `${w.id}|${face.cue}`;
+  if (wodCue === key) return;
+  const restored = wodCue === null;
+  wodCue = key;
+  if (restored || face.paused) return;
+  if (face.sound) CLOCK_SOUNDS[face.sound]();
+  if (face.say) announce(face.say);
+}
+
+// Ends every clock whose time is up, at the planned moment. Once at a time, and not while saving is
+// blocked: a refused save would otherwise be retried, and the view redrawn, on every tick.
+function settleClocks() {
+  if (clockSettling || locked() || updateBusy || saveConflict) return;
+  clockSettling = true;
+  enqueueAction(async () => {
+    try {
+      const ok = await mutate((next) => {
+        let changed = false;
+        for (const w of next.session?.wods ?? []) changed = settleClock(w, Date.now()) || changed;
+        if (!changed) return false;
+      }, sessionOptions());
+      if (!ok) render();
+      // The running controls are gone; keep keyboard and screen-reader users on the next step.
+      else if (view === 'wod' && (!document.activeElement || document.activeElement === document.body)) document.querySelector('[data-key="clocklog"]')?.focus({ preventScroll: true });
+    } finally { clockSettling = false; }
+  });
+}
+
+// The WOD part whose clock screen is open, by index in the workout.
+const clockIndex = () => state.session?.wods?.findIndex((w) => w.id === clockWodId) ?? -1;
+
+// Pause or resume the open clock. A clock whose time is already up ends instead.
+async function clockChange(change, message) {
+  let changed = false;
+  await mutate((next) => {
+    const w = next.session?.wods?.find((x) => x.id === clockWodId);
+    if (!w?.clock) { announce(CHANGED_ELSEWHERE); render(); return false; }
+    const now = Date.now();
+    if (settleClock(w, now)) return;
+    if (!change(w, now)) return false;
+    changed = true;
+  }, sessionOptions());
+  if (changed) announce(message);
+}
+
+// "Valmis" (For Time finished) or "Lopeta". Stopping during the pre-roll cancels the clock: nothing was timed yet.
+async function endClock(finish) {
+  const w = state.session?.wods?.find((x) => x.id === clockWodId);
+  if (!w?.clock || w.clock.endedAt) { render(); return; }
+  const face = clockFace(w, w.clock, Date.now());
+  if (finish && face.phase === 'preroll') { announce('Aika alkaa vasta valmistautumisen jälkeen.'); return; }
+  if (!finish && face.phase === 'run' && !await askConfirm('Lopetetaanko kello nyt? Mitattu aika säilyy, ja voit kirjata tuloksen.', 'Lopeta')) return;
+  let ended = null, cancelled = false;
+  await mutate((next) => {
+    const x = next.session?.wods?.find((y) => y.id === clockWodId);
+    const outcome = x?.clock ? stopClock(x, Date.now()) : 'none';
+    if (outcome === 'none') { render(); return false; }
+    cancelled = outcome === 'cancelled';
+    if (cancelled) view = 'workout';
+    ended = x;
+  }, sessionOptions());
+  if (!ended) return;
+  if (cancelled) {
+    announce('Kello peruttu.');
+    showCurrentExercise({ wod: state.session.wods.findIndex((x) => x.id === ended.id), focus: true, instant: true });
+    return;
+  }
+  announce(clockFace(ended, ended.clock).say);
+  document.querySelector('[data-key="clocklog"]')?.focus({ preventScroll: true });
 }
 
 function homeView() {
@@ -1004,8 +1128,14 @@ function workoutView() {
   return `${sessionHeader()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryNote(s)}${error}<ul class="list exercise-list">${exercises}</ul>${add}${sessionEnd(p.done === p.total)}${trackRail(s, cur)}`;
 }
 
-function sessionHeader() {
-  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-metrics">${hrBadge()}<span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></span></header>${warn()}`;
+function sessionHeader(back = `<button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button>`) {
+  return `<header class="session-header">${back}<span class="session-metrics">${hrBadge()}<span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></span></header>${warn()}`;
+}
+
+// The full-screen clock of one WOD part. render() falls back to the workout when that clock is gone.
+function wodClockView() {
+  const s = state.session, wi = s.wods.findIndex((w) => w.id === clockWodId);
+  return `${sessionHeader(`<button class="btn ghost back" data-action="clockback" data-key="clockback" aria-label="Takaisin harjoitukseen">${icon('back')} Harjoitukseen</button>`)}${clockScreen(s.wods[wi], wi, { count: s.wods.length, history: state.history, icon })}`;
 }
 
 function sessionEnd(complete) {
@@ -1020,7 +1150,7 @@ function functionalWorkout(s, p, cur, exercises, error, add) {
   const stat = [p.total ? `${p.done}/${p.total}&nbsp;sarjaa` : '', p.wodsTotal ? `${p.wodsDone}/${p.wodsTotal}&nbsp;WOD` : '', `${p.pct}%`].filter(Boolean).join(' · ');
   const guide = complete ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : [
     setsLeft ? 'Napauta sarjaa kirjataksesi. Uusi napautus peruu. Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.' : '',
-    wodsLeft ? (p.wodsTotal > 1 ? 'Kirjaa tulos aina, kun WOD-osa on tehty.' : 'Kirjaa tulos, kun WOD on tehty.') : '',
+    wodsLeft ? (p.wodsTotal > 1 ? 'Käynnistä kello WOD-osan kortista tai kirjaa tulos aina, kun osa on tehty.' : 'Käynnistä kello WOD-kortista tai kirjaa tulos, kun WOD on tehty.') : '',
   ].filter(Boolean).join(' ');
   const jump = cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>`
     : cur < 0 && s.exercises.length && next >= 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Siirry WOD-osaan: ${esc(wodTitle(wods[next]))} ${icon('arrow')}</button>` : '';
@@ -1206,11 +1336,12 @@ function render() {
   const anchorKey = view === 'workout' ? key || actionAnchor : null;
   const anchorTop = anchorKey ? document.querySelector(`[data-key="${CSS.escape(anchorKey)}"]`)?.getBoundingClientRect().top : undefined;
   if (view === 'workout' && !state.session) view = 'home';
+  if (view === 'wod' && !state.session?.wods?.some((w) => w.id === clockWodId && w.clock)) view = state.session ? 'workout' : 'home';
   if (view === 'library' && !(picker.mode === 'session' ? state.session : draft)) view = 'home';
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
   $app.toggleAttribute('data-entering', changed);
-  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : view === 'gallery' ? galleryView() : homeView();
+  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'wod' ? wodClockView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : view === 'gallery' ? galleryView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -1249,7 +1380,7 @@ function showCurrentExercise({ focus = false, instant = false, index = null, wod
   const target = !card ? document.querySelector('[data-action="finish"]') : card.getBoundingClientRect().height <= height || !nextSet ? card : nextSet.closest('.set-entry') || nextSet;
   if (!target || height < 48) return;
   const rect = target.getBoundingClientRect();
-  if (focus) (nextSet || card?.querySelector('[data-action="blockdone"], [data-action="openresult"]') || firstResultField(card) || target).focus({ preventScroll: true });
+  if (focus) (nextSet || card?.querySelector('[data-action="blockdone"], [data-action="clockopen"], [data-action="clockstart"], [data-action="openresult"]') || firstResultField(card) || target).focus({ preventScroll: true });
   window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - top - Math.max(0, (height - rect.height) / 2)), behavior: instant || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
 }
 
@@ -1290,6 +1421,7 @@ const REST_NOTICE_MS = 5000;
 function tick() {
   paintHr();
   paintTimer();
+  paintClock();
   const elapsed = document.getElementById('elapsed');
   if (elapsed && state.session) elapsed.textContent = core.formatDuration(Date.now() - state.session.startedAt);
   const rest = document.getElementById('rest');
@@ -1310,7 +1442,7 @@ function tick() {
 setInterval(tick, 500);
 
 async function syncWakeLock() {
-  const want = () => document.visibilityState === 'visible' && (view === 'workout' && state.session || view === 'timer' && timerRun && !timerRun.done);
+  const want = () => document.visibilityState === 'visible' && ((view === 'workout' || view === 'wod') && state.session || view === 'timer' && timerRun && !timerRun.done);
   try {
     if (want() && !wakeLock && !wakePending && 'wakeLock' in navigator) {
       wakePending = true;
@@ -1643,9 +1775,13 @@ const actions = {
       if (!session) { announce('Lisää ensin vähintään yksi liike.'); return false; }
       next.session = session; next.restEnd = null;
     });
-    if (state.session) { view = 'workout'; savedId = null; resultDraft = null; resultError = ''; wodCheer = null; render(); }
+    if (state.session) { view = 'workout'; savedId = null; resultDraft = null; resultError = ''; wodCheer = null; clockWodId = null; wodCue = null; render(); }
   },
-  resume() { view = 'workout'; render(); showCurrentExercise({ focus: true }); },
+  resume() {
+    const running = runningClock();
+    if (running) { prepareAudio(); clockWodId = running.id; view = 'wod'; render(); return; }
+    view = 'workout'; render(); showCurrentExercise({ focus: true });
+  },
   morehistory() { historyLimit += 20; render(); },
   edithistory(t) {
     historyEditing = historyEditing === t.dataset.id ? null : t.dataset.id;
@@ -1820,7 +1956,7 @@ const actions = {
     }, { ...sessionOptions(), critical: true });
     if (ok) {
       resetHr();
-      resultDraft = null; resultError = ''; wodCheer = null;
+      resultDraft = null; resultError = ''; wodCheer = null; clockWodId = null; wodCue = null;
       if (revisionResult) { revisionMessages.set(routineId, revisionResult.message); openRoutines.add(routineId); }
       view = 'home'; savedId = newId; historyEditing = null; historyMessage = ''; render();
       announce(newId ? `Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}` : 'Harjoitus lopetettu. Mitään ei tallennettu historiaan.');
@@ -1828,7 +1964,7 @@ const actions = {
   },
   async discard() {
     if (!await askConfirm('Hylätäänkö harjoitus? Suoritusmerkinnät menetetään.', 'Hylkää')) return;
-    if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { resetHr(); resultDraft = null; resultError = ''; wodCheer = null; view = 'home'; render(); }
+    if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { resetHr(); resultDraft = null; resultError = ''; wodCheer = null; clockWodId = null; wodCue = null; view = 'home'; render(); }
   },
   hrconnect() { void hr.connect(); },
   hrdisconnect() {
@@ -2096,6 +2232,7 @@ const actions = {
       if (w?.id !== shown.id) { resultDraft = null; resultError = ''; announce(CHANGED_ELSEWHERE); render(); return false; }
       // Compared with finished workouts only: this workout is not in history yet.
       record = isPersonalRecord(next.history, w.key, built.result);
+      if (w.clock && !w.clock.endedAt) stopClock(w, Date.now());
       w.result = built.result; w.division = built.result.division; saved = w;
       resultDraft = null; resultError = ''; wodCheer = null;
       cheerText = record && next.settings.cheers !== false ? pickRecordCheer(lastCheer) : '';
@@ -2118,6 +2255,89 @@ const actions = {
     if (!cleared) return;
     announce('Tulos poistettu.');
     document.querySelector(`[data-key="openresult-${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  },
+  // Starts the WOD clock with a 10 s pre-roll. One clock runs at a time, and never next to the interval timer.
+  async clockstart(t) {
+    prepareAudio();
+    readLatest();
+    const wi = +t.dataset.w, shown = state.session?.wods?.[wi];
+    if (!shown) { render(); return; }
+    if (shown.clock && !shown.clock.endedAt) { clockWodId = shown.id; view = 'wod'; render(); return; }
+    if (timerRun && !timerRun.done && !await askConfirm('Intervalliajastin on käynnissä. Lopetetaanko se?', 'Lopeta ajastin')) return;
+    const other = runningClock();
+    if (other && !await askConfirm(`Kello on käynnissä: ${wodTitle(other)}. Lopetetaanko se?`, 'Lopeta ja aloita')) return;
+    if (shown.clock && !await askConfirm('Aloitetaanko kello alusta? Edellinen ajanotto korvataan.', 'Aloita alusta')) return;
+    if (timerRun) { timerRun = null; rememberTimerRun(); }
+    let started = null;
+    await mutate((next) => {
+      const w = next.session?.wods?.[wi];
+      if (w?.id !== shown.id || w.result) { announce(CHANGED_ELSEWHERE); render(); return false; }
+      const now = Date.now();
+      for (const x of next.session.wods) if (x !== w && x.clock && !x.clock.endedAt) stopClock(x, now);
+      startClock(w, now);
+      next.restEnd = null;
+      if (resultDraft?.wodId === w.id) { resultDraft = null; resultError = ''; }
+      clockWodId = w.id; wodCue = ''; view = 'wod'; started = w;
+    }, sessionOptions());
+    if (started) announce(`Valmistaudu: ${wodTitle(started)} alkaa 10 sekunnin kuluttua.`);
+  },
+  clockopen(t) {
+    prepareAudio();
+    const w = state.session?.wods?.[+t.dataset.w];
+    if (!w?.clock) { render(); return; }
+    clockWodId = w.id; view = 'wod'; render();
+  },
+  clockback() {
+    const wi = clockIndex();
+    view = 'workout'; render();
+    if (wi >= 0) showCurrentExercise({ wod: wi, focus: true, instant: true });
+  },
+  async clockpause() { await clockChange(pauseClock, 'Kello tauolla.'); },
+  async clockresume() { prepareAudio(); await clockChange(resumeClock, 'Kello jatkuu.'); },
+  // One tap per finished round. A second tap within a second is a double tap, not a round.
+  async clocklap() {
+    prepareAudio();
+    const w = state.session?.wods?.[clockIndex()];
+    if (!w?.clock || w.clock.endedAt) { render(); return; }
+    const face = clockFace(w, w.clock, Date.now());
+    if (face.phase !== 'run' || face.paused) { announce(face.paused ? 'Kello on tauolla. Jatka ensin.' : 'Kierroksia kirjataan, kun kello käy.'); return; }
+    const last = w.clock.laps.at(-1);
+    if (last !== undefined && face.workMs - last < 1000) return;
+    let counted = null;
+    await mutate((next) => {
+      const x = next.session?.wods?.find((y) => y.id === clockWodId);
+      if (!x?.clock || (x.format === 'fortime' && x.clock.laps.length >= x.rounds - 1) || !addLap(x, Date.now())) return false;
+      counted = x;
+    }, sessionOptions());
+    if (!counted) return;
+    navigator.vibrate?.(40);
+    const n = counted.clock.laps.length, after = clockFace(counted, counted.clock, Date.now());
+    const final = counted.format === 'fortime' && n >= counted.rounds - 1;
+    announce(`${n === 1 ? '1 kierros' : `${n} kierrosta`} tehty.${final ? ' Viimeinen kierros.' : ''}${after.target ? ` ${after.target}.` : ''}`);
+  },
+  async clockundo() {
+    let undone = false;
+    await mutate((next) => {
+      const x = next.session?.wods?.find((y) => y.id === clockWodId);
+      if (!x?.clock || x.clock.endedAt || !undoLap(x)) return false;
+      undone = true;
+    }, sessionOptions());
+    if (!undone) return;
+    announce('Viimeisin kierros peruttu.');
+    if (!document.querySelector('[data-key="clockundo"]')) document.querySelector('[data-key="clocklap"]')?.focus({ preventScroll: true });
+  },
+  async clockdone() { await endClock(true); },
+  async clockstop() { await endClock(false); },
+  // Opens the result form on the workout view, prefilled with what the clock measured.
+  clocklog() {
+    const s = state.session, wi = clockIndex(), w = s?.wods?.[wi];
+    if (!w) { render(); return; }
+    const measured = clone(w);
+    settleClock(measured, Date.now());
+    resultDraft = { sessionId: s.id, wodId: w.id, fields: resultFields(measured) };
+    resultError = ''; wodCheer = null;
+    view = 'workout'; render();
+    showCurrentExercise({ wod: wi, focus: true, instant: true });
   },
   async export() {
     const text = locked() ? storage.getItem(core.STORAGE_KEY) : JSON.stringify(core.buildBackup(state), null, 2);

@@ -274,9 +274,10 @@ test('intervals alternate work and rest and end after the last work interval', (
   const wod = w.sanitizeSessionWod({ format: 'intervals', work: 20, rest: 10, rounds: 8, movements: [{ name: 'Kehonpainokyykky' }] });
   w.startClock(wod, T0);
   let face = w.clockFace(wod, wod.clock, at(1000));
-  assert.deepEqual([face.label, face.time, face.detail, face.cue, face.sound], ['TYÖ', '0:19', 'Kierros 1/8', 'seg:1:work', 'go']);
+  assert.deepEqual([face.label, face.segment, face.time, face.detail, face.cue, face.sound], ['TYÖ', 'work', '0:19', 'Kierros 1/8', 'seg:1:work', 'go']);
   face = w.clockFace(wod, wod.clock, at(20_000));
-  assert.deepEqual([face.label, face.time, face.cue, face.sound, face.say], ['LEPO', '0:10', 'seg:1:rest', 'rest', 'Lepo, kierros 1/8.']);
+  assert.deepEqual([face.label, face.segment, face.time, face.cue, face.sound, face.say], ['LEPO', 'rest', '0:10', 'seg:1:rest', 'rest', 'Lepo, kierros 1/8.']);
+  assert.equal(w.clockFace(wod, null, at(20_000)).segment, '', 'before the clock starts');
   assert.equal(w.clockFace(wod, wod.clock, at(30_000)).say, 'Työ, kierros 2/8.');
   assert.equal(w.clockFace(wod, wod.clock, at(229_000)).phase, 'run');
   assert.equal(w.clockFace(wod, wod.clock, at(230_000)).phase, 'done', 'the trailing rest is not part of the workout');

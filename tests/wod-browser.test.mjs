@@ -493,7 +493,7 @@ try {
           await p.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
           await tap(button(p, `Siirry WOD-osaan: ${title}`));
           await wodInView();
-          assert.equal(await focused(button(p, `Kirjaa tulos (${title})`)), true, 'the jump focuses the next step');
+          assert.equal(await focused(button(p, `Käynnistä kello (${title})`)), true, 'the jump focuses the next step: the clock');
 
           await tap(button(p, `Kirjaa tulos (${title})`));
           assert.equal(await focused(wod.locator('[data-rf="rounds"]')), true, 'rounds come first');

@@ -617,6 +617,23 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .result-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: var(--control-gap); }
 .result-actions .btn { width: 100%; }
 .track-wod .icon { width: 22px; height: 22px; }
+/* WOD clock: the card's start/status and the full-screen clock with its round counter */
+#app.view-wod { max-width: 680px; }
+.wod-actions { display: grid; gap: var(--control-gap); }
+.clock-status { color: var(--muted); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.wod-clock .timer-round { font-size: clamp(26px, 8vw, 40px); overflow-wrap: anywhere; }
+.wod-clock .timer-clock.long { font-size: clamp(44px, 17vw, 96px); }
+#wod-clock[data-phase="preroll"] .timer-clock { color: var(--accent); }
+#wod-clock[data-segment="rest"] .timer-round, #wod-clock[data-segment="rest"] .timer-clock { color: var(--focus); }
+#wod-clock[data-paused="true"] .timer-clock { opacity: .6; }
+.clock-laps { display: grid; gap: var(--space-2); }
+.clock-lap { width: 100%; min-height: 96px; border-radius: 20px; font-size: 28px; font-weight: 800; text-align: center; }
+.clock-lap[aria-disabled="true"] { opacity: .55; }
+.clock-lap-final { display: grid; place-content: center; gap: var(--space-1); padding: var(--space-3) var(--card-padding); border: 2px dashed var(--line-hi); background: var(--card); line-height: 1.2; overflow-wrap: anywhere; }
+.clock-lap-final small { color: var(--muted); font-size: 14px; font-weight: 600; }
+.clock-lap-info { color: var(--muted); font-size: 14px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.clock-controls-2 { grid-template-columns: repeat(2, minmax(0, 150px)); }
+.clock-board { display: grid; gap: var(--control-gap); }
 @media (max-width: 380px) {
 	.wod-add-row { grid-template-columns: 1fr; }
 }
