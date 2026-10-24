@@ -3,13 +3,13 @@ import * as autobackup from './autobackup.js';
 import { progressionConfig, progressionRange, prescription, reviseRoutine, undoRevision, canUndoRevision } from './progression.js';
 
 import { EXERCISES, CATEGORIES, EQUIPMENT, findExercises, normalizeSearch } from './exercises.js';
-import { pickCheer } from './cheers.js';
+import { pickCheer, pickRecordCheer } from './cheers.js';
 import { createMonitor, hrSupported, emptyHr, addHrSample, summarizeHr } from './heartrate.js';
 import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDays, sanitizeTracking, LOAD_TYPES } from './statistics.js';
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
-import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, parseScheme, wodPartLabel } from './wod.js';
-import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex } from './wod-ui.js';
+import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, DIVISIONS, parseScheme, wodPartLabel, wodTitle, resultFields, buildResult, resultLabel, isPersonalRecord } from './wod.js';
+import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard } from './wod-ui.js';
 import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateById, templateRoutine } from './wod-templates.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
@@ -848,7 +848,7 @@ function homeView() {
           ${state.settings.autoRest ? `<label class="check"><span>Oma lepoaika sarjojen välillä<small>Pois päältä: aika lasketaan liikkeen mukaan. Päällä: sama aika jokaisen sarjan jälkeen.</small></span><input type="checkbox" role="switch" data-action="restfixed" data-key="restfixed" ${state.settings.restMode === 'fixed' ? 'checked' : ''} aria-label="Käytä omaa lepoaikaa sarjojen välillä"></label>${state.settings.restMode === 'fixed' ? `<label class="field">Lepoaika sarjojen välillä (sekuntia, 10–600)<input type="number" inputmode="numeric" min="10" max="600" step="5" value="${state.settings.restSeconds}" data-action="restsecs" data-key="restsecs"></label>` : ''}` : ''}
         </div>
         <label class="check"><span>Kuormittavuuden kirjaus<small>Näyttää liikkeissä valinnaiset kentät: toteutuneet toistot, sarjan tyyppi ja kipu. RIR kirjataan aina liikkeen sarjojen alla. Tilastojen kehitysindeksi tarvitsee nämä tiedot.</small></span><input type="checkbox" role="switch" data-action="advancedlogging" data-key="advancedlogging" ${state.settings.advancedLogging ? 'checked' : ''} aria-label="Näytä kuormittavuuden kirjaus harjoituksen aikana"></label>
-        <label class="check"><span>Ruotsalaiset kannustukset<small>Näyttää sarjan kirjaamisen jälkeen lyhyen ruotsinkielisen kannustuksen.</small></span><input type="checkbox" role="switch" data-action="cheers" data-key="cheers" ${state.settings.cheers !== false ? 'checked' : ''} aria-label="Näytä ruotsalaiset kannustukset"></label>
+        <label class="check"><span>Ruotsalaiset kannustukset<small>Näyttää sarjan kirjaamisen tai WOD-ennätyksen jälkeen lyhyen ruotsinkielisen kannustuksen.</small></span><input type="checkbox" role="switch" data-action="cheers" data-key="cheers" ${state.settings.cheers !== false ? 'checked' : ''} aria-label="Näytä ruotsalaiset kannustukset"></label>
         ${hrSettings()}${backupCompact()}
         <section class="share"><button class="btn secondary" data-action="share" data-key="share">${icon('arrow')} Jaa sovellus (kopioi linkki)</button>${shareMessage ? `<p class="small-copy" id="share-status" role="status">${esc(shareMessage)}</p>` : ''}<p class="small-copy" id="build-number">${buildNumber ? `Versio ${esc(buildNumber)}` : ''}</p></section>
       </div>
@@ -938,6 +938,10 @@ const MUSCLE_GLYPHS = {
 };
 const railMuscle = (e) => RAIL_MUSCLE[core.sessionExerciseCategory(e, state.customExercises)] || '';
 
+// A functional workout's WOD part is next once every exercise before it is done.
+function isFunctional(s) { return s?.type === 'functional' || !!s?.wods?.length; }
+function nextWodIndex(s) { return core.currentExercise(s) < 0 ? (s.wods ?? []).findIndex((w) => !w.result) : -1; }
+
 function trackRail(s, cur) {
   const boxes = s.exercises.map((e, ei) => {
     const done = core.exerciseDone(e);
@@ -946,7 +950,12 @@ function trackRail(s, cur) {
     const glyph = muscle ? `<svg class="track-muscle" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="${MUSCLE_GLYPHS[muscle]}"/></svg>` : '';
     return `<li><button class="track-box${done ? ' done' : ''}${ei === cur ? ' current' : ''}" data-action="jumpto" data-e="${ei}" data-key="track-${ei}" ${muscle ? `data-muscle="${muscle}"` : ''} ${ei === cur ? 'aria-current="step"' : ''} aria-label="Liike ${ei + 1}: ${esc(e.name)}, ${e.sets.length} sarjaa, ${status}">${glyph}<span class="track-num">${e.sets.length}</span></button></li>`;
   }).join('');
-  return `<nav class="track-rail" aria-label="Harjoituksen eteneminen"><ol>${boxes}</ol></nav>`;
+  const next = nextWodIndex(s);
+  const wods = (s.wods ?? []).map((w, wi) => {
+    const status = w.result ? 'kirjattu' : wi === next ? 'vuorossa' : 'kesken';
+    return `<li><button class="track-box track-wod${w.result ? ' done' : ''}${wi === next ? ' current' : ''}" data-action="jumpwod" data-w="${wi}" data-key="track-wod-${wi}" ${wi === next ? 'aria-current="step"' : ''} aria-label="${wodPartLabel(wi, s.wods.length)}: ${esc(wodTitle(w))}, ${status}">${icon('board')}</button></li>`;
+  }).join('');
+  return `<nav class="track-rail" aria-label="Harjoituksen eteneminen"><ol>${boxes}${wods}</ol></nav>`;
 }
 
 // The newest finished sets of the same movement, memoized per history snapshot.
@@ -987,9 +996,43 @@ function workoutView() {
     const individual = e.sets.some((set) => set.reps);
     const targets = individual ? e.sets.map((set) => core.targetLabel(set.reps ?? e.reps)).join(' / ') : core.targetLabel(e.reps);
     const restLabel = core.formatDuration(core.restFor(state.settings, e, nextSi >= 0 ? nextSi : 0) * 1000);
-    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div>${exerciseRir(e, ei)}${loadPrompt(e, ei)}${exerciseActions(e, s.exercises.length)}${state.settings.advancedLogging ? exerciseLog(e, ei) : ''}</li>`;
+    return `<li class="card ex ${done ? 'complete' : ''} ${ei === cur ? 'current' : ''}" id="exercise-${ei}"><div class="exercise-heading"><span class="exercise-index">${String(ei + 1).padStart(2, '0')}</span><div class="grow"><h2>${esc(e.name)}</h2><p class="target">${e.sets.length} sarjaa <span>${individual ? '·' : '×'}</span> ${esc(targets)}${e.weight ? ` <span class="weight-pill">${esc(e.weight)}</span>` : ''} <span>·</span> Lepo ${restLabel}</p>${lastTime(e) ? `<p class="last-time muted small-copy">${esc(lastTime(e))}</p>` : ''}</div>${done ? '<span class="badge done-badge">Tehty</span>' : ei === cur ? '<span class="badge now">Vuorossa</span>' : `<span class="badge">${completed}/${e.sets.length}</span>`}</div><div class="sets">${sets}</div>${exerciseRir(e, ei)}${loadPrompt(e, ei)}${exerciseActions(e, s.exercises.length + (s.wods?.length ?? 0))}${state.settings.advancedLogging ? exerciseLog(e, ei) : ''}</li>`;
   }).join('');
-  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-metrics">${hrBadge()}<span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></span></header>${warn()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryNote(s)}${logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : ''}<ul class="list exercise-list">${exercises}</ul><button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button><div class="session-end"><button class="btn ${p.done === p.total ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${p.done === p.total ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>${trackRail(s, cur)}`;
+  const error = logError ? `<p class="banner" id="log-error" role="alert">${esc(logError)}</p>` : '';
+  const add = `<button class="btn secondary add-ex-btn" data-action="addsessionex" data-key="addsessionex" ${s.exercises.length >= core.SESSION_EXERCISE_LIMIT ? 'disabled' : ''}>${icon('plus')} Lisää liike tähän treeniin</button>`;
+  if (isFunctional(s)) return functionalWorkout(s, p, cur, exercises, error, add);
+  return `${sessionHeader()}<section class="session-intro card"><div class="row"><p class="eyebrow accent">${p.done === p.total ? 'KAIKKI SARJAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${p.done}/${p.total} sarjaa · ${p.pct}%</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar(p)}<div class="session-summary"><p class="session-guide">${cur < 0 ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : 'Napauta sarjaa kirjataksesi. Uusi napautus peruu.'} Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.</p><span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span></div>${cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>` : ''}</section>${recoveryNote(s)}${error}<ul class="list exercise-list">${exercises}</ul>${add}${sessionEnd(p.done === p.total)}${trackRail(s, cur)}`;
+}
+
+function sessionHeader() {
+  return `<header class="session-header"><button class="btn ghost back" data-action="home" data-key="back" aria-label="Takaisin harjoituksiin">${icon('back')} Harjoituksiin</button><span class="session-metrics">${hrBadge()}<span class="session-time">${icon('clock')}<span id="elapsed">0:00</span></span></span></header>${warn()}`;
+}
+
+function sessionEnd(complete) {
+  return `<div class="session-end"><button class="btn ${complete ? 'primary' : 'secondary'} big" data-action="finish" data-key="finish">${complete ? 'Tallenna harjoitus' : 'Lopeta kesken'} ${icon('check')}</button><button class="btn danger" data-action="discard" data-key="discard">Hylkää harjoitus</button><p class="small-copy muted">${storageOk ? 'Edistyminen tallennettu tälle laitteelle.' : 'Edistymistä ei ole tallennettu. Pidä välilehti auki.'}</p></div><div id="rest" class="rest" hidden></div>`;
+}
+
+// In class order: warm-up, strength or skill exercises, WOD parts, cool-down. Progress counts sets and WOD results.
+function functionalWorkout(s, p, cur, exercises, error, add) {
+  const wods = s.wods ?? [], next = nextWodIndex(s);
+  const setsLeft = p.done < p.total, wodsLeft = p.wodsDone < p.wodsTotal, complete = !setsLeft && !wodsLeft;
+  // A count stays with its unit, so a narrow screen breaks the line only at the separators.
+  const stat = [p.total ? `${p.done}/${p.total}&nbsp;sarjaa` : '', p.wodsTotal ? `${p.wodsDone}/${p.wodsTotal}&nbsp;WOD` : '', `${p.pct}%`].filter(Boolean).join(' · ');
+  const guide = complete ? 'Hienoa työtä! Tallenna harjoitus lopettamalla.' : [
+    setsLeft ? 'Napauta sarjaa kirjataksesi. Uusi napautus peruu. Muuta toteutuneita toistoja ja painoa sarjan − / + -painikkeilla.' : '',
+    wodsLeft ? (p.wodsTotal > 1 ? 'Kirjaa tulos aina, kun WOD-osa on tehty.' : 'Kirjaa tulos, kun WOD on tehty.') : '',
+  ].filter(Boolean).join(' ');
+  const jump = cur > 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Jatka liikkeestä: ${esc(s.exercises[cur].name)} ${icon('arrow')}</button>`
+    : cur < 0 && s.exercises.length && next >= 0 ? `<button class="btn secondary jump" data-action="jump" data-key="jump">Siirry WOD-osaan: ${esc(wodTitle(wods[next]))} ${icon('arrow')}</button>` : '';
+  const cards = wods.map((w, wi) => {
+    const open = resultDraft?.sessionId === s.id && resultDraft.wodId === w.id;
+    return sessionWodCard(w, wi, {
+      count: wods.length, history: state.history, current: wi === next, form: open ? resultDraft.fields : null, error: open ? resultError : '',
+      cheer: wodCheer?.sessionId === s.id && wodCheer.wodId === w.id ? wodCheer.text : '', advanced: state.settings.advancedLogging, icon,
+    });
+  }).join('');
+  const intro = `<section class="session-intro card"><div class="row"><p class="eyebrow accent">${complete ? 'KAIKKI OSAT KIRJATTU' : 'HARJOITUS KÄYNNISSÄ'}</p><span class="session-stat">${stat}</span></div><h1 tabindex="-1">${esc(s.name)}</h1>${progressBar({ done: p.done + p.wodsDone, total: p.total + p.wodsTotal, pct: p.pct })}<div class="session-summary"><p class="session-guide">${guide}</p>${s.exercises.length ? `<span class="muted">${s.exercises.filter(core.exerciseDone).length}/${s.exercises.length} liikettä</span>` : ''}</div>${jump}</section>`;
+  return `${sessionHeader()}${intro}${recoveryNote(s)}${error}${s.warmup ? sessionBlock('warmup', s.warmup, icon) : ''}${s.exercises.length ? `<ul class="list exercise-list">${exercises}</ul>` : ''}${add}<ul class="list wod-list">${cards}</ul>${s.cooldown ? sessionBlock('cooldown', s.cooldown, icon) : ''}${sessionEnd(complete)}${trackRail(s, cur)}`;
 }
 
 function progressionEditor(e, i) {
@@ -1185,23 +1228,34 @@ function render() {
 }
 
 // Center within usable space, not behind the sticky header or floating timer.
-// Oversized exercises show the next set and its steppers instead of centering an unreadable card.
-function showCurrentExercise({ focus = false, instant = false, index = null } = {}) {
-  if (view !== 'workout' || !state.session || document.hidden || (index === null && !storageOk)) return;
-  index ??= core.currentExercise(state.session);
-  const card = document.getElementById(`exercise-${index}`);
-  const nextSet = card?.querySelector('.set.next') || card?.querySelector('.set');
+// Oversized exercises show the next set and its steppers instead of centering an unreadable card;
+// an oversized warm-up or WOD card starts at the top. Before anything is logged, an undone warm-up comes first.
+function showCurrentExercise({ focus = false, instant = false, index = null, wod = null } = {}) {
+  const auto = index === null && wod === null;
+  if (view !== 'workout' || !state.session || document.hidden || (auto && !storageOk)) return;
+  const s = state.session;
+  const warmup = auto && s.warmup && !s.warmup.done && !core.sessionHasWork(s);
+  index ??= wod === null ? core.currentExercise(s) : -1;
+  wod ??= index < 0 ? nextWodIndex(s) : -1;
+  const id = warmup ? 'block-warmup' : index >= 0 ? `exercise-${index}` : wod >= 0 ? `wod-${wod}` : '';
+  const card = id ? document.getElementById(id) : null;
+  const nextSet = id.startsWith('exercise-') ? card?.querySelector('.set.next') || card?.querySelector('.set') : null;
   const viewport = window.visualViewport;
   const top = (viewport?.offsetTop ?? 0) + (document.querySelector('.session-header')?.getBoundingClientRect().height ?? 0) + 12;
   const viewportBottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight);
   const rest = document.getElementById('rest');
   const bottom = Math.min(viewportBottom, rest && !rest.hidden ? rest.getBoundingClientRect().top : viewportBottom) - 12;
   const height = Math.max(0, bottom - top);
-  const target = card && card.getBoundingClientRect().height <= height ? card : nextSet?.closest('.set-entry') || nextSet || document.querySelector('[data-action="finish"]');
+  const target = !card ? document.querySelector('[data-action="finish"]') : card.getBoundingClientRect().height <= height || !nextSet ? card : nextSet.closest('.set-entry') || nextSet;
   if (!target || height < 48) return;
   const rect = target.getBoundingClientRect();
-  if (focus) (nextSet || target).focus({ preventScroll: true });
+  if (focus) (nextSet || card?.querySelector('[data-action="blockdone"], [data-action="openresult"]') || firstResultField(card) || target).focus({ preventScroll: true });
   window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - top - Math.max(0, (height - rect.height) / 2)), behavior: instant || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+}
+
+// The result input to type first: a time field hidden by the time cap (or a choice) never is.
+function firstResultField(root) {
+  return [...root?.querySelectorAll('.result-form [data-rf="min"], .result-form [data-rf="rounds"], .result-form [data-rf="reps"], .result-form [data-rf="value"]') ?? []].find((el) => !el.closest('[hidden]')) ?? null;
 }
 
 let exerciseScroll;
@@ -1214,7 +1268,8 @@ function scheduleExerciseScroll(sessionId, index) {
     if (state.session?.id !== sessionId || core.currentExercise(state.session) !== index) return;
     if (index < 0) {
       if (view !== 'workout' || document.hidden) return;
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      if (nextWodIndex(state.session) >= 0) showCurrentExercise({ index: -1 });
+      else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     } else showCurrentExercise();
   }, 350);
 }
@@ -1227,6 +1282,10 @@ let lastRestBeep = 0;
 let cheer = null;
 let lastCheer = '';
 let actionAnchor = null;
+// The open WOD result form ({ sessionId, wodId, fields } as typed), what to fix in it, and a record cheer.
+let resultDraft = null;
+let resultError = '';
+let wodCheer = null;
 const REST_NOTICE_MS = 5000;
 function tick() {
   paintHr();
@@ -1580,11 +1639,11 @@ const actions = {
     }
     await mutate((next) => {
       if (next.session && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
-      const session = core.startSession(byId(t.dataset.id, next), Date.now(), { mode });
+      const session = core.startSession(byId(t.dataset.id, next), Date.now(), { mode, history: next.history });
       if (!session) { announce('Lisää ensin vähintään yksi liike.'); return false; }
       next.session = session; next.restEnd = null;
     });
-    if (state.session) { view = 'workout'; savedId = null; render(); }
+    if (state.session) { view = 'workout'; savedId = null; resultDraft = null; resultError = ''; wodCheer = null; render(); }
   },
   resume() { view = 'workout'; render(); showCurrentExercise({ focus: true }); },
   morehistory() { historyLimit += 20; render(); },
@@ -1739,31 +1798,37 @@ const actions = {
     readLatest();
     let confirmed = false;
     if (state.session) {
-      const shown = core.progress(state.session);
-      if (shown.done < shown.total) {
-        const none = shown.done === 0;
-        if (!await askConfirm(none ? 'Yhtään sarjaa ei ole kirjattu, joten harjoitusta ei tallenneta historiaan. Lopetetaanko ilman tallennusta?' : `${shown.total - shown.done} sarjaa on tekemättä. Lopetetaanko silti?`, none ? 'Lopeta tallentamatta' : 'Lopeta')) return;
+      const shown = core.progress(state.session), sets = shown.total - shown.done, wods = shown.wodsTotal - shown.wodsDone;
+      if (sets || wods) {
+        const none = !core.sessionHasWork(state.session);
+        const message = !isFunctional(state.session)
+          ? none ? 'Yhtään sarjaa ei ole kirjattu, joten harjoitusta ei tallenneta historiaan. Lopetetaanko ilman tallennusta?' : `${sets} sarjaa on tekemättä. Lopetetaanko silti?`
+          : none ? 'Mitään ei ole vielä kirjattu, joten harjoitusta ei tallenneta historiaan. Lopetetaanko ilman tallennusta?'
+            : `Kirjaamatta: ${[sets ? (sets === 1 ? '1 sarja' : `${sets} sarjaa`) : '', wods ? (wods === 1 ? '1 WOD-osa' : `${wods} WOD-osaa`) : ''].filter(Boolean).join(' ja ')}. Lopetetaanko silti?`;
+        if (!await askConfirm(message, none ? 'Lopeta tallentamatta' : 'Lopeta')) return;
         confirmed = true;
       }
     }
     const ok = await mutate((next) => {
       if (!next.session) return false;
       const p = core.progress(next.session);
-      if (p.done < p.total && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
+      if ((p.done < p.total || p.wodsDone < p.wodsTotal) && !confirmed) { announce(CHANGED_ELSEWHERE); render(); return false; }
       routineId = next.session.routineId;
-      if (p.done) { const summary = core.summarize(next.session, Date.now(), hrAcc.id === next.session.id ? summarizeHr(hrAcc) : null); newId = summary.id; next.history.unshift(summary); }
+      if (core.sessionHasWork(next.session)) { const summary = core.summarize(next.session, Date.now(), hrAcc.id === next.session.id ? summarizeHr(hrAcc) : null); newId = summary.id; next.history.unshift(summary); }
       next.history = next.history.slice(0, core.MAX_HISTORY); next.session = null; next.restEnd = null;
       if (p.done && byId(routineId, next)?.autoProgress) revisionResult = reviseRoutine(next, routineId);
     }, { ...sessionOptions(), critical: true });
     if (ok) {
       resetHr();
+      resultDraft = null; resultError = ''; wodCheer = null;
       if (revisionResult) { revisionMessages.set(routineId, revisionResult.message); openRoutines.add(routineId); }
-      view = 'home'; savedId = newId; historyEditing = null; historyMessage = ''; render(); announce(`Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}`);
+      view = 'home'; savedId = newId; historyEditing = null; historyMessage = ''; render();
+      announce(newId ? `Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}` : 'Harjoitus lopetettu. Mitään ei tallennettu historiaan.');
     }
   },
   async discard() {
     if (!await askConfirm('Hylätäänkö harjoitus? Suoritusmerkinnät menetetään.', 'Hylkää')) return;
-    if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { resetHr(); view = 'home'; render(); }
+    if (await mutate((next) => { next.session = null; next.restEnd = null; }, { ...sessionOptions(), critical: true })) { resetHr(); resultDraft = null; resultError = ''; wodCheer = null; view = 'home'; render(); }
   },
   hrconnect() { void hr.connect(); },
   hrdisconnect() {
@@ -1970,6 +2035,90 @@ const actions = {
   },
   jump() { showCurrentExercise({ focus: true }); },
   jumpto(t) { showCurrentExercise({ index: +t.dataset.e }); },
+  jumpwod(t) { showCurrentExercise({ wod: +t.dataset.w }); },
+  // "Valmis" on a warm-up or cool-down is a reminder for this workout only; history keeps sets and WOD results.
+  async blockdone(t) {
+    const kind = t.dataset.block;
+    if (!BLOCK_KINDS.includes(kind)) return;
+    await mutate((next) => {
+      const block = next.session?.[kind];
+      if (!block) { announce(CHANGED_ELSEWHERE); render(); return false; }
+      block.done = !block.done;
+      const title = kind === 'warmup' ? 'Lämmittely' : 'Loppuverryttely';
+      announce(block.done ? `${title} tehty.` : `${title}: merkintä peruttu.`);
+    }, sessionOptions());
+    // Safari does not focus a tapped button, so keep the toggle focused for the next tap or key press.
+    document.querySelector(`[data-key="blockdone-${kind}"]`)?.focus({ preventScroll: true });
+  },
+  // Which version (Rx or scaled) the whiteboard shows. The result form keeps its own choice in step.
+  async wodversion(t) {
+    const wi = +t.dataset.w, division = t.dataset.division, key = t.dataset.key;
+    if (!Object.hasOwn(DIVISIONS, division)) return;
+    await mutate((next) => {
+      const w = next.session?.wods?.[wi];
+      if (!w) { announce(CHANGED_ELSEWHERE); render(); return false; }
+      if (w.division === division) return false;
+      w.division = division;
+      if (resultDraft?.wodId === w.id) resultDraft.fields.division = division;
+      announce(`${wodTitle(w)}: ${division === 'scaled' ? 'skaalattu versio' : 'Rx-versio'}.`);
+    }, sessionOptions());
+    document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  },
+  openresult(t) {
+    const s = state.session, wi = +t.dataset.w, w = s?.wods?.[wi];
+    if (!w) return;
+    resultDraft = { sessionId: s.id, wodId: w.id, fields: resultFields(w) };
+    resultError = ''; wodCheer = null;
+    render();
+    const form = document.getElementById(`result-form-${wi}`);
+    (firstResultField(form?.closest('.wod-card')) || form?.querySelector('[data-action="saveresult"]'))?.focus();
+  },
+  cancelresult() {
+    const id = resultDraft?.wodId;
+    resultDraft = null; resultError = ''; render();
+    if (id) document.querySelector(`[data-key="openresult-${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  },
+  async saveresult(t) {
+    readLatest();
+    const wi = +t.dataset.w, shown = state.session?.wods?.[wi], fields = resultDraft?.fields;
+    if (!shown || !resultDraft || resultDraft.sessionId !== state.session.id || resultDraft.wodId !== shown.id) {
+      resultDraft = null; resultError = ''; announce(CHANGED_ELSEWHERE); render(); return;
+    }
+    const built = buildResult(shown, fields);
+    if (!built.ok) {
+      resultError = built.error; render();
+      document.getElementById(`result-error-${wi}`)?.focus();
+      return;
+    }
+    let saved = null, record = false, cheerText = '';
+    await mutate((next) => {
+      const w = next.session?.wods?.[wi];
+      if (w?.id !== shown.id) { resultDraft = null; resultError = ''; announce(CHANGED_ELSEWHERE); render(); return false; }
+      // Compared with finished workouts only: this workout is not in history yet.
+      record = isPersonalRecord(next.history, w.key, built.result);
+      w.result = built.result; w.division = built.result.division; saved = w;
+      resultDraft = null; resultError = ''; wodCheer = null;
+      cheerText = record && next.settings.cheers !== false ? pickRecordCheer(lastCheer) : '';
+      if (cheerText) { lastCheer = cheerText; wodCheer = { sessionId: next.session.id, wodId: w.id, text: cheerText }; }
+    }, sessionOptions());
+    if (!saved) return;
+    announce(`Tulos tallennettu: ${wodTitle(saved)}, ${resultLabel(saved.result, { long: true })}.${record ? ' Uusi ennätys!' : ''}${cheerText ? ` ${cheerText}` : ''}`);
+    document.querySelector(`[data-key="openresult-${CSS.escape(saved.id)}"]`)?.focus({ preventScroll: true });
+  },
+  async clearresult(t) {
+    const wi = +t.dataset.w, id = state.session?.wods?.[wi]?.id;
+    if (!id || !await askConfirm('Poistetaanko tämän WOD-osan tulos? Muut kirjaukset säilyvät.', 'Poista tulos')) return;
+    let cleared = false;
+    await mutate((next) => {
+      const w = next.session?.wods?.[wi];
+      if (w?.id !== id) { announce(CHANGED_ELSEWHERE); render(); return false; }
+      delete w.result;
+      resultDraft = null; resultError = ''; wodCheer = null; cleared = true;
+    }, sessionOptions());
+    if (!cleared) return;
+    announce('Tulos poistettu.');
+    document.querySelector(`[data-key="openresult-${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+  },
   async export() {
     const text = locked() ? storage.getItem(core.STORAGE_KEY) : JSON.stringify(core.buildBackup(state), null, 2);
     const delivered = await shareBackup(text) ?? downloadBackup(text);
@@ -2099,11 +2248,22 @@ document.addEventListener('click', (e) => {
   if (holdSuppressClick && e.target.closest?.('.step-btn')) { e.stopImmediatePropagation(); e.preventDefault(); holdSuppressClick = false; }
 }, true);
 document.addEventListener('submit', (e) => {
+  // Enter in a result field clicks "Tallenna tulos", which the click handler runs; this catches any other submit.
+  if (e.target.classList?.contains('result-form')) {
+    e.preventDefault();
+    const button = e.target.querySelector('[data-action="saveresult"]');
+    if (button) enqueueAction(() => actions.saveresult(button));
+    return;
+  }
   if (e.target.id !== 'custom-exercise-form') return;
   e.preventDefault(); enqueueAction(() => actions.createcustom());
 });
 document.addEventListener('input', (e) => {
   const t = e.target;
+  if (t.dataset.rf) {
+    if (resultDraft && !['checkbox', 'radio'].includes(t.type) && Object.hasOwn(resultDraft.fields, t.dataset.rf)) resultDraft.fields[t.dataset.rf] = t.value;
+    return;
+  }
   if (t.dataset.tf && timerDraft) {
     const field = t.dataset.tf;
     if (['name', 'repeats'].includes(field)) timerDraft[field] = t.value;
@@ -2188,6 +2348,17 @@ async function commitHistoryEdit(t) {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.rf) {
+    if (!resultDraft) return;
+    if (t.dataset.rf === 'capped') {
+      // Capped: the reps done by the cap replace the time. Toggled in place so focus stays on the switch.
+      resultDraft.fields.capped = t.checked;
+      const wi = t.closest('.result-form')?.dataset.w;
+      document.getElementById(`rf-time-${wi}`)?.toggleAttribute('hidden', t.checked);
+      document.getElementById(`rf-cap-${wi}`)?.toggleAttribute('hidden', !t.checked);
+    } else if (t.type === 'radio' && t.checked && t.dataset.rf === 'division' && Object.hasOwn(DIVISIONS, t.value)) resultDraft.fields.division = t.value;
+    return;
+  }
   if (t.dataset.autobackup) { void (t.checked ? chooseAutoFolder() : disableAutoBackup()); return; }
   if (t.dataset.appearance) {
     window.TrackerAppearance?.set(t.dataset.appearance);

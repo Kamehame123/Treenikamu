@@ -68,3 +68,17 @@ export function pickCheer(done, total, previous = '', random = Math.random) {
   const pool = (part < 1 / 3 ? CHEERS.early : part < 2 / 3 ? CHEERS.middle : CHEERS.late).filter((c) => c !== previous);
   return pool[Math.floor(random() * pool.length)] ?? '';
 }
+
+// Shown every time a WOD result beats the earlier best of the same version.
+export const RECORD_CHEERS = [
+  'Nytt personbästa! Grymt jobbat.',
+  'Det här var ditt bästa hittills!',
+  'Nytt rekord – slitet lönar sig.',
+  'Starkt! Du slog ditt eget rekord.',
+  'Personbästa idag – var stolt över det!',
+];
+
+export function pickRecordCheer(previous = '', random = Math.random) {
+  const pool = RECORD_CHEERS.filter((c) => c !== previous);
+  return pool[Math.floor(random() * pool.length)] ?? RECORD_CHEERS[0];
+}

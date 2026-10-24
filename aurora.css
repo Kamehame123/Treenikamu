@@ -69,9 +69,9 @@ html[data-theme="aurora"] .release-notes .release-version { color: var(--accent)
 /* Workout */
 html[data-theme="aurora"] .session-time, html[data-theme="aurora"] .session-hr { background: var(--accent-soft); border-color: #cfc3f5; }
 html[data-theme="aurora"] .session-intro { background: linear-gradient(135deg, #f3efff, #ffffff); }
-html[data-theme="aurora"] .ex.current { border-color: var(--accent); background: linear-gradient(160deg, #f3efff, #ffffff 60%); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow); }
-html[data-theme="aurora"] .ex.complete { background: #f4fbf8; border-color: #bfe6d4; }
-html[data-theme="aurora"] .ex.current .exercise-index { background: linear-gradient(135deg, #6a49e0, #a03bd0); color: #ffffff; }
+html[data-theme="aurora"] .ex.current, html[data-theme="aurora"] .wod-card.current { border-color: var(--accent); background: linear-gradient(160deg, #f3efff, #ffffff 60%); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow); }
+html[data-theme="aurora"] .ex.complete, html[data-theme="aurora"] .wod-card.complete, html[data-theme="aurora"] .block-card.complete { background: #f4fbf8; border-color: #bfe6d4; }
+html[data-theme="aurora"] .ex.current .exercise-index, html[data-theme="aurora"] .wod-card.current .exercise-index { background: linear-gradient(135deg, #6a49e0, #a03bd0); color: #ffffff; }
 html[data-theme="aurora"] .exercise-index { background: var(--accent-soft); color: var(--accent); }
 html[data-theme="aurora"] .badge.done-badge { background: var(--success-soft); border-color: var(--success); color: var(--success); }
 html[data-theme="aurora"] .progress { background: #e1dcf2; }
@@ -131,13 +131,13 @@ html[data-theme="aurora"] .type-choice, html[data-theme="aurora"] .format-option
 html[data-theme="aurora"] .format-option:has(input:checked) { background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-ring); }
 html[data-theme="aurora"] .chip[aria-pressed="true"] { background: var(--accent-soft); }
 html[data-theme="aurora"] .wod-board { background: #ffffffcc; border-color: #b9a7f1; }
-html[data-theme="aurora"] .segmented [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+html[data-theme="aurora"] .segmented [aria-pressed="true"], html[data-theme="aurora"] .block-done[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
 /* Motion: short, opacity-only entrances on real view changes, and one check pop on an explicit set log.
    Never loops, and never applies transforms or filters to anything that contains fixed or sticky UI. */
 @keyframes aurora-rise { from { opacity: 0; } to { opacity: 1; } }
 @keyframes aurora-check { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-html[data-theme="aurora"] #app[data-entering] :is(.stats > *, .routine-list > li, .home-aside > *, .statistics-content > *, .timer-card, .timer-item, .ex, .history-list > li) { animation: aurora-rise .26s ease-out both; }
+html[data-theme="aurora"] #app[data-entering] :is(.stats > *, .routine-list > li, .home-aside > *, .statistics-content > *, .timer-card, .timer-item, .ex, .wod-card, .block-card, .history-list > li) { animation: aurora-rise .26s ease-out both; }
 html[data-theme="aurora"] #app[data-entering] :is(.stats > :nth-child(2), .routine-list > li:nth-child(2), .ex:nth-of-type(2)) { animation-delay: 40ms; }
 html[data-theme="aurora"] #app[data-entering] :is(.stats > :nth-child(3), .routine-list > li:nth-child(3), .ex:nth-of-type(3)) { animation-delay: 80ms; }
 html[data-theme="aurora"] .set.just-logged.done .set-foot .icon { animation: aurora-check .28s ease-out; }

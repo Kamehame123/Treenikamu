@@ -1,41 +1,81 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm } from './support.mjs';
+import * as core from '../core.js';
+import { buildResult, resultFields, wodTitle } from '../wod.js';
+import { RECORD_CHEERS } from '../cheers.js';
 import { TEMPLATES, DEFAULT_WARMUP, templateById, templateRoutine } from '../wod-templates.js';
 
 const { server, url } = await startServer();
+const DAY = 86400000;
 const button = (p, name) => p.getByRole('button', { name, exact: true });
 const saved = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('gym-tracker-v1')));
 const focused = (locator) => locator.evaluate((e) => e === document.activeElement);
 const values = (locator) => locator.evaluateAll((elements) => elements.map((e) => e.value));
+const idle = (p) => p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+const live = (p, pattern) => p.waitForFunction((source) => new RegExp(source).test(document.getElementById('live').textContent), pattern.source);
+const program = (id) => core.sanitizeRoutine(templateRoutine(templateById(id), 'women'));
+// A finished workout from a template with the given WOD result, as history keeps it.
+function finished(id, fields, at) {
+  const s = core.startSession(program(id), at - 1800000), w = s.wods[0];
+  const built = buildResult(w, { ...resultFields(w), ...fields });
+  assert.equal(built.ok, true, built.error);
+  w.result = built.result; w.division = built.result.division;
+  return core.summarize(s, at);
+}
+// Saves programs made from templates with the given history, then starts the first program.
+async function startProgram(p, ids, history = []) {
+  const state = core.defaultState();
+  state.settings.autoRest = false;
+  state.routines = ids.map((id) => program(id));
+  state.history = history;
+  await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+  await p.reload();
+  await tap(button(p, `Aloita: ${state.routines[0].name}`));
+  await p.locator('.wod-card').first().waitFor();
+}
+// Opens the in-app confirmation and answers it; returns the question and the accept button's text.
+async function answer(locator, accept) {
+  const p = locator.page(), dialog = p.getByRole('alertdialog');
+  await locator.click();
+  const asked = [await dialog.locator('#confirm-text').textContent(), await dialog.getByRole('button').nth(1).textContent()];
+  await dialog.getByRole('button').nth(accept ? 1 : 0).click();
+  await dialog.waitFor({ state: 'detached' });
+  await idle(p);
+  return asked;
+}
+// The top of an element relative to the viewport, as a share of its height.
+const viewportTop = (locator) => locator.evaluate((e) => e.getBoundingClientRect().top / innerHeight);
 async function newFunctional(p) {
   await tap(button(p, 'Luo treeniohjelma'));
   assert.equal(await p.locator('h1').innerText(), 'Millainen ohjelma?');
   await tap(button(p, 'Toiminnallinen treeni'));
   await p.locator('.wod-edit').waitFor();
 }
-async function audit(p, label) {
+async function audit(p, label, { known = '' } = {}) {
   await p.waitForTimeout(350);
   const violations = (await new AxeBuilder({ page: p }).analyze()).violations;
   assert.deepEqual(violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })), [], `${label}: axe`);
-  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('button, input, select, summary, a:not(.sr)')].filter((e) => {
-    const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 47.9 || r.height < 47.9);
-  }).map((e) => e.outerHTML.slice(0, 100))), [], `${label}: 48 px touch targets`);
+  assert.deepEqual(await p.evaluate((known) => [...document.querySelectorAll('button, input, select, summary, a:not(.sr)')].filter((e) => {
+    const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 47.9 || r.height < 47.9) && !(known && e.matches(known));
+  }).map((e) => e.outerHTML.slice(0, 100)), known), [], `${label}: 48 px touch targets`);
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${label}: no horizontal overflow`);
 }
+// One fresh browser context per run; any page error fails the run.
+const runner = (t, browser, device) => async (title, fn, { timeout = 40000, ...options } = {}) => t.test(title, { timeout }, async () => {
+  const context = await browser.newContext({ ...devices[device], serviceWorkers: 'block', ...options });
+  const page = await context.newPage(); page.setDefaultTimeout(5000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  try { await page.goto(url); await fn(page); assert.deepEqual(errors, []); } finally { await context.close(); }
+});
 
 try {
   for (const [engine, type, device] of [['chromium', chromium, 'Pixel 7'], ['webkit', webkit, 'iPhone 14']]) {
     const browser = await type.launch();
     try {
       await test(`${engine}: functional program editor`, async (t) => {
-        const run = async (title, fn, { timeout = 40000, ...options } = {}) => t.test(title, { timeout }, async () => {
-          const context = await browser.newContext({ ...devices[device], serviceWorkers: 'block', ...options });
-          const page = await context.newPage(); page.setDefaultTimeout(5000);
-          const errors = [];
-          page.on('pageerror', (error) => errors.push(error.message));
-          try { await page.goto(url); await fn(page); assert.deepEqual(errors, []); } finally { await context.close(); }
-        });
+        const run = runner(t, browser, device);
 
         await run('typing, formats, rep schemes and movement order build the saved WOD', async (p) => {
           await newFunctional(p);
@@ -308,6 +348,197 @@ try {
           await tap(button(p, 'Luo treeniohjelma'));
           await audit(p, 'aurora chooser');
           await galleryAudit('aurora');
+        }, { bypassCSP: true, timeout: 120000 });
+      });
+
+      await test(`${engine}: functional workout`, async (t) => {
+        const run = runner(t, browser, device);
+
+        await run('a WOD-only workout: warm-up, version, result errors, saving, reload, correcting and removing', async (p) => {
+          await startProgram(p, ['fran']);
+          const stat = p.locator('.session-stat'), wod = p.locator('#wod-0'), field = (name) => wod.locator(`[data-rf="${name}"]`);
+          assert.equal(await stat.textContent(), '0/1\u00a0WOD · 0%');
+          assert.equal(await wod.locator('.badge.now').textContent(), 'Vuorossa');
+          assert.equal(await wod.locator('.wod-past').textContent(), 'Ensimmäinen kerta: tulos on lähtötasosi.');
+
+          const warmup = button(p, 'Lämmittely: Valmis');
+          await tap(warmup);
+          assert.equal(await warmup.getAttribute('aria-pressed'), 'true');
+          assert.equal(await focused(warmup), true, 'the toggle keeps focus');
+          await live(p, /^Lämmittely tehty\.$/);
+          assert.equal((await saved(p)).session.warmup.done, true);
+
+          const scaled = button(p, 'Skaalattu');
+          await tap(scaled);
+          assert.equal(await scaled.getAttribute('aria-pressed'), 'true');
+          assert.equal(await focused(scaled), true, 'the version switch keeps focus');
+          assert.match(await wod.innerText(), /Kyykkypunnerrus tangolla \(20 kg\)\s+Avustettu leuanveto/);
+          assert.equal((await saved(p)).session.wods[0].division, 'scaled');
+
+          await tap(button(p, 'Kirjaa tulos (Fran)'));
+          assert.equal(await focused(field('min')), true, 'the form opens on its first field');
+          assert.equal(await wod.locator('[data-rf="division"][value="scaled"]').isChecked(), true, 'the form follows the version on the board');
+          await tap(button(p, 'Tallenna tulos'));
+          const error = p.locator('#result-error-0');
+          assert.match(await error.textContent(), /^Anna aika minuutteina ja sekunteina/);
+          assert.equal(await focused(error), true, 'the error is read first');
+          assert.equal((await saved(p)).session.wods[0].result, undefined);
+
+          const shown = async () => [await p.locator('#rf-time-0').isVisible(), await p.locator('#rf-cap-0').isVisible()];
+          await field('capped').evaluate((e) => { e.dataset.probe = 'kept'; });
+          await field('capped').check();
+          assert.deepEqual(await shown(), [false, true], 'a time cap swaps the time for reps');
+          assert.equal(await field('capped').getAttribute('data-probe'), 'kept', 'the switch is toggled in place, so focus stays on it');
+          await field('capped').uncheck();
+          assert.deepEqual(await shown(), [true, false]);
+
+          await field('min').fill('4');
+          await field('sec').fill('40');
+          await field('notes').fill('Hyvä veto');
+          await field('sec').press('Enter');
+          await wod.locator('.wod-result').waitFor();
+          await idle(p);
+          const edit = button(p, 'Muokkaa tulosta (Fran)');
+          assert.equal(await focused(edit), true, 'focus moves to the saved result');
+          assert.equal(await wod.locator('.wod-score').textContent(), 'Tulos 4:40 Skaalattu', 'a first result is a baseline, not a record');
+          assert.equal(await wod.locator('.wod-notes').textContent(), 'Hyvä veto');
+          assert.equal(await wod.locator('.done-badge').textContent(), 'Kirjattu');
+          assert.equal(await stat.textContent(), '1/1\u00a0WOD · 100%');
+          assert.equal(await button(p, 'Tallenna harjoitus').count(), 1, 'the workout is complete');
+          await live(p, /^Tulos tallennettu: Fran, 4:40 · Skaalattu\.$/);
+          assert.deepEqual((await saved(p)).session.wods[0].result, { kind: 'time', seconds: 280, division: 'scaled', notes: 'Hyvä veto' });
+
+          await p.reload();
+          await wod.locator('.wod-result').waitFor();
+          assert.equal(await wod.locator('.wod-score').textContent(), 'Tulos 4:40 Skaalattu', 'the result survives a reload');
+
+          await tap(edit);
+          assert.equal(await p.locator('#result-title-0').textContent(), 'Muokkaa tulosta (Fran)');
+          assert.deepEqual(await values(wod.locator('[data-rf="min"], [data-rf="sec"], [data-rf="notes"]')), ['4', '40', 'Hyvä veto']);
+          assert.equal(await wod.locator('[data-rf="division"][value="scaled"]').isChecked(), true);
+          assert.equal(await focused(field('min')), true);
+          await tap(button(p, 'Peruuta'));
+          assert.equal(await focused(edit), true, 'cancel returns to the result');
+
+          await tap(edit);
+          await tapConfirm(button(p, 'Poista tulos'));
+          assert.equal(await focused(button(p, 'Kirjaa tulos (Fran)')), true);
+          assert.equal((await saved(p)).session.wods[0].result, undefined);
+          assert.equal(await stat.textContent(), '0/1\u00a0WOD · 0%');
+          await live(p, /^Tulos poistettu\.$/);
+        });
+
+        await run('history shows the previous result and the bests, and beating the best is a new record with a cheer', async (p) => {
+          const now = Date.now();
+          await startProgram(p, ['fran'], [finished('fran', { min: '5', sec: '0' }, now - 2 * DAY), finished('fran', { min: '4', sec: '50', division: 'scaled' }, now - 9 * DAY)]);
+          const wod = p.locator('#wod-0'), field = (name) => wod.locator(`[data-rf="${name}"]`);
+          const past = await wod.locator('.wod-past p').allTextContents();
+          assert.match(past[0], /^Edellinen \d{1,2}\.\d{1,2}\.: 5:00 · Rx$/);
+          assert.equal(past[1], 'Ennätys: Rx 5:00 · Skaalattu 4:50');
+          assert.equal(await button(p, 'Rx').getAttribute('aria-pressed'), 'true', 'the version of the latest result is preselected');
+
+          await tap(button(p, 'Kirjaa tulos (Fran)'));
+          await field('min').fill('4');
+          await field('sec').fill('32');
+          await tap(button(p, 'Tallenna tulos'));
+          assert.equal(await wod.locator('.wod-score').textContent(), 'Tulos 4:32 Rx Uusi ennätys');
+          const cheer = await wod.locator('.cheer').textContent();
+          assert.ok(RECORD_CHEERS.includes(cheer), `a record cheer: ${cheer}`);
+          await live(p, /^Tulos tallennettu: Fran, 4:32 · Rx\. Uusi ennätys! /);
+          assert.ok((await p.locator('#live').textContent()).endsWith(cheer));
+
+          await tap(button(p, 'Muokkaa tulosta (Fran)'));
+          await field('min').fill('5');
+          await field('sec').fill('10');
+          await tap(button(p, 'Tallenna tulos'));
+          assert.equal(await wod.locator('.wod-score').textContent(), 'Tulos 5:10 Rx', 'a slower correction is no record');
+          assert.equal(await wod.locator('.cheer').count(), 0);
+
+          await tap(button(p, 'Tallenna harjoitus'));
+          await live(p, /^Harjoitus tallennettu\. Hienoa työtä!/);
+          const state = await saved(p);
+          assert.equal(state.session, null);
+          assert.equal(state.history.length, 3);
+          assert.deepEqual(state.history[0].wods.map((w) => [w.name, w.result]), [['Fran', { kind: 'time', seconds: 310, division: 'rx' }]]);
+          assert.match(state.history[0].wods[0].board, /Kyykkypunnerrus tangolla \(29 kg\)/, 'history keeps the Rx whiteboard');
+        });
+
+        await run('in a class with strength sets the WOD part follows the sets, and finishing early names what is unlogged', async (p) => {
+          await startProgram(p, ['tunti']);
+          const stat = p.locator('.session-stat'), wod = p.locator('#wod-0'), title = wodTitle(program('tunti').wods[0]);
+          const set = (si) => p.locator(`[data-action="set"][data-e="0"][data-s="${si}"]`);
+          const wodInView = () => p.waitForFunction(() => { const top = document.getElementById('wod-0').getBoundingClientRect().top; return top > 0 && top < innerHeight / 2; });
+          assert.equal(await stat.textContent(), '0/5\u00a0sarjaa · 0/1\u00a0WOD · 0%');
+          assert.equal(await p.locator('#exercise-0 .badge.now').count(), 1, 'the sets come first');
+          assert.equal(await wod.locator('.badge.now').count(), 0);
+          assert.deepEqual(await answer(p.locator('[data-action="finish"]'), false), ['Mitään ei ole vielä kirjattu, joten harjoitusta ei tallenneta historiaan. Lopetetaanko ilman tallennusta?', 'Lopeta tallentamatta']);
+
+          await tap(set(0));
+          await tap(set(1));
+          assert.deepEqual(await answer(p.locator('[data-action="finish"]'), false), ['Kirjaamatta: 3 sarjaa ja 1 WOD-osa. Lopetetaanko silti?', 'Lopeta']);
+          await tap(set(2));
+          await tap(set(3));
+          assert.ok(await viewportTop(wod) > 0.5, 'the WOD part starts low before the last set');
+          await tap(set(4));
+          await wodInView();
+          assert.equal(await stat.textContent(), '5/5\u00a0sarjaa · 0/1\u00a0WOD · 83%');
+          assert.equal(await wod.locator('.badge.now').textContent(), 'Vuorossa');
+          const rail = p.locator('[data-action="jumpwod"]');
+          assert.equal(await rail.getAttribute('aria-current'), 'step');
+          assert.equal(await rail.getAttribute('aria-label'), `WOD: ${title}, vuorossa`);
+
+          await p.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+          await tap(rail);
+          await wodInView();
+          await p.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+          await tap(button(p, `Siirry WOD-osaan: ${title}`));
+          await wodInView();
+          assert.equal(await focused(button(p, `Kirjaa tulos (${title})`)), true, 'the jump focuses the next step');
+
+          await tap(button(p, `Kirjaa tulos (${title})`));
+          assert.equal(await focused(wod.locator('[data-rf="rounds"]')), true, 'rounds come first');
+          await wod.locator('[data-rf="rounds"]').fill('5');
+          await wod.locator('[data-rf="reps"]').fill('12');
+          await tap(button(p, 'Tallenna tulos'));
+          assert.equal(await wod.locator('.wod-score').textContent(), 'Tulos 5 kierrosta + 12 toistoa Rx');
+          assert.equal(await stat.textContent(), '5/5\u00a0sarjaa · 1/1\u00a0WOD · 100%');
+          await tap(button(p, 'Tallenna harjoitus'));
+          const [entry] = (await saved(p)).history;
+          assert.deepEqual([entry.type, entry.setsDone, entry.setsTotal], ['functional', 5, 5]);
+          assert.deepEqual(entry.wods.map((w) => w.result), [{ kind: 'roundsReps', rounds: 5, reps: 12, division: 'rx' }]);
+        });
+
+        await run('the running workout passes accessibility, touch-size and overflow checks in Dark and Aurora', async (p) => {
+          const history = [finished('fran', { min: '5', sec: '0' }, Date.now() - 2 * DAY)];
+          // The strength part reuses the gym exercise card, whose RIR and set +/− buttons are under 48 px on main too.
+          const widths = async (label, list = [390, 320], known = '') => {
+            for (const width of list) {
+              await p.setViewportSize({ width, height: 844 });
+              await audit(p, `${label} ${width}`, { known });
+            }
+            await p.setViewportSize(devices[device].viewport);
+          };
+          for (const theme of ['dark', 'aurora']) {
+            if (theme === 'aurora') await p.evaluate(() => localStorage.setItem('gym-tracker-appearance-v1', 'aurora'));
+            await startProgram(p, ['fran', 'tunti'], history);
+            assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), theme);
+            const wod = p.locator('#wod-0');
+            await tap(button(p, 'Lämmittely: Valmis'));
+            await widths(`${theme} WOD workout`);
+            await tap(button(p, 'Kirjaa tulos (Fran)'));
+            await wod.locator('[data-rf="capped"]').check();
+            await tap(button(p, 'Tallenna tulos'));
+            assert.equal(await p.locator('#result-error-0').count(), 1);
+            await widths(`${theme} result form with an error`, [320]);
+            await wod.locator('[data-rf="capped"]').uncheck();
+            await wod.locator('[data-rf="min"]').fill('4');
+            await wod.locator('[data-rf="sec"]').fill('32');
+            await tap(button(p, 'Tallenna tulos'));
+            assert.equal(await wod.locator('.cheer').count(), 1);
+            await widths(`${theme} new record`, [320]);
+            await startProgram(p, ['tunti', 'fran'], history);
+            await widths(`${theme} class with sets`, [320], '.exercise-rir .rir-btn, [data-action="rmset"], [data-action="addset"]');
+          }
         }, { bypassCSP: true, timeout: 120000 });
       });
     } finally { await browser.close(); }

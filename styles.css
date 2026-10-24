@@ -257,13 +257,13 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .session-guide { color: var(--muted); font-size: 12px; }
 .cheer { margin-top: 10px; padding: 8px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 650; }
 .jump { margin-top: 10px; }
-.ex { scroll-margin-top: 72px; }
-.ex.current { border: 2px solid var(--accent); background: var(--card-hi); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow); }
-.ex.complete { background: var(--input); border-color: var(--line); }
-.ex.complete h2 { color: var(--muted); }
+.ex, .wod-card, .block-card { scroll-margin-top: 72px; }
+.ex.current, .wod-card.current { border: 2px solid var(--accent); background: var(--card-hi); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow); }
+.ex.complete, .wod-card.complete, .block-card.complete { background: var(--input); border-color: var(--line); }
+.ex.complete h2, .wod-card.complete h2, .block-card.complete h2 { color: var(--muted); }
 .exercise-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
 .exercise-index { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding-inline: 6px; border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.ex.current .exercise-index { background: var(--accent); color: var(--accent-ink); }
+.ex.current .exercise-index, .wod-card.current .exercise-index { background: var(--accent); color: var(--accent-ink); }
 .exercise-heading h2 { font-size: 18px; line-height: 1.25; }
 .target { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
 .weight-pill { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 750; border: 1px solid var(--line-hi); }
@@ -445,7 +445,8 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .home-programs > *, .home-aside > *, .progression-controls > *, .history-list > li > *,
 .settings-body > *, .rest-settings > *, .session-end > *, .edit > *,
 .library-filters > *, .custom-exercise form > *, .stat-filters > *, .editor-section > *, .wod-moves > *, .wod-move > *,
-.wod-params > *, .move-scaled-body > *, .wod-board > *, .wod-guide-body > *, .gallery-controls > *, .gallery-loads > *, .template-card > * { margin-block: 0; }
+.wod-params > *, .move-scaled-body > *, .wod-board > *, .wod-guide-body > *, .gallery-controls > *, .gallery-loads > *, .template-card > *,
+.block-card > *, .wod-card > *, .wod-result > *, .result-form > *, .wod-past > * { margin-block: 0; }
 @media (max-width: 700px) {
 	.stat-columns { grid-template-columns: 1fr; }
 	.stat-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -499,11 +500,11 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 	*, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
 }
 @media (forced-colors: active) {
-	.set.done, .set.next, .ex.current, .track-box.done, .track-box.current { border: 2px solid Highlight; }
+	.set.done, .set.next, .ex.current, .wod-card.current, .track-box.done, .track-box.current { border: 2px solid Highlight; }
 	.track-muscle { display: none; }
 	.set.done .icon { color: Highlight; }
 	.appearance-option:has(input:checked) { border: 3px solid Highlight; }
-	.format-option:has(input:checked), .chip[aria-pressed="true"], .segmented [aria-pressed="true"] { border: 3px solid Highlight; }
+	.format-option:has(input:checked), .chip[aria-pressed="true"], .segmented [aria-pressed="true"], .block-done[aria-pressed="true"] { border: 3px solid Highlight; }
 }
 
 /* Interval timer */
@@ -593,12 +594,29 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .gallery-loads { gap: var(--space-2); }
 .segmented { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
 .segmented > .btn.secondary { flex: 1 1 auto; width: auto; }
-.segmented [aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.segmented [aria-pressed="true"], .block-done[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .template-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
 .template-card { display: flex; flex-direction: column; gap: var(--control-gap); }
 .template-card h2 { overflow-wrap: anywhere; }
 .template-card > .btn { margin-top: auto; }
 .template-parts { color: var(--muted); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+/* Running functional workout: warm-up and cool-down, WOD cards and the result form */
+.block-card, .wod-card { display: grid; gap: var(--control-gap); }
+.block-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--control-gap); }
+.block-text, .wod-notes { font-size: 14px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.wod-past { display: grid; gap: 2px; color: var(--muted); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.wod-result { display: grid; gap: var(--space-2); }
+.wod-score { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.wod-score strong { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.result-form { display: grid; gap: var(--control-gap); min-width: 0; padding-top: var(--control-gap); border-top: 1px solid var(--line); }
+.result-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--control-gap); }
+.result-division { min-width: 0; margin: 0; padding: 0; border: 0; }
+.result-division legend { padding: 0; margin-bottom: var(--space-2); color: var(--muted); font-size: 12px; font-weight: 650; }
+.choice-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.choice-row .choice-option { flex: 1 1 120px; border: 1px solid var(--line-hi); background: var(--input); }
+.result-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: var(--control-gap); }
+.result-actions .btn { width: 100%; }
+.track-wod .icon { width: 22px; height: 22px; }
 @media (max-width: 380px) {
 	.wod-add-row { grid-template-columns: 1fr; }
 }

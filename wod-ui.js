@@ -11,7 +11,8 @@ import { uid } from './core.js';
 import { escapeHtml as esc } from './statistics-ui.js';
 import {
   MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, FORMAT_DEFAULTS,
-  SCHEME_CHIPS, MODALITY_LABELS, sanitizeWod, parseScheme, boardLines, modalities, movementLine, wodMinutes, wodPartLabel,
+  SCHEME_CHIPS, MODALITY_LABELS, DIVISIONS, sanitizeWod, parseScheme, boardLines, modalities, movementLine, wodMinutes, wodPartLabel,
+  wodTitle, formatScore, resultLabel, previousResult, bestResults, isPersonalRecord,
 } from './wod.js';
 import { DEFAULT_WARMUP, DEFAULT_COOLDOWN, TEMPLATES, TEMPLATE_GROUPS, SEXES, templateWod, templateRoutine } from './wod-templates.js';
 
@@ -120,15 +121,23 @@ export function scaledSummary(m) {
 }
 
 const decimal = (n) => String(n).replace('.', ',');
+const boardMeta = (wod) => {
+  const minutes = wodMinutes(wod);
+  return `<p class="board-meta"><span>${minutes ? `Kesto noin ${decimal(minutes)} min` : 'Kesto riippuu tahdista'}</span>${modalities(wod).map((k) => `<span class="pill">${MODALITY_LABELS[k]}</span>`).join('')}</p>`;
+};
+// One version of the whiteboard. The headline is left out when the card title already says it.
+function wodBoard(wod, division, title) {
+  const [headline, ...lines] = boardLines(wod, division);
+  return `<div class="wod-board">${headline === title ? '' : `<p class="board-headline">${esc(headline)}</p>`}<ul class="board-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>${boardMeta(wod)}</div>`;
+}
 
 // What the whiteboard will say, from the values the save would store.
 export function boardPreview(raw) {
   const wod = sanitizeWod(raw);
   const [headline, ...rx] = boardLines(wod, 'rx');
   const scaled = wod.movements.some((m) => m.scaled) ? boardLines(wod, 'scaled').slice(1) : [];
-  const minutes = wodMinutes(wod);
   const list = (lines) => `<ul class="board-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`;
-  return `<p class="eyebrow">Taululla</p><p class="board-headline">${esc(wod.name || headline)}</p>${wod.name ? `<p class="board-sub">${esc(headline)}</p>` : ''}${rx.length ? list(rx) : '<p class="field-hint">Lisää liikkeitä, niin ne näkyvät tässä.</p>'}${scaled.length ? `<p class="eyebrow">Skaalattu</p>${list(scaled)}` : ''}${wod.stimulus ? `<p class="board-stimulus">${esc(wod.stimulus)}</p>` : ''}<p class="board-meta"><span>${minutes ? `Kesto noin ${decimal(minutes)} min` : 'Kesto riippuu tahdista'}</span>${modalities(wod).map((k) => `<span class="pill">${MODALITY_LABELS[k]}</span>`).join('')}</p>`;
+  return `<p class="eyebrow">Taululla</p><p class="board-headline">${esc(wod.name || headline)}</p>${wod.name ? `<p class="board-sub">${esc(headline)}</p>` : ''}${rx.length ? list(rx) : '<p class="field-hint">Lisää liikkeitä, niin ne näkyvät tässä.</p>'}${scaled.length ? `<p class="eyebrow">Skaalattu</p>${list(scaled)}` : ''}${wod.stimulus ? `<p class="board-stimulus">${esc(wod.stimulus)}</p>` : ''}${boardMeta(wod)}`;
 }
 
 const activeScheme = (w) => parseScheme(w.scheme)?.join('-') ?? '';
@@ -218,10 +227,7 @@ function templateParts(t) {
 
 function templateCard(t, sex, icon) {
   const wod = sanitizeWod(templateWod(t, sex));
-  const [headline, ...lines] = boardLines(wod, 'rx');
-  const minutes = wodMinutes(wod);
-  const board = `<div class="wod-board">${headline === t.name ? '' : `<p class="board-headline">${esc(headline)}</p>`}<ul class="board-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul><p class="board-meta"><span>${minutes ? `Kesto noin ${decimal(minutes)} min` : 'Kesto riippuu tahdista'}</span>${modalities(wod).map((k) => `<span class="pill">${MODALITY_LABELS[k]}</span>`).join('')}</p></div>`;
-  return `<li class="card template-card"><h2>${esc(t.name)}</h2>${templateParts(t)}${board}${wod.stimulus ? `<p class="board-stimulus">${esc(wod.stimulus)}</p>` : ''}${wod.notes ? `<p class="field-hint">${esc(wod.notes)}</p>` : ''}<button class="btn secondary" data-action="usetemplate" data-template="${esc(t.id)}" data-key="use-${esc(t.id)}">Käytä mallia<span class="sr"> ${esc(t.name)}</span> ${icon('arrow')}</button></li>`;
+  return `<li class="card template-card"><h2>${esc(t.name)}</h2>${templateParts(t)}${wodBoard(wod, 'rx', t.name)}${wod.stimulus ? `<p class="board-stimulus">${esc(wod.stimulus)}</p>` : ''}${wod.notes ? `<p class="field-hint">${esc(wod.notes)}</p>` : ''}<button class="btn secondary" data-action="usetemplate" data-template="${esc(t.id)}" data-key="use-${esc(t.id)}">Käytä mallia<span class="sr"> ${esc(t.name)}</span> ${icon('arrow')}</button></li>`;
 }
 
 // group: a key of TEMPLATE_GROUPS; sex: a key of SEXES (only the suggested loads differ).
@@ -229,4 +235,66 @@ export function templateGallery(group, sex, icon) {
   const toggles = (action, attr, options, current, labelling) => `<div class="segmented" role="group" ${labelling}>${Object.entries(options).map(([value, text]) => `<button class="btn secondary" data-action="${action}" data-${attr}="${value}" data-key="${action}-${value}" aria-pressed="${current === value}">${text}</button>`).join('')}</div>`;
   const cards = TEMPLATES.filter((t) => t.group === group).map((t) => templateCard(t, sex, icon)).join('');
   return `<section class="card gallery-controls" aria-label="Mallien valinta">${toggles('templategroup', 'group', TEMPLATE_GROUPS, group, 'aria-label="Mallien ryhmä"')}<p class="field-hint">${GROUP_NOTES[group]}</p><div class="gallery-loads"><span class="eyebrow" id="gallery-loads">Ehdotetut kuormat</span>${toggles('templatesex', 'sex', SEXES, sex, 'aria-labelledby="gallery-loads"')}</div></section><ul class="list template-list" aria-label="${TEMPLATE_GROUPS[group]}">${cards}</ul>`;
+}
+
+// ---- Running workout: warm-up, cool-down and WOD parts ----
+
+const shortDate = (at) => new Date(at).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
+
+// "Valmis" is a reminder within this workout; history keeps only the sets and WOD results.
+export function sessionBlock(kind, block, icon) {
+  const { title } = BLOCKS[kind], done = block.done === true;
+  return `<div class="card block-card${done ? ' complete' : ''}" id="block-${kind}"><div class="block-heading"><h2>${title}</h2>${block.minutes ? `<span class="badge">${block.minutes} min</span>` : ''}</div>${block.text ? `<p class="block-text">${esc(block.text)}</p>` : ''}<button class="btn secondary block-done" data-action="blockdone" data-block="${kind}" data-key="blockdone-${kind}" aria-pressed="${done}">${done ? icon('check') : ''}<span class="sr">${title}: </span>Valmis</button></div>`;
+}
+
+// The latest result and the best of each version. The first try has nothing to compare with.
+function wodPast(w, history) {
+  const previous = previousResult(history, w.key);
+  if (!previous) return w.score === 'none' ? '' : '<div class="wod-past"><p>Ensimmäinen kerta: tulos on lähtötasosi.</p></div>';
+  const best = bestResults(history, w.key);
+  const bests = Object.keys(DIVISIONS).filter((d) => best[d]).map((d) => `${DIVISIONS[d]} ${formatScore(best[d].result)}`);
+  return `<div class="wod-past"><p>Edellinen ${shortDate(previous.at)}: ${esc(resultLabel(previous.result))}</p>${bests.length ? `<p>Ennätys: ${esc(bests.join(' · '))}</p>` : ''}</div>`;
+}
+
+function resultInput(w, fields, field, label, { kilos = false, min = 0, max = 100000 } = {}) {
+  const type = kilos ? 'type="text" inputmode="decimal"' : `type="number" inputmode="numeric" min="${min}" max="${max}" step="1"`;
+  return `<label class="field">${label}<input ${type} value="${esc(fields[field])}" data-rf="${field}" data-key="rf-${field}-${esc(w.id)}" autocomplete="off"></label>`;
+}
+
+// Inputs for the WOD's score. A time cap swaps the time for the reps done by the cap (app.js toggles `hidden`).
+function scoreInputs(w, wi, fields) {
+  const input = (field, label, options) => resultInput(w, fields, field, label, options);
+  if (w.score === 'time') {
+    const cap = w.minutes || fields.capped ? `<label class="check"><span>Aikaraja tuli vastaan${w.minutes ? ` (${w.minutes} min)` : ''}<small>Kirjaa silloin aikarajaan mennessä tehdyt toistot.</small></span><input type="checkbox" data-rf="capped" data-w="${wi}" data-key="rf-capped-${esc(w.id)}"${fields.capped ? ' checked' : ''}></label><div id="rf-cap-${wi}"${fields.capped ? '' : ' hidden'}>${input('reps', 'Toistot aikarajaan mennessä')}</div>` : '';
+    return `<div class="result-pair" id="rf-time-${wi}"${fields.capped ? ' hidden' : ''}>${input('min', 'Minuutit', { max: 1440 })}${input('sec', 'Sekunnit', { max: 59 })}</div>${cap}`;
+  }
+  if (w.score === 'roundsReps') return `<div class="result-pair">${input('rounds', 'Kierrokset', { max: 10000 })}${input('reps', 'Lisätoistot')}</div><p class="field-hint">Kokonaiset kierrokset ja viimeisen, kesken jääneen kierroksen toistot.</p>`;
+  if (w.score === 'kg') return input('value', 'Kuorma (kg)', { kilos: true });
+  if (w.score === 'none') return '<p class="field-hint">Tälle osalle ei kirjata lukua. Tallenna, niin osa merkitään tehdyksi.</p>';
+  return input('value', SCORE_LABELS[w.score]);
+}
+
+// fields: the values as typed (prefilled by resultFields in wod.js); error: what to fix before saving.
+export function resultForm(w, wi, fields, { error = '', advanced = false } = {}) {
+  const id = esc(w.id);
+  const divisions = Object.entries(DIVISIONS).map(([value, text]) => `<label class="choice-option"><input type="radio" name="rf-division-${wi}" value="${value}" data-rf="division" data-key="rf-division-${id}-${value}"${fields.division === value ? ' checked' : ''}><span>${text}</span></label>`).join('');
+  const rpe = advanced ? resultInput(w, fields, 'rpe', 'Rasittavuus (RPE 1–10) <span class="optional">valinnainen</span>', { min: 1, max: 10 }) : '';
+  return `<form class="result-form" id="result-form-${wi}" data-w="${wi}" aria-labelledby="result-title-${wi}" novalidate><h3 id="result-title-${wi}">${w.result ? 'Muokkaa tulosta' : 'Kirjaa tulos'}<span class="sr"> (${esc(wodTitle(w))})</span></h3>${error ? `<p class="banner" id="result-error-${wi}" role="alert" tabindex="-1">${esc(error)}</p>` : ''}${scoreInputs(w, wi, fields)}<fieldset class="result-division"><legend>Versio</legend><div class="choice-row">${divisions}</div></fieldset>${rpe}<label class="field">Muistiinpanot <span class="optional">valinnainen</span><textarea maxlength="300" rows="2" data-rf="notes" data-key="rf-notes-${id}" placeholder="Esim. skaalaus tai tuntuma">${esc(fields.notes)}</textarea></label><div class="result-actions"><button type="submit" class="btn primary" data-action="saveresult" data-w="${wi}" data-key="saveresult-${id}">Tallenna tulos</button><button type="button" class="btn secondary" data-action="cancelresult" data-w="${wi}" data-key="cancelresult-${id}">Peruuta</button>${w.result ? `<button type="button" class="btn ghost danger-text" data-action="clearresult" data-w="${wi}" data-key="clearresult-${id}">Poista tulos</button>` : ''}</div></form>`;
+}
+
+// A record is only possible against an earlier result of the same version in history.
+function resultSummary(w, wi, history, cheer) {
+  const r = w.result, record = isPersonalRecord(history, w.key, r);
+  return `<div class="wod-result"><p class="wod-score"><span class="eyebrow">Tulos</span> <strong>${esc(formatScore(r, { long: true }))}</strong> <span class="badge">${DIVISIONS[r.division]}</span>${record ? ' <span class="badge done-badge">Uusi ennätys</span>' : ''}</p>${r.rpe ? `<p class="field-hint">RPE ${r.rpe}</p>` : ''}${r.notes ? `<p class="wod-notes">${esc(r.notes)}</p>` : ''}${cheer ? `<p class="cheer">${esc(cheer)}</p>` : ''}<button class="btn secondary" data-action="openresult" data-w="${wi}" data-key="openresult-${esc(w.id)}">Muokkaa tulosta<span class="sr"> (${esc(wodTitle(w))})</span></button></div>`;
+}
+
+// One WOD part of a running workout. current: the part to do next; form: the open result form's fields.
+export function sessionWodCard(w, wi, { count, history = [], current = false, form = null, error = '', cheer = '', advanced = false, icon }) {
+  const id = esc(w.id), title = wodTitle(w), division = w.division === 'scaled' ? 'scaled' : 'rx';
+  const badge = w.result ? '<span class="badge done-badge">Kirjattu</span>' : current ? '<span class="badge now">Vuorossa</span>' : '';
+  const versions = `<div class="segmented" role="group" aria-label="Näytettävä versio: ${esc(title)}">${Object.entries(DIVISIONS).map(([value, text]) => `<button class="btn secondary" data-action="wodversion" data-w="${wi}" data-division="${value}" data-key="wodversion-${id}-${value}" aria-pressed="${division === value}">${text}</button>`).join('')}</div>`;
+  const unwritten = division === 'scaled' && !w.movements.some((m) => m.scaled) ? '<p class="field-hint">Skaalattua versiota ei ole kirjoitettu. Kevennä kuormaa, määrää tai liikettä niin, että tuntuma säilyy.</p>' : '';
+  const result = form ? resultForm(w, wi, form, { error, advanced }) : w.result ? resultSummary(w, wi, history, cheer)
+    : `<button class="btn primary big" data-action="openresult" data-w="${wi}" data-key="openresult-${id}">Kirjaa tulos<span class="sr"> (${esc(title)})</span> ${icon('arrow')}</button>`;
+  return `<li class="card wod-card${w.result ? ' complete' : ''}${current ? ' current' : ''}" id="wod-${wi}"><div class="exercise-heading"><span class="exercise-index">${wodPartLabel(wi, count)}</span><h2 class="grow">${esc(title)}</h2>${badge}</div>${versions}${unwritten}${wodBoard(w, division, title)}${w.stimulus ? `<p class="board-stimulus">${esc(w.stimulus)}</p>` : ''}${w.notes ? `<p class="wod-notes">${esc(w.notes)}</p>` : ''}${wodPast(w, history)}${result}</li>`;
 }

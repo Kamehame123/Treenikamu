@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as ui from '../wod-ui.js';
 import * as w from '../wod.js';
 import * as c from '../core.js';
-import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateRoutine, DEFAULT_WARMUP, DEFAULT_COOLDOWN } from '../wod-templates.js';
+import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateById, templateRoutine, DEFAULT_WARMUP, DEFAULT_COOLDOWN } from '../wod-templates.js';
 
 const icon = (name) => `<svg data-icon="${name}"></svg>`;
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -211,4 +211,112 @@ test('a gallery card previews the whiteboard with the chosen loads and names its
   assert.doesNotMatch(templateCard(formats, 'AMRAP 12 min'), /board-headline/, 'a headline equal to the name is not repeated');
   assert.match(templateCard(formats, 'Kokonainen tunti'), /<p class="template-parts">Lämmittely 12 min · Takakyykky 5 × 5 · WOD · Loppuverryttely 8 min<\/p>/);
   assert.match(templateCard(formats, 'Tabata'), /<p class="field-hint">Perinteinen tulos on heikoimman jakson toistot\./);
+});
+
+// ---- Running workout ----
+
+const franWod = (history = []) => c.startSession(c.sanitizeRoutine(templateRoutine(templateById('fran'), 'women')), 1000, { history }).wods[0];
+const franHistory = (wod, result) => [{ id: 'h1', endedAt: Date.UTC(2025, 2, 4, 12), wods: [{ id: 'x', key: wod.key, name: 'Fran', format: 'fortime', score: 'time', board: 'b', result }] }];
+
+test('warm-up and cool-down cards show the plan and a "Valmis" toggle named for screen readers', () => {
+  const open = ui.sessionBlock('warmup', { text: 'Soutu 5 min\n<b>Liikkuvuus</b>', minutes: 12, done: false }, icon);
+  assert.match(open, /^<div class="card block-card" id="block-warmup"><div class="block-heading"><h2>Lämmittely<\/h2><span class="badge">12 min<\/span><\/div>/);
+  assert.match(open, /<p class="block-text">Soutu 5 min\n&lt;b&gt;Liikkuvuus&lt;\/b&gt;<\/p>/);
+  assert.match(open, /<button class="btn secondary block-done" data-action="blockdone" data-block="warmup" data-key="blockdone-warmup" aria-pressed="false"><span class="sr">Lämmittely: <\/span>Valmis<\/button><\/div>$/);
+  const done = ui.sessionBlock('cooldown', { text: '', minutes: null, done: true }, icon);
+  assert.match(done, /^<div class="card block-card complete" id="block-cooldown">/);
+  assert.match(done, /aria-pressed="true"><svg data-icon="check"><\/svg><span class="sr">Loppuverryttely: <\/span>Valmis<\/button>/);
+  assert.doesNotMatch(done, /block-text|class="badge"/);
+});
+
+test('a WOD card shows the whiteboard of the chosen version and the next step', () => {
+  const wod = franWod();
+  const html = ui.sessionWodCard(wod, 0, { count: 1, history: [], current: true, icon });
+  assert.match(html, /^<li class="card wod-card current" id="wod-0"><div class="exercise-heading"><span class="exercise-index">WOD<\/span><h2 class="grow">Fran<\/h2><span class="badge now">Vuorossa<\/span><\/div>/);
+  assert.match(html, /<div class="segmented" role="group" aria-label="Näytettävä versio: Fran">/);
+  assert.match(html, new RegExp(`data-action="wodversion" data-w="0" data-division="rx" data-key="wodversion-${wod.id}-rx" aria-pressed="true">Rx</button>`));
+  assert.match(html, /data-division="scaled"[^>]*aria-pressed="false">Skaalattu<\/button>/);
+  assert.match(html, /<li>Kyykkypunnerrus tangolla \(29 kg\)<\/li><li>Leuanveto myötäotteella<\/li>/);
+  assert.match(html, /<p class="board-stimulus">/);
+  assert.match(html, /<div class="wod-past"><p>Ensimmäinen kerta: tulos on lähtötasosi\.<\/p><\/div>/);
+  assert.match(html, new RegExp(`<button class="btn primary big" data-action="openresult" data-w="0" data-key="openresult-${wod.id}">Kirjaa tulos<span class="sr"> \\(Fran\\)</span> <svg data-icon="arrow"></svg></button></li>$`));
+  assert.doesNotMatch(html, /result-form|Skaalattua versiota ei ole|crossfit/i);
+
+  const scaled = ui.sessionWodCard({ ...wod, division: 'scaled' }, 1, { count: 2, icon });
+  assert.match(scaled, /^<li class="card wod-card" id="wod-1"><div class="exercise-heading"><span class="exercise-index">WOD 2<\/span><h2 class="grow">Fran<\/h2><\/div>/);
+  assert.match(scaled, /data-division="scaled"[^>]*aria-pressed="true">Skaalattu<\/button>/);
+  assert.match(scaled, /<li>Kyykkypunnerrus tangolla \(20 kg\)<\/li><li>Avustettu leuanveto<\/li>/);
+  const unwritten = ui.sessionWodCard({ ...wod, division: 'scaled', movements: wod.movements.map(({ scaled: _, ...m }) => m) }, 0, { count: 1, icon });
+  assert.match(unwritten, /Skaalattua versiota ei ole kirjoitettu\./);
+  const none = ui.sessionWodCard({ ...wod, score: 'none' }, 0, { count: 1, icon });
+  assert.doesNotMatch(none, /wod-past/, 'a part without a score has no baseline to mention');
+
+  const evil = '"><img src=x onerror=alert(1)>';
+  const escaped = ui.sessionWodCard({ ...wod, name: evil, notes: evil, stimulus: evil, movements: [{ ...wod.movements[0], name: evil }] }, 0, { count: 1, form: w.resultFields(wod), icon });
+  assert.doesNotMatch(escaped, /<img/);
+});
+
+test('the result form asks for the score of the WOD and swaps the time for reps when capped', () => {
+  const wod = franWod(), fields = w.resultFields(wod);
+  const form = ui.resultForm(wod, 0, fields);
+  assert.match(form, /^<form class="result-form" id="result-form-0" data-w="0" aria-labelledby="result-title-0" novalidate><h3 id="result-title-0">Kirjaa tulos<span class="sr"> \(Fran\)<\/span><\/h3>/);
+  assert.match(form, /<div class="result-pair" id="rf-time-0"><label class="field">Minuutit<input type="number" inputmode="numeric" min="0" max="1440" step="1" value="" data-rf="min"/);
+  assert.match(form, /Sekunnit<input type="number" inputmode="numeric" min="0" max="59"/);
+  assert.match(form, /Aikaraja tuli vastaan \(10 min\)/);
+  assert.match(form, /<div id="rf-cap-0" hidden><label class="field">Toistot aikarajaan mennessä/);
+  assert.match(form, /<fieldset class="result-division"><legend>Versio<\/legend>/);
+  assert.match(form, /value="rx" data-rf="division" data-key="rf-division-[^"]+-rx" checked>/);
+  assert.match(form, /<textarea maxlength="300" rows="2" data-rf="notes"/);
+  assert.match(form, /<button type="submit" class="btn primary" data-action="saveresult" data-w="0"/);
+  assert.doesNotMatch(form, /data-rf="rpe"|clearresult|role="alert"/);
+
+  const capped = ui.resultForm(wod, 0, { ...fields, capped: true, reps: '150' }, { error: 'Korjaa <b>', advanced: true });
+  assert.match(capped, /<div class="result-pair" id="rf-time-0" hidden>/);
+  assert.match(capped, /data-rf="capped" data-w="0" data-key="rf-capped-[^"]+" checked>/);
+  assert.match(capped, /<div id="rf-cap-0"><label/);
+  assert.match(capped, /value="150" data-rf="reps"/);
+  assert.match(capped, /<p class="banner" id="result-error-0" role="alert" tabindex="-1">Korjaa &lt;b&gt;<\/p>/);
+  assert.match(capped, /Rasittavuus \(RPE 1–10\)[^<]*<span class="optional">valinnainen<\/span><input type="number" inputmode="numeric" min="1" max="10"/);
+  assert.doesNotMatch(ui.resultForm({ ...wod, minutes: 0 }, 0, fields), /data-rf="capped"|rf-cap-0/, 'without a time cap there is nothing to toggle');
+
+  const logged = { ...wod, result: { kind: 'time', seconds: 290, division: 'scaled', notes: 'Hyvä' } };
+  const edit = ui.resultForm(logged, 0, w.resultFields(logged));
+  assert.match(edit, /<h3 id="result-title-0">Muokkaa tulosta/);
+  assert.match(edit, /value="4" data-rf="min"/);
+  assert.match(edit, /value="50" data-rf="sec"/);
+  assert.match(edit, /value="scaled" data-rf="division"[^>]* checked>/);
+  assert.match(edit, />Hyvä<\/textarea>/);
+  assert.match(edit, /data-action="clearresult" data-w="0"/);
+
+  const kind = (score) => ui.resultForm({ ...wod, score }, 0, fields);
+  assert.match(kind('roundsReps'), /Kierrokset<input[^>]*data-rf="rounds"[\s\S]*Lisätoistot<input[^>]*data-rf="reps"/);
+  assert.match(kind('kg'), /Kuorma \(kg\)<input type="text" inputmode="decimal" value="" data-rf="value"/);
+  assert.match(kind('cal'), /Kalorit<input type="number"[^>]*data-rf="value"/);
+  assert.match(kind('none'), /Tälle osalle ei kirjata lukua\./);
+  assert.doesNotMatch(kind('none'), /data-rf="(min|sec|reps|rounds|value)"/);
+});
+
+test('a logged WOD shows its score, version, a new record and the record cheer', () => {
+  const first = franWod();
+  const history = franHistory(first, { kind: 'time', seconds: 300, division: 'rx' });
+  const wod = franWod(history);
+  assert.match(ui.sessionWodCard(wod, 0, { count: 1, history, icon }), /<div class="wod-past"><p>Edellinen 4\.3\.: 5:00 · Rx<\/p><p>Ennätys: Rx 5:00<\/p><\/div>/);
+
+  const done = { ...wod, result: { kind: 'time', seconds: 280, division: 'rx', rpe: 8, notes: 'Kova <3' } };
+  const html = ui.sessionWodCard(done, 0, { count: 1, history, current: false, cheer: 'Nytt personbästa!', icon });
+  assert.match(html, /^<li class="card wod-card complete" id="wod-0">/);
+  assert.match(html, /<span class="badge done-badge">Kirjattu<\/span>/);
+  assert.match(html, /<p class="wod-score"><span class="eyebrow">Tulos<\/span> <strong>4:40<\/strong> <span class="badge">Rx<\/span> <span class="badge done-badge">Uusi ennätys<\/span><\/p>/);
+  assert.match(html, /<p class="field-hint">RPE 8<\/p>/);
+  assert.match(html, /<p class="wod-notes">Kova &lt;3<\/p>/);
+  assert.match(html, /<p class="cheer">Nytt personbästa!<\/p>/);
+  assert.match(html, /data-action="openresult"[^>]*>Muokkaa tulosta<span class="sr"> \(Fran\)<\/span><\/button><\/div><\/li>$/);
+  assert.doesNotMatch(html, /btn primary big|result-form/);
+
+  assert.doesNotMatch(ui.sessionWodCard({ ...done, result: { kind: 'time', seconds: 300, division: 'rx' } }, 0, { count: 1, history, icon }), /Uusi ennätys/, 'equalling the best is no record');
+  assert.doesNotMatch(ui.sessionWodCard({ ...done, result: { kind: 'time', seconds: 200, division: 'scaled' } }, 0, { count: 1, history, icon }), /Uusi ennätys/, 'the first scaled result is a baseline');
+  assert.match(ui.sessionWodCard({ ...done, result: { kind: 'time', capped: true, reps: 120, seconds: 600, division: 'rx' } }, 0, { count: 1, history, icon }), /<strong>Aikaraja 10:00 \+ 120 toistoa<\/strong>/);
+  const editing = ui.sessionWodCard(done, 0, { count: 1, history, form: w.resultFields(done), icon });
+  assert.match(editing, /<form class="result-form"/);
+  assert.doesNotMatch(editing, /wod-score/, 'the open form replaces the summary');
 });
