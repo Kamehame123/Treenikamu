@@ -160,6 +160,32 @@ try {
         });
 
         for (const appearance of ['dark', 'aurora']) {
+          await run(`${appearance}: routine muscle symbols count primary groups left of start without an expand chevron`, async (context) => {
+            const state = core.defaultState();
+            const names = ['Takakyykky', 'Romanialainen maastaveto', 'Kulmasoutu tangolla', 'Penkkipunnerrus', 'Pystypunnerrus tangolla', 'Hauiskääntö tangolla', 'Ojentajapunnerrus köydellä', 'Lankku', 'Oma liike'];
+            state.routines = [core.sanitizeRoutine({ id: 'muscles', name: 'Koko keho A', exercises: names.map((name, i) => ({ id: `e${i}`, name, sets: 3, reps: '10' })) })];
+            const page = await seed(context, { appearance, state });
+            const before = await raw(page);
+            const card = page.locator('.routine');
+            assert.equal(await card.locator('.settings-chevron').count(), 0);
+            assert.deepEqual(await card.locator('.routine-muscle').evaluateAll((items) => items.map((el) => [el.dataset.muscle, el.textContent])), [['legs', '2'], ['back', '1'], ['chest', '1'], ['shoulders', '1'], ['arms', '2'], ['core', '1']]);
+            assert.equal(await card.locator('.routine-muscle[data-muscle="legs"]').getAttribute('aria-label'), 'Jalat: 2 liikettä');
+            for (const width of [320, 390, 540, 1040]) {
+              await page.setViewportSize({ width, height: 900 });
+              assert.equal(await card.evaluate((el) => {
+                const start = el.querySelector('.quick-start').getBoundingClientRect();
+                return [...el.querySelectorAll('.routine-muscle')].every((item) => item.getBoundingClientRect().right <= start.left);
+              }), true, `${width}: muscles stay left of start`);
+              assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            }
+            await card.locator('.routine-details > summary').click();
+            assert.equal(await card.locator('details').first().getAttribute('open'), '');
+            assert.equal(await card.locator('[data-action="edit"]').isVisible(), true);
+            assert.equal(await raw(page), before, 'opening details never changes training records');
+            await card.locator('.quick-start').click();
+            await page.locator('.ex').first().waitFor();
+          }, { reducedMotion: 'reduce', serviceWorkers: 'block' });
+
           await run(`${appearance}: only the next unfinished set pulses inward, without layout movement`, async (context) => {
             const state = core.defaultState();
             state.settings.autoRest = false;

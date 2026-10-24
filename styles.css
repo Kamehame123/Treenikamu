@@ -111,9 +111,9 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 @media (prefers-reduced-motion: reduce) { .variant-light::before, .variant-super::before { animation: none; } }
 .history-log { padding-inline: 12px; font-size: 12px; overflow-wrap: anywhere; }
 .history-log li { margin-block: 8px; }
-.routine-details > summary { display: grid; align-content: center; gap: 6px; min-height: 56px; padding-right: 76px; list-style: none; cursor: pointer; }
+.routine-details > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: 6px; min-height: 56px; padding-right: 76px; list-style: none; cursor: pointer; }
+.routine-details > summary > h2, .routine-details > summary > .routine-meta { grid-column: 1; }
 .routine-details > summary::-webkit-details-marker { display: none; }
-.routine-details[open] > summary .settings-chevron { transform: rotate(180deg); }
 .routine-body { margin-top: var(--control-gap); }
 .routine-actions { display: flex; gap: var(--control-gap); }
 .routine-actions .big { flex: 1; width: auto; }
@@ -125,7 +125,10 @@ button.quick-start .icon { width: 24px; height: 24px; fill: currentColor; }
 .routine h2 { font-size: 20px; letter-spacing: -.03em; }
 .routine-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .routine-meta > span { padding: 2px 8px; border: 1px solid var(--line-hi); border-radius: 8px; background: var(--card); }
-.routine-meta > .settings-chevron { margin-left: 0; padding: 0 4px; border: 0; background: none; }
+.routine-muscles { grid-column: 2; grid-row: 1 / 3; align-self: center; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 104px; }
+.routine-muscle { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); }
+.routine-muscle .muscle-icon { width: 22px; height: 22px; }
+.routine-muscle b { font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .routine-meta b { color: var(--text); font-variant-numeric: tabular-nums; }
 .routine-pills { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--control-gap); padding: 0; list-style: none; }
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); font-size: 12px; color: var(--text); line-height: 1.3; max-width: 100%; overflow-wrap: anywhere; }

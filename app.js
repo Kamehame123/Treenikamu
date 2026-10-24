@@ -960,7 +960,8 @@ function homeView() {
       <button class="quick-start" data-action="start" data-key="quick-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Aloita: ${esc(r.name)}">${icon('play')} <span>Aloita</span></button>
       <details class="routine-details" data-routine-panel="${esc(r.id)}" ${openRoutines.has(r.id) ? 'open' : ''}>
         <summary><h2>${esc(r.name)}</h2>
-          <span class="routine-meta">${meta} <span class="settings-chevron" aria-hidden="true">⌄</span></span>
+          <span class="routine-meta">${meta}</span>
+          ${routineMuscles(r)}
         </summary>
         <div class="routine-body">${routineLastResults(r, state.history)}<ul class="routine-pills" aria-label="${functional ? 'Sisältö' : 'Liikkeet'}: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div>${variants}${strength || !functional ? progressionControls(r) : ''}</div>
       </details></li>`;
@@ -1073,6 +1074,25 @@ const MUSCLE_GLYPHS = {
   core: 'M6.5 3.5h5v5h-5zM12.5 3.5h5v5h-5zM6.5 9.5h5v5h-5zM12.5 9.5h5v5h-5zM6.5 15.5h5v5h-5zM12.5 15.5h5v5h-5z',
 };
 const railMuscle = (e) => RAIL_MUSCLE[core.sessionExerciseCategory(e, state.customExercises)] || '';
+const MUSCLE_LABELS = { legs: 'Jalat', back: 'Selkä', chest: 'Rinta', shoulders: 'Hartiat', arms: 'Kädet', core: 'Keskivartalo' };
+
+function muscleGlyph(muscle, className) {
+  return `<svg class="${className}" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="${MUSCLE_GLYPHS[muscle]}"/></svg>`;
+}
+
+function routineMuscles(routine) {
+  const counts = new Map();
+  const movements = [...routine.exercises, ...(routine.wods ?? []).flatMap((w) => w.movements)];
+  for (const movement of movements) {
+    const muscle = railMuscle(movement);
+    if (muscle) counts.set(muscle, (counts.get(muscle) ?? 0) + 1);
+  }
+  if (!counts.size) return '';
+  return `<span class="routine-muscles">${[...counts].map(([muscle, count]) => {
+    const label = `${MUSCLE_LABELS[muscle]}: ${count} ${count === 1 ? 'liike' : 'liikettä'}`;
+    return `<span class="routine-muscle" data-muscle="${muscle}" role="img" aria-label="${label}" title="${label}">${muscleGlyph(muscle, 'muscle-icon')}<b aria-hidden="true">${count}</b></span>`;
+  }).join('')}</span>`;
+}
 
 // A functional workout's WOD part is next once every exercise before it is done.
 function isFunctional(s) { return s?.type === 'functional' || !!s?.wods?.length; }
@@ -1083,7 +1103,7 @@ function trackRail(s, cur) {
     const done = core.exerciseDone(e);
     const status = done ? 'tehty' : ei === cur ? 'vuorossa' : 'kesken';
     const muscle = railMuscle(e);
-    const glyph = muscle ? `<svg class="track-muscle" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="${MUSCLE_GLYPHS[muscle]}"/></svg>` : '';
+    const glyph = muscle ? muscleGlyph(muscle, 'track-muscle') : '';
     return `<li><button class="track-box${done ? ' done' : ''}${ei === cur ? ' current' : ''}" data-action="jumpto" data-e="${ei}" data-key="track-${ei}" ${muscle ? `data-muscle="${muscle}"` : ''} ${ei === cur ? 'aria-current="step"' : ''} aria-label="Liike ${ei + 1}: ${esc(e.name)}, ${e.sets.length} sarjaa, ${status}">${glyph}<span class="track-num">${e.sets.length}</span></button></li>`;
   }).join('');
   const next = nextWodIndex(s);

@@ -1,4 +1,7 @@
 [
+  { "version": 90, "date": "2026-10-24", "changes": [
+    "Ohjelmakortin avausnuoli on poistettu. Aloita-painikkeen vasemmalla puolella näkyvät nyt päälihasryhmien symbolit ja kunkin ryhmän liikkeiden määrä. Ohjelman tiedot avautuvat edelleen otsikkoa napauttamalla. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 89, "date": "2026-10-24", "changes": [
     "Vuorossa-merkki on poistettu liikkeiden ja WOD-osien otsikoista. Nykyisen liikkeen korostus ja treenin eteneminen toimivat ennallaan. Tallennetut treenit ja historia säilyvät."
   ] },

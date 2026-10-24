@@ -350,6 +350,13 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 
 ### Inputs and decision rules
 
+- Home routine cards omit the expand chevron; tapping the heading still opens
+  editing, variants and progression options. Muscle symbols left of "Aloita"
+  count exercises per primary group (legs, back, chest, shoulders, arms, core),
+  including named WOD movements. Counts are exercises, not sets or individual
+  anatomical muscles; whole-body, cardio, mobility and unknown moves are not
+  assigned guessed muscle groups. Icons reuse the workout rail graphics and
+  have accessible group names and counts.
 - Sets always stack vertically. Unfinished set buttons show "Klikkaa" above
   "tehdyksi"; completed buttons show a small circular check badge with the set
   number underneath, without a large outline or repeated result text. Their full

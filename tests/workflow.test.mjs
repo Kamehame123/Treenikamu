@@ -131,7 +131,7 @@ try {
           assert.equal(await p.locator('h1').innerText(), 'Treenipäiväkirja');
           assert.equal(await p.locator('h1').evaluate((e) => e.getBoundingClientRect().width <= 1), true, 'title heading is screen-reader only');
           const compact = await p.locator('.routine').first().evaluate((e) => e.getBoundingClientRect().height);
-          assert.ok(compact <= 90, `collapsed program is compact (${compact}px)`);
+          assert.ok(compact <= 124, `collapsed program with muscle overview is compact (${compact}px)`);
           assert.equal(await p.locator('.routine').count(), 2);
           assert.equal(await p.locator('.routine h2').last().textContent(), state.routines[1].name);
           assert.match(await p.locator('.routine-meta').last().innerText(), /1 liikettä\s+4 sarjaa/);
