@@ -253,6 +253,47 @@ keys, backup envelopes and old records remain compatible. Run `npm test` for
 logic/compatibility tests and `npm run test:statistics` for mobile Chromium and
 WebKit, accessibility, storage-failure, logging and offline coverage.
 
+## Functional training (Toiminnallinen treeni)
+
+**Luo treeniohjelma** first asks what kind of program to make: **Kuntosalitreeni**
+(the sets-and-reps gym program), **Toiminnallinen treeni** or **Aloita mallista**
+(a functional program from a ready-made template). A functional program is
+built like a group class and is created, edited, started, logged, backed up and shown
+in history exactly like a gym program. It holds one session template:
+
+- an optional **warm-up** and **cool-down** (free text with a duration, ticked off while training),
+- optional **strength or skill** exercises, which are ordinary gym exercises with sets, reps and
+  progression, and
+- one to three **WOD parts** (workout of the day). Each part has a format (**Aikaa vastaan**,
+  **AMRAP**, **EMOM**, **Intervallit**, **Maksimikuorma**), the movements with amounts and loads,
+  an optional rep scheme such as 21-15-9, a score type, and an optional easier **Skaalattu** version
+  of every movement or load. The gallery fills in Rx loads for women or men.
+
+The template gallery offers ready-made formats and well-known workouts (for example Fran, Cindy,
+Grace, Murph and a whole class hour) that open in the editor to be changed before saving.
+
+While training, a WOD card shows the whiteboard (Rx or Skaalattu), the previous result and the best
+of each version. **Käynnistä kello** opens the WOD clock: a 10 s pre-roll, then count-up for
+For Time (with an optional time cap), count-down for AMRAP, a new round every interval for EMOM and
+work/rest segments for intervals. The big **+1 kierros** button counts rounds (a second tap within
+a second is ignored, **Peru viimeisin kierros** undoes one), and **Tauko**, **Lopeta** and **Valmis**
+pause, stop or finish. The clock is computed from timestamps and is saved with the workout, so a
+reload or a background tab never makes it drift. It beeps and vibrates for the last three seconds,
+the start of work and rest and the end, and announces changes to screen readers. **Kirjaa tulos**
+opens the result form, prefilled with what the clock measured; a time without the clock can be
+typed in. A result that beats the previous one in the same version is a new record
+(**Uusi ennätys**), shown with the existing Swedish cheers setting.
+
+A workout with only WOD parts counts as finished once a result is logged. **Kevennetty** and
+**Super** only appear for programs that have strength exercises: Kevennetty lightens the strength
+part by 15 % and preselects **Skaalattu**, Super adds a set to the strength part. WODs themselves
+are never changed automatically; their progression is the history of results. History lists
+every WOD with its result and the whiteboard as it was done, and the results can be corrected or
+removed there. **Ennätykset** has a **WOD-ennätykset** section with the best result of each version.
+
+Run `npm test` for the logic tests and `npm run test:wod` for the Chromium/WebKit tests of the
+editor, workout, clock, history and records, including accessibility, touch-size and overflow checks.
+
 ## Home-screen launch
 
 Launching the installed app from its home-screen icon requests full-screen mode,

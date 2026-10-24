@@ -483,6 +483,70 @@ try {
           assert.equal(await p.locator('.wod-record-list .record-row').count(), 1, 'a removed result leaves the records');
         }, { timeout: 90000 });
 
+        await run('full flow: a template becomes a program, is trained with the clock, saved, and shows in history, records and on the home card', async (p) => {
+          await fakeTime(p);
+          await p.reload();
+          await tap(button(p, 'Luo treeniohjelma'));
+          await tap(button(p, 'Aloita mallista'));
+          await tap(p.getByRole('group', { name: 'Mallien ryhmä' }).getByRole('button', { name: 'Vertailutreenit', exact: true }));
+          await tap(button(p, 'Käytä mallia Fran'));
+          await tap(button(p, 'Tallenna harjoitus'));
+          assert.equal((await saved(p)).routines.some((r) => r.name === 'Fran' && r.type === 'functional'), true);
+
+          await p.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+          await tap(button(p, 'Aloita: Fran'));
+          await tap(button(p, 'Käynnistä kello (Fran)'));
+          await p.clock.runFor(80000);
+          await tap(p.locator('[data-action="clocklap"]'));
+          await p.clock.runFor(60000);
+          await tap(button(p, 'Valmis'));
+          assert.equal(await p.locator('#wod-clock .timer-clock').textContent(), '2:10');
+          await tap(button(p, 'Kirjaa tulos'));
+          assert.deepEqual(await values(p.locator('#wod-0 [data-rf="min"], #wod-0 [data-rf="sec"]')), ['2', '10']);
+          await tap(button(p, 'Tallenna tulos'));
+          assert.equal(await p.locator('#wod-0 .wod-score').textContent(), 'Tulos 2:10 Rx', 'the first result is a baseline, not a record');
+          await tap(button(p, 'Tallenna harjoitus'));
+          const state = await saved(p);
+          assert.equal(state.session, null);
+          assert.deepEqual(state.history[0].wods.map((w) => [w.name, w.result]), [['Fran', { kind: 'time', seconds: 130, division: 'rx' }]]);
+          assert.equal(state.history[0].setsTotal, 0);
+
+          await p.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+          assert.match(await p.locator('.routine-last').textContent(), /Fran 2:10 · Rx/);
+          await tap(button(p, 'Historia'));
+          assert.equal(await p.locator('.history-wods li').textContent(), 'Fran 2:10 · Rx');
+          assert.equal(await p.locator('.history-sets').textContent(), '1/1 WOD');
+          await tap(button(p, 'Harjoituksiin'));
+          await tap(button(p, 'Ennätykset'));
+          assert.match(await p.locator('.wod-record-list .record-row').innerText(), /Fran[\s\S]*1 kirjaus[\s\S]*Rx 2:10/);
+        }, { timeout: 90000 });
+
+        await run('schema-1 data loads unchanged next to functional programs, and the first save writes schema 2', async (p) => {
+          const gym = core.sanitizeRoutine({ id: 'g1', name: 'Rintatreeni', exercises: [{ name: 'Penkkipunnerrus', sets: 3, reps: '8', weight: '60 kg' }] });
+          const old = core.startSession(gym, Date.now() - 4 * DAY), done = core.startSession(gym, Date.now() - 3 * DAY);
+          core.toggleSet(done, 0, 0);
+          const state = { ...core.defaultState(), v: 1, routines: [gym, program('fran')], history: [core.summarize(done, Date.now() - 3 * DAY + 1800000)], session: old };
+          const raw = JSON.stringify(state);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', value), raw);
+          await p.reload();
+          assert.equal(await p.evaluate(() => localStorage.getItem('gym-tracker-v1')), raw, 'loading rewrites nothing');
+          assert.equal(await p.locator('h1').innerText(), 'Rintatreeni');
+          assert.equal(await p.locator('.session-stat').textContent(), '0/3 sarjaa · 0%', 'the unfinished workout is where it was left');
+          await tap(p.locator('[data-action="set"][data-e="0"][data-s="0"]'));
+          const after = await saved(p);
+          assert.equal(after.v, 2);
+          assert.deepEqual(after.routines.map((r) => [r.id, r.name]), [['g1', 'Rintatreeni'], [state.routines[1].id, 'Fran']]);
+          assert.deepEqual(after.routines[0].exercises.map((e) => [e.name, e.sets, e.reps, e.weight]), [['Penkkipunnerrus', 3, '8', '60 kg']]);
+          assert.deepEqual(after.history.map((h) => [h.id, h.name, h.setsDone, h.setsTotal]), [[state.history[0].id, 'Rintatreeni', 1, 3]]);
+          assert.equal(after.session.exercises[0].sets[0].done, true);
+          await tap(button(p, 'Takaisin harjoituksiin'));
+          await p.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+          assert.equal(await p.locator('.routine').nth(0).locator('.routine-variants .btn').count(), 2, 'the gym program keeps its variants');
+          assert.equal(await p.locator('.routine').nth(0).locator('.routine-meta .badge').count(), 0);
+          assert.equal(await p.locator('.routine').nth(1).locator('.routine-meta .badge').textContent(), 'Toiminnallinen');
+          assert.match(await p.locator('.resume').textContent(), /Rintatreeni[\s\S]*1\/3 sarjaa tehty/);
+        });
+
         await run('the home card, history editor and records pass accessibility, touch-size and overflow checks in Dark and Aurora', async (p) => {
           const now = Date.now();
           const history = [finished('tunti', { rounds: '5', reps: '12' }, now - DAY), finished('fran', { min: '4', sec: '30' }, now - 2 * DAY)];
