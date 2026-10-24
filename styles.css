@@ -298,14 +298,14 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .step-input { width: 100%; min-width: 0; height: 44px; padding: 0 4px; border: 0; border-radius: 12px; background: var(--surface); color: inherit; font: inherit; font-size: 19px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
 .step-value b { max-width: 100%; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .step-value small { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
-.set.next { border: 2px solid var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-ring); }
+.set.next { border: 2px solid var(--accent); background: var(--surface); box-shadow: inset 0 0 0 0 var(--accent); }
 .set.next .set-foot { color: var(--accent); font-weight: 800; }
 @keyframes set-pulse {
-	0%, 100% { box-shadow: 0 0 0 2px var(--accent-ring); }
-	50% { box-shadow: 0 0 0 5px var(--accent-ring); }
+	0%, 100% { box-shadow: inset 0 0 0 0 var(--accent); }
+	50% { box-shadow: inset 0 0 24px 4px var(--accent); }
 }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-	.set.next:not(.done) { animation: set-pulse 2.8s ease-in-out infinite; }
+	.set.next:not(.done) { animation: set-pulse 2.4s ease-in-out infinite; }
 }
 .set-label { font-size: 10px; color: var(--muted); font-weight: 750; letter-spacing: .06em; }
 .set-value { font-size: 14px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; max-width: 100%; }

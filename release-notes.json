@@ -1,4 +1,7 @@
 [
+  { "version": 88, "date": "2026-10-24", "changes": [
+    "Klikkaa tehdyksi -painikkeen syke on nyt selkeämpi ja hohtaa painikkeen sisään, ei sen ulkopuolelle. Painike ei kasva eikä siirry. Vähennetyn liikkeen asetus toimii edelleen. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 87, "date": "2026-10-24", "changes": [
     "Seuraavan Klikkaa tehdyksi -painikkeen ympärillä on nyt hillitty, hitaasti sykkivä korostus. Tehdyt sarjat pysyvät paikallaan. Korostus ei liiku, jos laitteen asetuksissa on vähennetty liikettä. Tallennetut treenit ja historia säilyvät."
   ] },

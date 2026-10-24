@@ -354,8 +354,9 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   "tehdyksi"; completed buttons show a small circular check badge with the set
   number underneath, without a large outline or repeated result text. Their full
   tap area stays the same size, and tapping again undoes completion. The next
-  unfinished button has a gentle 2.8-second pulsing ring, without scaling or
-  moving the layout; other sets stay still. Reduced-motion and forced-colors
+  unfinished button has a clearly visible 2.4-second inward glow using the theme
+  accent, without an outer halo, scaling or layout movement; other sets stay
+  still. Reduced-motion and forced-colors
   preferences disable the pulse. Screen
   readers retain the completion state, reps, weight and target. This is a visual
   change only; saved workouts, history and storage formats are unchanged.

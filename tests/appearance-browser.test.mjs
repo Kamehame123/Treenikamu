@@ -160,7 +160,7 @@ try {
         });
 
         for (const appearance of ['dark', 'aurora']) {
-          await run(`${appearance}: only the next unfinished set gently pulses, without layout movement`, async (context) => {
+          await run(`${appearance}: only the next unfinished set pulses inward, without layout movement`, async (context) => {
             const state = core.defaultState();
             state.settings.autoRest = false;
             state.settings.cheers = false;
@@ -172,7 +172,7 @@ try {
             assert.deepEqual(await first.evaluate((el) => {
               const style = getComputedStyle(el);
               return [style.animationName, style.animationDuration, style.animationIterationCount];
-            }), ['set-pulse', '2.8s', 'infinite']);
+            }), ['set-pulse', '2.4s', 'infinite']);
             assert.equal(await second.evaluate((el) => getComputedStyle(el).animationName), 'none');
             const pulse = await first.evaluate((el) => {
               const animation = el.getAnimations().find((a) => a.animationName === 'set-pulse');
@@ -180,10 +180,13 @@ try {
               animation.currentTime = 0;
               const start = getComputedStyle(el).boxShadow;
               const box = el.getBoundingClientRect().toJSON();
-              animation.currentTime = 1400;
+              animation.currentTime = 1200;
               return { start, peak: getComputedStyle(el).boxShadow, box, peakBox: el.getBoundingClientRect().toJSON() };
             });
             assert.notEqual(pulse.start, pulse.peak, 'the ring visibly changes over the cycle');
+            assert.match(pulse.start, /inset/, 'the resting shadow stays inside the button');
+            assert.match(pulse.peak, /inset/, 'the pulse stays inside the button');
+            assert.match(pulse.peak, /0px 0px 24px 4px/, 'the peak has a noticeable 24px inner glow');
             assert.deepEqual(pulse.box, pulse.peakBox, 'the button never scales or shifts');
             assert.equal(await raw(page), before, 'the animation never rewrites training data');
             await first.click();
