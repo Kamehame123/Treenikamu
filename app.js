@@ -2314,6 +2314,7 @@ const actions = {
     const n = counted.clock.laps.length, after = clockFace(counted, counted.clock, Date.now());
     const final = counted.format === 'fortime' && n >= counted.rounds - 1;
     announce(`${n === 1 ? '1 kierros' : `${n} kierrosta`} tehty.${final ? ' Viimeinen kierros.' : ''}${after.target ? ` ${after.target}.` : ''}`);
+    if (final) document.querySelector('.clock-lap-final')?.focus({ preventScroll: true });
   },
   async clockundo() {
     let undone = false;

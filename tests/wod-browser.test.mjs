@@ -34,6 +34,24 @@ async function startProgram(p, ids, history = []) {
   await tap(button(p, `Aloita: ${state.routines[0].name}`));
   await p.locator('.wod-card').first().waitFor();
 }
+// Freezes the page clock a second ahead, so a test moves time only with clock.runFor.
+async function fakeTime(p) {
+  const now = new Date();
+  await p.clock.install({ time: now });
+  await p.clock.pauseAt(new Date(now.getTime() + 1000));
+}
+// Opens a workout whose first WOD clock started `ago` ms ago (and is paused right now when asked), at the clock screen.
+async function seedClock(p, id, { ago, laps = [], paused = false, edit }) {
+  const now = Date.now(), state = core.defaultState();
+  state.settings.autoRest = false;
+  state.routines = [program(id)];
+  const s = core.startSession(state.routines[0], now - ago - 60000), w = s.wods[0];
+  edit?.(w);
+  w.clock = { startedAt: now - ago, pausedAt: paused ? now : null, pausedMs: 0, laps };
+  state.session = s;
+  await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+  await p.reload();
+}
 // Opens the in-app confirmation and answers it; returns the question and the accept button's text.
 async function answer(locator, accept) {
   const p = locator.page(), dialog = p.getByRole('alertdialog');
@@ -507,6 +525,177 @@ try {
           assert.deepEqual([entry.type, entry.setsDone, entry.setsTotal], ['functional', 5, 5]);
           assert.deepEqual(entry.wods.map((w) => w.result), [{ kind: 'roundsReps', rounds: 5, reps: 12, division: 'rx' }]);
         });
+
+        await run('the clock: pre-roll, rounds, undo, pause across a reload, Valmis and the result it fills in', async (p) => {
+          await fakeTime(p);
+          await startProgram(p, ['fran']);
+          const t = (id) => p.locator(`#${id}`).textContent(), lap = p.locator('[data-action="clocklap"]');
+          await tap(button(p, 'Käynnistä kello (Fran)'));
+          assert.equal(await p.locator('h1').innerText(), 'Fran');
+          assert.deepEqual([await t('wc-label'), await t('wc-time')], ['Valmistaudu', '10']);
+          assert.equal(await lap.getAttribute('aria-disabled'), 'true', 'nothing to count during the pre-roll');
+          await p.clock.runFor(100);
+          assert.match(await p.locator('#live').textContent(), /^Valmistaudu: Fran alkaa 10 sekunnin kuluttua\.$/);
+          await lap.click({ force: true });
+          assert.equal(await p.locator('.clock-lap-info').textContent(), 'Napauta +1 kierros aina, kun kierros on tehty.');
+          await p.clock.runFor(100);
+          assert.equal(await p.locator('#live').textContent(), 'Kierroksia kirjataan, kun kello käy.');
+
+          await p.clock.runFor(10000);
+          assert.deepEqual([await t('wc-label'), await t('wc-time')], ['Nyt!', '0:00']);
+          assert.equal(await lap.getAttribute('aria-disabled'), 'false');
+          await p.clock.runFor(3000);
+          assert.equal(await t('wc-label'), 'Aikaa vastaan');
+          assert.equal(await t('wc-target'), 'Nyt: 21');
+          await p.clock.runFor(58000);
+          await tap(lap);
+          await tap(lap);
+          assert.equal(await t('wc-target'), 'Nyt: 15');
+          assert.equal(await t('wc-detail'), 'Kierros 2/3 · aikaraja 10:00');
+          assert.equal(await p.locator('.clock-lap-info').textContent(), '1 kierros tehty · viimeisin 1:01', 'a double tap counts one round');
+          await p.clock.runFor(100);
+          assert.equal(await p.locator('#live').textContent(), '1 kierros tehty. Nyt: 15.');
+
+          await p.clock.runFor(60000);
+          await tap(lap);
+          const final = p.locator('.clock-lap-final');
+          assert.equal(await final.textContent(), 'Viimeinen kierrosPaina Valmis, kun kierros on tehty.');
+          assert.equal(await focused(final), true, 'focus stays where the round button was');
+          assert.equal(await lap.count(), 0);
+          assert.equal(await t('wc-target'), 'Nyt: 9');
+          await tap(button(p, 'Peru viimeisin kierros'));
+          assert.equal(await lap.count(), 1);
+          assert.equal(await t('wc-target'), 'Nyt: 15');
+          await tap(lap);
+          assert.equal(await final.count(), 1);
+
+          await tap(button(p, 'Tauko'));
+          assert.equal(await t('wc-label'), 'Tauolla');
+          const paused = await t('wc-time');
+          await p.clock.runFor(30000);
+          assert.equal(await t('wc-time'), paused, 'a paused clock stands still');
+          await p.reload();
+          await p.locator('#wod-clock').waitFor();
+          assert.deepEqual([await t('wc-label'), await t('wc-time')], ['Tauolla', paused], 'the paused clock comes back after a reload');
+          assert.equal(await p.locator('#wod-clock').getAttribute('data-paused'), 'true');
+          await tap(button(p, 'Jatka'));
+          await p.clock.runFor(51000);
+
+          await tap(button(p, 'Valmis'));
+          const finish = await p.locator('#wod-clock .timer-clock').textContent(), [fm, fs] = finish.split(':').map(Number), total = fm * 60 + fs;
+          assert.ok(total >= 172 && total <= 173, `about 51 s after the pause, got ${finish}`);
+          assert.equal(await focused(button(p, 'Kirjaa tulos')), true, 'focus moves to the next step');
+          await p.clock.runFor(100);
+          assert.equal(await p.locator('#live').textContent(), `Valmis. Aika ${finish}.`);
+          assert.deepEqual((await saved(p)).session.wods[0].clock.laps.length, 2);
+
+          await tap(button(p, 'Kirjaa tulos'));
+          const wod = p.locator('#wod-0');
+          assert.deepEqual(await values(wod.locator('[data-rf="min"], [data-rf="sec"]')), [String(Math.floor(total / 60)), String(total % 60)], 'the result form is prefilled with the time');
+          assert.equal(await focused(wod.locator('[data-rf="min"]')), true);
+          assert.equal(await wod.locator('.clock-status').textContent(), `Kello: Valmis · ${finish}`);
+          await tap(button(p, 'Tallenna tulos'));
+          assert.equal((await saved(p)).session.wods[0].result.seconds, total + 0);
+          assert.match(await wod.locator('.wod-score').textContent(), /^Tulos \d:\d\d Rx$/);
+        }, { timeout: 90000 });
+
+        await run('the clock: stopping in the pre-roll cancels it, stopping later keeps the time, restarting asks first', async (p) => {
+          await fakeTime(p);
+          await startProgram(p, ['fran']);
+          const start = button(p, 'Käynnistä kello (Fran)');
+          await tap(start);
+          await p.clock.runFor(3000);
+          await tap(button(p, 'Lopeta'));
+          assert.equal(await p.locator('#wod-clock').count(), 0);
+          assert.equal(await focused(start), true, 'focus returns to the card');
+          assert.equal((await saved(p)).session.wods[0].clock, undefined, 'nothing was timed');
+          await p.clock.runFor(100);
+          assert.equal(await p.locator('#live').textContent(), 'Kello peruttu.');
+
+          await tap(start);
+          await p.clock.runFor(15000);
+          assert.match(await p.locator('#wc-time').textContent(), /^0:0[45]$/);
+          const asked = await answer(button(p, 'Lopeta'), true);
+          assert.deepEqual(asked, ['Lopetetaanko kello nyt? Mitattu aika säilyy, ja voit kirjata tuloksen.', 'Lopeta']);
+          assert.equal(await p.locator('#wod-clock .timer-clock').textContent(), '0:05');
+          await tap(button(p, 'Harjoitukseen'));
+          assert.equal(await p.locator('.clock-status').textContent(), 'Kello: Valmis · 0:05');
+          assert.equal(await focused(button(p, 'Kirjaa tulos (Fran)')), true);
+          const restart = button(p, 'Käynnistä kello uudelleen (Fran)');
+          assert.deepEqual(await answer(restart, false), ['Aloitetaanko kello alusta? Edellinen ajanotto korvataan.', 'Aloita alusta']);
+          assert.equal((await saved(p)).session.wods[0].clock.endedAt > 0, true, 'declining keeps the measured time');
+          await answer(restart, true);
+          assert.deepEqual([await p.locator('#wc-label').textContent(), await p.locator('#wc-time').textContent()], ['Valmistaudu', '10']);
+        }, { timeout: 90000 });
+
+        await run('an AMRAP runs out while another view is open: the card follows it and the result gets the rounds', async (p) => {
+          await fakeTime(p);
+          await startProgram(p, ['cindy']);
+          await tap(button(p, 'Käynnistä kello (Cindy)'));
+          await p.clock.runFor(310000);
+          const lap = p.locator('[data-action="clocklap"]');
+          await tap(lap);
+          await p.clock.runFor(2000);
+          await tap(lap);
+          assert.equal(await p.locator('#wc-detail').textContent(), 'Kierros 3');
+          await tap(button(p, 'Takaisin harjoitukseen'));
+          const open = button(p, 'Avaa kello (Cindy)');
+          assert.equal(await focused(open), true, 'focus returns to the card button');
+          assert.match(await p.locator('#wc-mini-0').textContent(), /^AMRAP · /);
+          await p.clock.runFor(1200000);
+          await p.clock.runFor(100);
+          assert.equal(await p.locator('.clock-status').textContent(), 'Kello: Aika loppui · 20:00 · 2 kierrosta');
+          assert.match(await p.locator('#live').textContent(), /^Aika loppui\.$/);
+          await tap(button(p, 'Kirjaa tulos (Cindy)'));
+          assert.deepEqual(await values(p.locator('#wod-0 [data-rf="rounds"], #wod-0 [data-rf="reps"]')), ['2', '']);
+          assert.equal((await saved(p)).session.wods[0].clock.endedAt > 0, true, 'the end was saved at the planned moment');
+        }, { timeout: 90000 });
+
+        await run('the clock screens and the card pass accessibility, touch-size and overflow checks in Dark and Aurora', async (p) => {
+          const widths = async (label, list) => {
+            for (const width of list) {
+              await p.setViewportSize({ width, height: 844 });
+              await audit(p, `${label} ${width}`);
+            }
+            await p.setViewportSize(devices[device].viewport);
+          };
+          const states = [
+            ['run with a round counted', 'fran', { ago: 100000, laps: [60000] }, [390, 320]],
+            ['last round', 'fran', { ago: 210000, laps: [60000, 150000] }, [320]],
+            ['paused pre-roll', 'fran', { ago: 5000, paused: true }, [320]],
+            ['an hour without a cap', 'fran', { ago: 3620000, edit: (w) => { w.minutes = 0; } }, [390, 320]],
+            ['interval work', 'tabata', { ago: 15000 }, [320]],
+            ['AMRAP', 'cindy', { ago: 310000, laps: [100000, 200000] }, [320]],
+          ];
+          for (const theme of ['dark', 'aurora']) {
+            if (theme === 'aurora') await p.evaluate(() => localStorage.setItem('gym-tracker-appearance-v1', 'aurora'));
+            for (const [label, id, options, list] of states) {
+              await seedClock(p, id, options);
+              await p.locator('#wod-clock').waitFor();
+              assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), theme);
+              if (label === 'an hour without a cap') assert.match(await p.locator('#wc-time').getAttribute('class'), /\blong\b/);
+              await widths(`${theme} clock: ${label}`, list);
+            }
+            await seedClock(p, 'fran', { ago: 100000, laps: [60000] });
+            await tap(button(p, 'Takaisin harjoitukseen'));
+            await widths(`${theme} card with a running clock`, [320]);
+          }
+        }, { bypassCSP: true, timeout: 150000 });
+
+        await run('the finished clock screen and the card with a measured time pass the checks', async (p) => {
+          await fakeTime(p);
+          await startProgram(p, ['fran']);
+          await tap(button(p, 'Käynnistä kello (Fran)'));
+          await p.clock.runFor(10000 + 90000);
+          await tap(button(p, 'Valmis'));
+          await p.locator('#wod-clock[data-phase="done"]').waitFor();
+          await p.clock.resume();
+          await audit(p, 'finished clock 390');
+          await p.setViewportSize({ width: 320, height: 844 });
+          await audit(p, 'finished clock 320');
+          await tap(button(p, 'Kirjaa tulos'));
+          await audit(p, 'result form with the measured time 320');
+        }, { bypassCSP: true, timeout: 90000 });
 
         await run('the running workout passes accessibility, touch-size and overflow checks in Dark and Aurora', async (p) => {
           const history = [finished('fran', { min: '5', sec: '0' }, Date.now() - 2 * DAY)];
