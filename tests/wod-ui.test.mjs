@@ -422,3 +422,77 @@ test('the clock status line names a paused clock and adds the score only once th
   assert.equal(ui.countsRounds({ format: 'fortime', rounds: 1 }), false);
   assert.equal(ui.countsRounds({ format: 'emom', rounds: 10 }), false);
 });
+
+// ---- Home, history and records ----
+
+import { recordsView } from '../statistics-ui.js';
+
+const AT = Date.UTC(2025, 2, 4, 12);
+const program = (id) => c.sanitizeRoutine(templateRoutine(templateById(id), 'women'));
+const entry = (id, results, extra = {}) => {
+  const s = c.startSession(program(id), AT - 1800000);
+  s.wods.forEach((wod, i) => { if (results[i]) { wod.result = results[i]; wod.division = results[i].division; } });
+  return { ...c.summarize(s, AT), ...extra };
+};
+const rx = (seconds, extra = {}) => ({ kind: 'time', seconds, division: 'rx', ...extra });
+
+test('a functional program card names its parts and its previous results', () => {
+  const fran = program('fran'), tunti = program('tunti');
+  assert.equal(ui.isFunctionalRoutine(fran), true);
+  assert.equal(ui.isFunctionalRoutine({ type: 'functional', exercises: [] }), true);
+  assert.equal(ui.isFunctionalRoutine({ exercises: [{}] }), false);
+  assert.equal(ui.routineWodPills(fran), '<li class="pill">Fran <b>21-15-9 aikaa vastaan · aikaraja 10 min</b></li>');
+  assert.match(ui.routineWodPills(tunti), /<b>AMRAP 12 min<\/b><\/li>$/);
+  assert.equal(ui.routineLastResults(fran, []), '', 'nothing before the first result');
+  const history = [entry('fran', [rx(272)])];
+  assert.equal(ui.routineLastResults(fran, history), '<p class="routine-last small-copy"><span class="eyebrow">Edellinen tulos</span> Fran <strong>4:32 · Rx</strong> (4.3.)</p>');
+  assert.equal(ui.routineLastResults(program('cindy'), history), '', 'another WOD has its own history');
+  assert.doesNotMatch(ui.routineWodPills(fran) + ui.routineLastResults(fran, history), /crossfit/i);
+});
+
+test('history lines count sets and WOD parts, and keep the whiteboards', () => {
+  assert.equal(ui.historyWork({ setsDone: 3, setsTotal: 4 }), '3/4 sarjaa');
+  assert.equal(ui.historyWork({ setsDone: 0, setsTotal: 0 }), '0/0 sarjaa', 'old entries read as before');
+  assert.equal(ui.historyWork({ setsDone: 0, setsTotal: 0, wods: [{ result: rx(60) }] }), '1/1 WOD');
+  assert.equal(ui.historyWork({ setsDone: 5, setsTotal: 5, wods: [{ result: rx(60) }, {}] }), '5/5 sarjaa · 1/2 WOD');
+
+  const h = entry('fran', [rx(272, { notes: 'Hyvä <b>veto</b>' })]);
+  const html = ui.historyWods(h);
+  assert.match(html, /^<ul class="history-wods" aria-label="WOD-tulokset: Fran"><li><strong>Fran<\/strong> 4:32 · Rx <span class="muted">· Hyvä &lt;b&gt;veto&lt;\/b&gt;<\/span><\/li><\/ul><details class="history-log"><summary>WOD-taulut: Fran<\/summary><p><strong>Fran<\/strong><\/p><ul class="board-lines"><li>/);
+  assert.match(html, /<li>21-15-9 aikaa vastaan/);
+  assert.match(ui.historyWods(entry('fran', [null])), /<li><strong>Fran<\/strong> <span class="muted">ei tulosta<\/span><\/li>/);
+  assert.equal(ui.historyWods({ name: 'Penkki' }), '');
+});
+
+test('the history editor corrects each score by its kind, version and notes', () => {
+  const html = ui.historyWodEditor(entry('fran', [rx(272, { notes: 'tuntuma' })]));
+  assert.match(html, /^<fieldset class="history-edit-ex history-edit-wod"><legend>Fran<\/legend><div class="result-pair">/);
+  assert.match(html, /value="4" data-hwod="min" data-hid="[^"]+" data-w="0" data-key="hwod-0-min" aria-label="Minuutit: Fran"/);
+  assert.match(html, /value="32" data-hwod="sec"/);
+  assert.match(html, /value="rx" data-hwod="division"[^>]* checked>/);
+  assert.match(html, /value="tuntuma" data-hwod="notes"/);
+  assert.match(html, /data-action="clearhistorywod"[^>]*data-w="0"[^>]*aria-label="Poista tulos: Fran">Poista tulos<\/button>/);
+
+  const capped = ui.historyWodEditor(entry('fran', [rx(600, { capped: true, reps: 40 })]));
+  assert.match(capped, /value="40" data-hwod="reps"/);
+  assert.doesNotMatch(capped, /data-hwod="min"/, 'a capped result is corrected by its reps');
+  const none = ui.historyWodEditor(entry('fran', [null]));
+  assert.match(none, /value="" data-hwod="min"/);
+  assert.doesNotMatch(none, /clearhistorywod/, 'nothing to remove before a result exists');
+  const rounds = ui.historyWodEditor(entry('cindy', [{ kind: 'roundsReps', rounds: 18, reps: 7, division: 'scaled' }]));
+  assert.match(rounds, /value="18" data-hwod="rounds"[\s\S]*value="7" data-hwod="reps"[\s\S]*value="scaled" data-hwod="division"[^>]* checked>/);
+  assert.equal(ui.historyWodEditor({ id: 'x' }), '');
+});
+
+test('the records view lists the best result of each WOD and version', () => {
+  const empty = recordsView({ history: [] });
+  assert.match(empty, /Ei vielä ennätyksiä/);
+  assert.doesNotMatch(empty, /WOD-ennätykset/);
+  const history = [entry('fran', [rx(300)], { id: 'a', endedAt: AT }), entry('fran', [rx(272)], { id: 'b', endedAt: AT + 86400000 }), entry('fran', [{ kind: 'time', seconds: 250, division: 'scaled' }], { id: 'c', endedAt: AT + 2 * 86400000 })];
+  const html = recordsView({ history });
+  assert.doesNotMatch(html, /Ei vielä ennätyksiä/);
+  assert.match(html, /<h2 class="record-heading">WOD-ennätykset<\/h2><ul class="card record-list wod-record-list" aria-label="WOD-ennätykset"><li class="record-row"><div class="record-result"><span class="record-name">Fran<\/span> <span class="muted record-date">3 kirjausta<\/span><\/div>/);
+  assert.match(html, /Rx <strong>4:32<\/strong><\/span> <span class="muted record-date">5\.3\.2025<\/span>/);
+  assert.match(html, /Skaalattu <strong>4:10<\/strong>/);
+});
+

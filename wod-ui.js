@@ -12,7 +12,7 @@ import { escapeHtml as esc } from './statistics-ui.js';
 import {
   MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, FORMAT_DEFAULTS,
   SCHEME_CHIPS, MODALITY_LABELS, DIVISIONS, sanitizeWod, parseScheme, boardLines, modalities, movementLine, wodMinutes, wodPartLabel,
-  wodTitle, formatScore, resultLabel, previousResult, bestResults, isPersonalRecord, clockFace, formatTime,
+  wodTitle, formatScore, resultLabel, previousResult, bestResults, isPersonalRecord, clockFace,   formatTime, wodHeadline, wodKey, resultFields,
 } from './wod.js';
 import { DEFAULT_WARMUP, DEFAULT_COOLDOWN, TEMPLATES, TEMPLATE_GROUPS, SEXES, templateWod, templateRoutine } from './wod-templates.js';
 
@@ -361,4 +361,56 @@ export function clockScreen(w, wi, { count, history = [], icon, now = Date.now()
   const done = fortime ? `<button class="btn${finishing ? ' primary' : ''}" data-action="clockdone" data-key="clock-done" aria-disabled="${face.phase === 'preroll'}">${icon('check')}Valmis</button>` : '';
   const controls = `<div class="timer-controls timer-run-controls${fortime ? '' : ' clock-controls-2'}"><button class="btn" data-action="clockstop" data-key="clock-stop">${icon('stop')}Lopeta</button>${pause}${done}</div>`;
   return `${heading}${clock}${laps}${controls}${board}`;
+}
+
+// ---- Home, history and records ----
+
+export const isFunctionalRoutine = (r) => r?.type === 'functional' || !!r?.wods?.length;
+
+// Home card: one pill per WOD part ("Fran 21-15-9 aikaa vastaan · aikaraja 10 min"); strength pills come from the exercises.
+export function routineWodPills(r) {
+  return (r.wods ?? []).map((w) => `<li class="pill">${w.name ? `${esc(w.name)} ` : ''}<b>${esc(wodHeadline(w))}</b></li>`).join('');
+}
+
+// "Edellinen tulos: Fran 4:32 · Rx (4.3.)" for the parts that have a logged result.
+export function routineLastResults(r, history) {
+  const parts = (r.wods ?? []).flatMap((w) => {
+    const previous = previousResult(history, w.key || wodKey(w));
+    return previous ? [`${esc(wodTitle(w))} <strong>${esc(resultLabel(previous.result))}</strong> (${shortDate(previous.at)})`] : [];
+  });
+  return parts.length ? `<p class="routine-last small-copy"><span class="eyebrow">Edellinen tulos</span> ${parts.join(' · ')}</p>` : '';
+}
+
+const loggedWods = (h) => (h.wods ?? []).filter((w) => w.result).length;
+
+// The amount of work a finished workout holds, e.g. "5/5 sarjaa · 1/1 WOD".
+export function historyWork(h) {
+  return [h.setsTotal ? `${h.setsDone}/${h.setsTotal} sarjaa` : '', h.wods?.length ? `${loggedWods(h)}/${h.wods.length} WOD` : ''].filter(Boolean).join(' · ') || `${h.setsDone}/${h.setsTotal} sarjaa`;
+}
+
+// Result lines and, folded away, the whiteboards as they were done.
+export function historyWods(h) {
+  if (!h.wods?.length) return '';
+  const lines = h.wods.map((w) => `<li><strong>${esc(w.name)}</strong> ${w.result ? `${esc(resultLabel(w.result))}${w.result.notes ? ` <span class="muted">· ${esc(w.result.notes)}</span>` : ''}` : '<span class="muted">ei tulosta</span>'}</li>`).join('');
+  const boards = h.wods.filter((w) => w.board).map((w) => `<p><strong>${esc(w.name)}</strong></p><ul class="board-lines">${w.board.split('\n').map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`).join('');
+  return `<ul class="history-wods" aria-label="WOD-tulokset: ${esc(h.name)}">${lines}</ul>${boards ? `<details class="history-log"><summary>WOD-taulut: ${esc(h.name)}</summary>${boards}</details>` : ''}`;
+}
+
+// Corrections of logged WOD scores, one fieldset per part. Values are read back by app.js on change.
+export function historyWodEditor(h) {
+  if (!h.wods?.length) return '';
+  const hid = esc(h.id);
+  return h.wods.map((w, wi) => {
+    const fields = resultFields({ result: w.result, division: w.result?.division ?? 'rx' });
+    const input = (field, label, { kilos = false } = {}) => `<label class="field"><span>${label}</span><input type="text" inputmode="${kilos ? 'decimal' : 'numeric'}" value="${esc(fields[field])}" data-hwod="${field}" data-hid="${hid}" data-w="${wi}" data-key="hwod-${wi}-${field}" aria-label="${label}: ${esc(w.name)}" autocomplete="off"></label>`;
+    const capped = w.result?.kind === 'time' && w.result.capped;
+    const score = w.score === 'time' ? (capped ? input('reps', 'Toistot aikarajaan mennessä') : `<div class="result-pair">${input('min', 'Minuutit')}${input('sec', 'Sekunnit')}</div>`)
+      : w.score === 'roundsReps' ? `<div class="result-pair">${input('rounds', 'Kierrokset')}${input('reps', 'Lisätoistot')}</div>`
+        : w.score === 'kg' ? input('value', 'Kuorma (kg)', { kilos: true })
+          : w.score === 'none' ? '' : input('value', SCORE_LABELS[w.score]);
+    const divisions = Object.entries(DIVISIONS).map(([value, text]) => `<label class="choice-option"><input type="radio" name="hwod-division-${wi}" value="${value}" data-hwod="division" data-hid="${hid}" data-w="${wi}" data-key="hwod-${wi}-division-${value}"${fields.division === value ? ' checked' : ''}><span>${text}</span></label>`).join('');
+    const notes = `<label class="field"><span>Muistiinpanot</span><input type="text" maxlength="300" value="${esc(fields.notes)}" data-hwod="notes" data-hid="${hid}" data-w="${wi}" data-key="hwod-${wi}-notes" aria-label="Muistiinpanot: ${esc(w.name)}"></label>`;
+    const clear = w.result ? `<button class="btn small delete" data-action="clearhistorywod" data-id="${hid}" data-w="${wi}" data-key="hwod-${wi}-clear" aria-label="Poista tulos: ${esc(w.name)}">Poista tulos</button>` : '';
+    return `<fieldset class="history-edit-ex history-edit-wod"><legend>${esc(w.name)}</legend>${score}<fieldset class="result-division"><legend>Versio</legend><div class="choice-row">${divisions}</div></fieldset>${notes}${clear}</fieldset>`;
+  }).join('');
 }

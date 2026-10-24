@@ -23,6 +23,17 @@ function finished(id, fields, at) {
   w.result = built.result; w.division = built.result.division;
   return core.summarize(s, at);
 }
+// Saves programs made from templates with the given history and opens the home screen with every program expanded.
+async function openHome(p, ids, history = []) {
+  const state = core.defaultState();
+  state.settings.autoRest = false;
+  state.routines = ids.map((id) => program(id));
+  state.history = history;
+  await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+  await p.reload();
+  await p.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+  return state;
+}
 // Saves programs made from templates with the given history, then starts the first program.
 async function startProgram(p, ids, history = []) {
   const state = core.defaultState();
@@ -367,6 +378,135 @@ try {
           await audit(p, 'aurora chooser');
           await galleryAudit('aurora');
         }, { bypassCSP: true, timeout: 120000 });
+      });
+
+      await test(`${engine}: functional home, variants, history and records`, async (t) => {
+        const run = runner(t, browser, device);
+
+        await run('the home card shows what the program holds, and variants only appear when there is strength work', async (p) => {
+          const now = Date.now();
+          await openHome(p, ['fran', 'tunti'], [finished('fran', { min: '4', sec: '30' }, now - 2 * DAY)]);
+          const [fran, tunti] = [p.locator('.routine').nth(0), p.locator('.routine').nth(1)];
+          assert.equal(await fran.locator('.routine-meta .badge').textContent(), 'Toiminnallinen');
+          assert.match(await fran.locator('.routine-meta').innerText(), /1\s+WOD/);
+          assert.equal(await fran.locator('.routine-pills .pill').first().textContent(), 'Fran 21-15-9 aikaa vastaan · aikaraja 10 min');
+          assert.match(await fran.locator('.routine-last').textContent(), /^Edellinen tulos Fran 4:30 · Rx \(\d{1,2}\.\d{1,2}\.\)$/);
+          assert.equal(await fran.locator('.routine-variants').count(), 0, 'a WOD-only program has nothing to lighten or boost');
+          assert.equal(await fran.locator('.progression-controls').count(), 0, 'and no sets to progress');
+          assert.equal(await tunti.locator('.routine-last').count(), 0);
+          assert.equal(await tunti.locator('.routine-variants .btn').count(), 2);
+          assert.equal(await tunti.locator('.progression-controls').count(), 1);
+          assert.match(await tunti.locator('.variant-light .variant-note').textContent(), /^Voima -15 %, WOD skaalattuna$/);
+          assert.match(await tunti.locator('.routine-pills').innerText(), /AMRAP 12 min[\s\S]*Takakyykky\s+5×5/);
+        });
+
+        await run('Kevennetty starts the WOD as Skaalattu and Super adds a set to the strength part only', async (p) => {
+          const state = await openHome(p, ['tunti']);
+          const name = state.routines[0].name;
+          await tap(button(p, `Kevennetty Voima -15 %, WOD skaalattuna: ${name}`));
+          assert.equal(await button(p, 'Skaalattu').getAttribute('aria-pressed'), 'true', 'the WOD starts in the easier version');
+          assert.equal((await saved(p)).session.wods[0].division, 'scaled');
+          assert.match(await p.locator('.notice').textContent(), /^Kevennetty treeni: voimaosan toistot ja painot ovat noin 15 % pienemmät ja WOD on valmiiksi Skaalattu-versiolla\./);
+          assert.equal(await p.locator('.session-stat').textContent(), '0/5\u00a0sarjaa · 0/1\u00a0WOD · 0%');
+          await tapConfirm(p.locator('[data-action="finish"]'));
+          await p.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+          await tap(button(p, `Super Lisäsarja liikkeisiin: ${name}`));
+          assert.equal(await p.locator('.session-stat').textContent(), '0/6\u00a0sarjaa · 0/1\u00a0WOD · 0%', 'one more set, and the WOD is untouched');
+          assert.equal((await saved(p)).session.wods[0].division, 'rx');
+          assert.equal(await p.locator('.notice').count(), 0);
+        });
+
+        await run('history shows WOD results and boards, corrects scores, and records follow the corrections', async (p) => {
+          const now = Date.now();
+          await openHome(p, ['fran', 'tunti'], [
+            finished('tunti', { rounds: '5', reps: '12' }, now - DAY),
+            finished('fran', { min: '4', sec: '30' }, now - 2 * DAY),
+          ]);
+          await tap(button(p, 'Historia'));
+          const item = (name) => p.locator('.history-list > li').filter({ has: p.getByRole('heading', { name, exact: true }) });
+          assert.equal(await item('Fran').locator('.history-sets').textContent(), '1/1 WOD');
+          assert.equal(await item('Fran').locator('.history-wods li').textContent(), 'Fran 4:30 · Rx');
+          assert.equal(await item('Kokonainen tunti').locator('.history-sets').textContent(), '0/5 sarjaa', 'sets lead when there are sets');
+          assert.equal(await item('Kokonainen tunti').locator('.history-wods li').textContent(), 'AMRAP 12 min 5 + 12 · Rx');
+          await item('Fran').locator('details.history-log summary').click();
+          assert.match(await item('Fran').locator('.board-lines').innerText(), /21-15-9 aikaa vastaan/);
+
+          await tap(item('Fran').locator('[data-action="edithistory"]'));
+          const wod = item('Fran'), field = (name) => wod.locator(`[data-hwod="${name}"]`);
+          const savedSeconds = async () => (await saved(p)).history.find((h) => h.name === 'Fran').wods[0].result.seconds;
+          assert.deepEqual(await values(wod.locator('[data-hwod="min"], [data-hwod="sec"]')), ['4', '30']);
+          await field('sec').fill('99');
+          await field('sec').press('Tab');
+          await p.locator('[role="alert"]').waitFor();
+          assert.match(await p.locator('[role="alert"]').textContent(), /^Anna aika minuutteina ja sekunteina/);
+          assert.equal(await savedSeconds(), 270, 'a bad value changes nothing');
+          assert.deepEqual(await values(wod.locator('[data-hwod="min"], [data-hwod="sec"]')), ['4', '30'], 'the field shows the saved value again');
+
+          await field('sec').fill('10');
+          await field('sec').press('Tab');
+          await p.waitForFunction(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).history.some((h) => h.name === 'Fran' && h.wods[0].result.seconds === 250));
+          assert.equal(await p.locator('[role="alert"]').count(), 0);
+          assert.equal(await p.locator('.history-wods li').first().isVisible(), true);
+          await wod.locator('[data-hwod="division"][value="scaled"]').check();
+          await p.waitForFunction(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).history.some((h) => h.name === 'Fran' && h.wods[0].result.division === 'scaled'));
+          await field('notes').fill('Kevyt');
+          await field('notes').press('Tab');
+          await p.waitForFunction(() => JSON.parse(localStorage.getItem('gym-tracker-v1')).history.some((h) => h.name === 'Fran' && h.wods[0].result.notes === 'Kevyt'));
+          const edited = (await saved(p)).history.find((h) => h.name === 'Fran');
+          assert.deepEqual(edited.wods[0].result, { kind: 'time', seconds: 250, division: 'scaled', notes: 'Kevyt' });
+          assert.ok(edited.editedAt > 0, 'the entry is marked as edited');
+          await tap(item('Fran').locator('[data-action="edithistory"]'));
+          assert.equal(await item('Fran').locator('.history-wods li').textContent(), 'Fran 4:10 · Skaalattu · Kevyt');
+          assert.match(await item('Fran').locator('.muted').first().textContent(), /muokattu/);
+
+          await tap(button(p, 'Harjoituksiin'));
+          await p.evaluate(() => document.querySelectorAll('details.routine-details').forEach((d) => { d.open = true; }));
+          assert.match(await p.locator('.routine-last').first().textContent(), /Fran 4:10 · Skaalattu/);
+          await tap(button(p, 'Ennätykset'));
+          const rows = p.locator('.wod-record-list .record-row');
+          assert.equal(await rows.count(), 2);
+          const fran = rows.filter({ hasText: 'Fran' });
+          assert.match(await fran.innerText(), /1 kirjaus[\s\S]*Skaalattu 4:10/);
+          assert.doesNotMatch(await fran.innerText(), /Rx/);
+          assert.match(await rows.filter({ hasText: 'AMRAP 12 min' }).innerText(), /Rx 5 kierrosta \+ 12 toistoa/);
+
+          await tap(button(p, 'Harjoituksiin'));
+          await tap(button(p, 'Historia'));
+          await tap(item('Fran').locator('[data-action="edithistory"]'));
+          await tapConfirm(button(p, 'Poista tulos: Fran'));
+          assert.equal((await saved(p)).history.find((h) => h.name === 'Fran').wods[0].result, undefined);
+          await tap(item('Fran').locator('[data-action="edithistory"]'));
+          assert.equal(await item('Fran').locator('.history-sets').textContent(), '0/1 WOD');
+          assert.equal(await item('Fran').locator('.history-wods li').textContent(), 'Fran ei tulosta');
+          await tap(button(p, 'Harjoituksiin'));
+          await tap(button(p, 'Ennätykset'));
+          assert.equal(await p.locator('.wod-record-list .record-row').count(), 1, 'a removed result leaves the records');
+        }, { timeout: 90000 });
+
+        await run('the home card, history editor and records pass accessibility, touch-size and overflow checks in Dark and Aurora', async (p) => {
+          const now = Date.now();
+          const history = [finished('tunti', { rounds: '5', reps: '12' }, now - DAY), finished('fran', { min: '4', sec: '30' }, now - 2 * DAY)];
+          const widths = async (label, list = [390, 320], known = '') => {
+            for (const width of list) {
+              await p.setViewportSize({ width, height: 844 });
+              await audit(p, `${label} ${width}`, { known });
+            }
+            await p.setViewportSize(devices[device].viewport);
+          };
+          for (const theme of ['dark', 'aurora']) {
+            if (theme === 'aurora') await p.evaluate(() => localStorage.setItem('gym-tracker-appearance-v1', 'aurora'));
+            await openHome(p, ['fran', 'tunti'], history);
+            assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), theme);
+            await widths(`${theme} home with functional programs`);
+            await tap(button(p, 'Historia'));
+            await widths(`${theme} history`);
+            await tap(p.locator('[data-action="edithistory"]').first());
+            await widths(`${theme} history editor`);
+            await tap(button(p, 'Harjoituksiin'));
+            await tap(button(p, 'Ennätykset'));
+            await widths(`${theme} records`);
+          }
+        }, { bypassCSP: true, timeout: 150000 });
       });
 
       await test(`${engine}: functional workout`, async (t) => {

@@ -9,7 +9,7 @@ import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDa
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
 import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, DIVISIONS, parseScheme, wodPartLabel, wodTitle, resultFields, buildResult, resultLabel, isPersonalRecord, clockFace, startClock, pauseClock, resumeClock, settleClock, stopClock, addLap, undoLap } from './wod.js';
-import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard, clockScreen, clockParts, clockStatus } from './wod-ui.js';
+import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex, sessionBlock, sessionWodCard, clockScreen, clockParts, clockStatus, isFunctionalRoutine, routineWodPills, routineLastResults, historyWork, historyWods, historyWodEditor } from './wod-ui.js';
 import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateById, templateRoutine } from './wod-templates.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
@@ -636,8 +636,8 @@ function progressionControls(r) {
 }
 
 function historyDetails(h) {
-  if (!h.exercises?.length) return '';
-  return `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary>${historySets(h)}</details>`;
+  const sets = h.exercises?.length ? `<details class="history-log"><summary>Toteutuneet sarjat: ${esc(h.name)}</summary>${historySets(h)}</details>` : '';
+  return `${historyWods(h)}${sets}`;
 }
 
 const historyDate = (ts) => new Date(ts).toLocaleDateString('fi-FI', { ...(new Date(ts).getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }), month: 'short', day: 'numeric' });
@@ -662,19 +662,19 @@ function historyEditor(h) {
     const confirm = core.historyRepSuggestions(e).length ? `<button class="btn secondary" data-action="confirmhistoryreps" data-id="${id}" data-e="${ei}" data-key="hconfirm-${id}-${ei}">Vahvista tavoitteiden mukaiset toistot</button>` : '';
     return `<fieldset class="history-edit-ex"><legend>${esc(e.name)}</legend>${load}${e.sets.map((set, si) => `<div class="history-edit-set"><label class="check"><span>Sarja ${si + 1}</span><input type="checkbox" data-hedit="done" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hd-${ei}-${si}" aria-label="Sarja ${si + 1} tehty: ${esc(e.name)}" ${set.done ? 'checked' : ''}></label><label class="field"><span>Toistot</span><input type="text" inputmode="numeric" value="${esc(set.actualReps ?? '')}" placeholder="${esc(set.reps ?? e.reps ?? '')}" data-hedit="actualReps" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hr-${ei}-${si}" aria-label="Toistot: ${esc(e.name)}, sarja ${si + 1}"></label><label class="field"><span>Paino (kg)</span><input type="text" inputmode="decimal" value="${esc(set.actualWeight ?? '')}" placeholder="${esc(e.weight ?? '')}" data-hedit="actualWeight" data-hid="${id}" data-e="${ei}" data-s="${si}" data-key="hw-${ei}-${si}" aria-label="Paino (kg): ${esc(e.name)}, sarja ${si + 1}"></label></div>`).join('')}${confirm}</fieldset>`;
   }).join('');
-  return `<div class="history-editor">${duration}${sets}<p class="muted small-copy">Tyhjät toistot ovat tuntemattomia. Tyhjä paino käyttää tallennettua tavoitepainoa. Muutokset tallentuvat heti ja koskevat vain tätä harjoitusta.</p></div>`;
+  return `<div class="history-editor">${duration}${sets}${historyWodEditor(h)}<p class="muted small-copy">Tyhjät toistot ovat tuntemattomia. Tyhjä paino käyttää tallennettua tavoitepainoa. Muutokset tallentuvat heti ja koskevat vain tätä harjoitusta.</p></div>`;
 }
 
 function historyItem(h) {
   const id = esc(h.id), editing = historyEditing === h.id;
-  return `<li data-hist="${id}"><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h2>${esc(h.name)}</h2><span class="muted">${historyDate(h.endedAt)} · ${core.formatDuration(h.endedAt - h.startedAt)}${h.editedAt ? ' · muokattu' : ''}${hrText(h)}</span></div><span class="history-sets">${h.setsDone}<span>/${h.setsTotal} sarjaa</span></span></div>${editing ? historyEditor(h) : historyDetails(h)}<div class="history-actions"><button class="btn small" data-action="edithistory" data-id="${id}" data-key="hedit-${id}" aria-label="${editing ? 'Valmis' : 'Muokkaa'}: ${esc(h.name)}, ${historyDate(h.endedAt)}" aria-expanded="${editing}">${editing ? 'Valmis' : 'Muokkaa'}</button><button class="btn small delete" data-action="delhistory" data-id="${id}" data-key="hdel-${id}" aria-label="Poista: ${esc(h.name)}, ${historyDate(h.endedAt)}">Poista</button></div></li>`;
+  return `<li data-hist="${id}"><div class="hist"><span class="history-check">${icon('check')}</span><div class="grow"><h2>${esc(h.name)}</h2><span class="muted">${historyDate(h.endedAt)} · ${core.formatDuration(h.endedAt - h.startedAt)}${h.editedAt ? ' · muokattu' : ''}${hrText(h)}</span></div><span class="history-sets">${h.setsTotal || !h.wods?.length ? `${h.setsDone}<span>/${h.setsTotal} sarjaa</span>` : `${h.wods.filter((w) => w.result).length}<span>/${h.wods.length} WOD</span>`}</span></div>${editing ? historyEditor(h) : historyDetails(h)}<div class="history-actions"><button class="btn small" data-action="edithistory" data-id="${id}" data-key="hedit-${id}" aria-label="${editing ? 'Valmis' : 'Muokkaa'}: ${esc(h.name)}, ${historyDate(h.endedAt)}" aria-expanded="${editing}">${editing ? 'Valmis' : 'Muokkaa'}</button><button class="btn small delete" data-action="delhistory" data-id="${id}" data-key="hdel-${id}" aria-label="Poista: ${esc(h.name)}, ${historyDate(h.endedAt)}">Poista</button></div></li>`;
 }
 
 function savedCard() {
   const h = savedId && state.history.find((x) => x.id === savedId);
   if (!h) return '';
   const kg = knownVolume(h);
-  return `<section class="card saved-card" aria-label="Tallennettu harjoitus"><span class="eyebrow accent">TALLENNETTU</span><h2>${esc(h.name)}</h2><p class="muted">${h.setsDone}/${h.setsTotal} sarjaa · ${core.formatDuration(h.endedAt - h.startedAt)}${kg ? ` · ${kg.toLocaleString('fi-FI')} kg nostettu` : ''}${hrText(h)}</p><p class="muted small-copy">Unohditko kirjata sarjan tai painon? Korjaa tulos nyt.</p><div class="history-actions"><button class="btn small" data-action="fixsaved" data-key="fixsaved">Muokkaa tulosta</button><button class="btn small" data-action="closesaved" data-key="closesaved">Sulje</button></div></section>`;
+  return `<section class="card saved-card" aria-label="Tallennettu harjoitus"><span class="eyebrow accent">TALLENNETTU</span><h2>${esc(h.name)}</h2><p class="muted">${historyWork(h)} · ${core.formatDuration(h.endedAt - h.startedAt)}${kg ? ` · ${kg.toLocaleString('fi-FI')} kg nostettu` : ''}${hrText(h)}</p><p class="muted small-copy">${h.wods?.length ? 'Unohditko kirjata sarjan, painon tai WOD-tuloksen? Korjaa tulos nyt.' : 'Unohditko kirjata sarjan tai painon? Korjaa tulos nyt.'}</p><div class="history-actions"><button class="btn small" data-action="fixsaved" data-key="fixsaved">Muokkaa tulosta</button><button class="btn small" data-action="closesaved" data-key="closesaved">Sulje</button></div></section>`;
 }
 
 function coachingGuide() {
@@ -944,16 +944,25 @@ function homeView() {
   else periodStart.setMonth(0, 1);
   const thisWeek = state.history.filter((h) => h.endedAt >= +periodStart).length;
   const periodLabel = { week: 'tällä viikolla', month: 'tässä kuussa', year: 'tänä vuonna' }[homePeriod];
-  const resume = s ? `<section class="resume card"><div class="row"><span class="eyebrow accent"><span class="pulse" aria-hidden="true"></span> HARJOITUS KESKEN</span><span class="badge now">${core.progress(s).pct}%</span></div><h2>${esc(s.name)}</h2><p class="muted">${core.progress(s).done}/${core.progress(s).total} sarjaa tehty · Jatka siitä, mihin jäit.</p>${progressBar(core.progress(s))}<button class="btn primary big" data-action="resume" data-key="resume">Jatka harjoitusta ${icon('arrow')}</button></section>` : '';
+  const resumeProgress = s && core.progress(s);
+  const resumeDone = !s ? '' : isFunctional(s) ? [resumeProgress.total ? `${resumeProgress.done}/${resumeProgress.total} sarjaa` : '', resumeProgress.wodsTotal ? `${resumeProgress.wodsDone}/${resumeProgress.wodsTotal} WOD` : ''].filter(Boolean).join(' · ') : `${resumeProgress.done}/${resumeProgress.total} sarjaa`;
+  const resume = s ? `<section class="resume card"><div class="row"><span class="eyebrow accent"><span class="pulse" aria-hidden="true"></span> HARJOITUS KESKEN</span><span class="badge now">${resumeProgress.pct}%</span></div><h2>${esc(s.name)}</h2><p class="muted">${resumeDone} tehty · Jatka siitä, mihin jäit.</p>${progressBar(resumeProgress)}<button class="btn primary big" data-action="resume" data-key="resume">Jatka harjoitusta ${icon('arrow')}</button></section>` : '';
   const routines = state.routines.map((r, i) => {
-    const pills = r.exercises.map((e) => `<li class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></li>`).join('');
+    const functional = isFunctionalRoutine(r), strength = r.exercises.length > 0;
+    const pills = routineWodPills(r) + r.exercises.map((e) => `<li class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></li>`).join('');
+    const meta = functional
+      ? `<span class="badge">Toiminnallinen</span> <span><b>${r.wods.length}</b> WOD</span>${strength ? ` <span><b>${r.exercises.reduce((n, e) => n + e.sets, 0)}</b> sarjaa</span>` : ''}`
+      : `<span><b>${r.exercises.length}</b> liikettä</span> <span><b>${r.exercises.reduce((n, e) => n + e.sets, 0)}</b> sarjaa</span>`;
+    const lightNote = functional ? 'Voima -15 %, WOD skaalattuna' : 'Toistot ja painot -15 %';
+    const variants = !functional || strength ? `<div class="routine-variants"><button class="btn secondary variant-light" data-action="start" data-mode="light" data-key="start-light-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Kevennetty ${lightNote}: ${esc(r.name)}"><span class="variant-title">${icon('feather')}Kevennetty</span> <span class="variant-note">${lightNote}</span></button>`
+      + `<button class="btn secondary variant-super" data-action="start" data-mode="super" data-key="start-super-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Super Lisäsarja liikkeisiin: ${esc(r.name)}"><span class="variant-title">${icon('flame')}Super</span> <span class="variant-note">Lisäsarja liikkeisiin</span></button></div>` : '';
     return `<li class="card routine" data-tone="${[...r.id].reduce((n, c) => n + c.charCodeAt(0), 0) % 3}">
       <button class="quick-start" data-action="start" data-key="quick-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Aloita: ${esc(r.name)}">${icon('play')} <span>Aloita</span></button>
       <details class="routine-details" data-routine-panel="${esc(r.id)}" ${openRoutines.has(r.id) ? 'open' : ''}>
         <summary><h2>${esc(r.name)}</h2>
-          <span class="routine-meta"><span><b>${r.exercises.length}</b> liikettä</span> <span><b>${r.exercises.reduce((n, e) => n + e.sets, 0)}</b> sarjaa</span> <span class="settings-chevron" aria-hidden="true">⌄</span></span>
+          <span class="routine-meta">${meta} <span class="settings-chevron" aria-hidden="true">⌄</span></span>
         </summary>
-        <div class="routine-body"><ul class="routine-pills" aria-label="Liikkeet: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div><div class="routine-variants"><button class="btn secondary variant-light" data-action="start" data-mode="light" data-key="start-light-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Kevennetty Toistot ja painot -15 %: ${esc(r.name)}"><span class="variant-title">${icon('feather')}Kevennetty</span> <span class="variant-note">Toistot ja painot -15 %</span></button><button class="btn secondary variant-super" data-action="start" data-mode="super" data-key="start-super-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Super Lisäsarja liikkeisiin: ${esc(r.name)}"><span class="variant-title">${icon('flame')}Super</span> <span class="variant-note">Lisäsarja liikkeisiin</span></button></div>${progressionControls(r)}</div>
+        <div class="routine-body">${routineLastResults(r, state.history)}<ul class="routine-pills" aria-label="${functional ? 'Sisältö' : 'Liikkeet'}: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div>${variants}${strength || !functional ? progressionControls(r) : ''}</div>
       </details></li>`;
   }).join('');
   const ios = (/iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) && !navigator.standalone;
@@ -1047,7 +1056,10 @@ function exerciseLog(e, ei) {
 function recoveryNote(s) {
   if (!s.fatigued) return '';
   const light = s.exercises.some((e) => e.deload);
-  return `<p class="notice" role="status">${light ? 'Kevennetty treeni: toistot ja painot ovat noin 15 % pienemmät. Ohjelma ei muutu, eikä tämän treenin tulos muuta tavoitteita. Lopeta, jos olo huononee.' : 'Palautuminen on merkitty heikoksi. Tätä treeniä ei ole kevennetty automaattisesti: valitse kuormat itse ja lopeta, jos olo huononee.'}</p>`;
+  const lightText = s.wods?.length
+    ? 'Kevennetty treeni: voimaosan toistot ja painot ovat noin 15 % pienemmät ja WOD on valmiiksi Skaalattu-versiolla. Ohjelma ei muutu, eikä tämän treenin tulos muuta tavoitteita. Lopeta, jos olo huononee.'
+    : 'Kevennetty treeni: toistot ja painot ovat noin 15 % pienemmät. Ohjelma ei muutu, eikä tämän treenin tulos muuta tavoitteita. Lopeta, jos olo huononee.';
+  return `<p class="notice" role="status">${light ? lightText : 'Palautuminen on merkitty heikoksi. Tätä treeniä ei ole kevennetty automaattisesti: valitse kuormat itse ja lopeta, jos olo huononee.'}</p>`;
 }
 
 // Only the largest muscle groups get a rail graphic; whole-body, cardio, mobility and unknown moves stay plain.
@@ -1801,6 +1813,21 @@ const actions = {
     }, { critical: true });
     if (ok) historyMessage = 'Toteutuneet toistot vahvistettu. Muut harjoitustiedot säilyvät.';
     render();
+  },
+  async clearhistorywod(t) {
+    readLatest();
+    const id = t.dataset.id, wi = +t.dataset.w, w = state.history.find((h) => h.id === id)?.wods?.[wi];
+    if (!w) { announce('WOD-osaa ei löytynyt. Näkymä on päivitetty.'); render(); return; }
+    if (!await askConfirm(`Poistetaanko WOD-tulos "${w.name}" historiasta? Se poistuu myös ennätyksistä. Muut kirjaukset säilyvät.`, 'Poista tulos')) return;
+    let result = null;
+    const ok = await mutate((next) => {
+      result = core.editHistoryWod(next, id, wi, null);
+      if (!result.ok) return false;
+    }, { critical: true });
+    historyMessage = ok && result?.ok ? '' : result?.error ?? 'Muutosta ei voitu tallentaa. Yritä uudelleen.';
+    render();
+    announce(historyMessage || 'Tulos poistettu.');
+    document.querySelector(`[data-key^="hwod-${wi}-"]`)?.focus({ preventScroll: true });
   },
   fixsaved() {
     historyEditing = savedId; savedId = null; historyMessage = ''; view = 'history';
@@ -2567,6 +2594,33 @@ async function commitHistoryEdit(t) {
   if (historyMessage) announce(historyMessage);
 }
 
+// Corrects the logged score of one WOD part of a finished workout. Fields are read from the part's fieldset.
+async function commitHistoryWod(t) {
+  const { hid: id } = t.dataset, wi = +t.dataset.w, box = t.closest('.history-edit-wod');
+  const w = state.history.find((h) => h.id === id)?.wods?.[wi];
+  if (!box || !w) { render(); return; }
+  const fields = { min: '', sec: '', reps: '', rounds: '', value: '', division: 'rx', notes: '', capped: w.result?.kind === 'time' && !!w.result.capped, rpe: w.result?.rpe === undefined ? '' : String(w.result.rpe) };
+  for (const input of box.querySelectorAll('[data-hwod]')) {
+    if (input.type !== 'radio') fields[input.dataset.hwod] = input.value;
+    else if (input.checked) fields.division = input.value;
+  }
+  // A part that never had a score stays without one until a value is typed.
+  if (!w.result && w.score !== 'none' && !['min', 'sec', 'reps', 'rounds', 'value'].some((k) => String(fields[k]).trim() !== '')) return;
+  const built = buildResult({ score: w.score }, fields);
+  let result = built;
+  if (built.ok) {
+    if (built.result.capped && w.result?.seconds) built.result.seconds = w.result.seconds;
+    const ok = await mutate((next) => {
+      result = core.editHistoryWod(next, id, wi, built.result);
+      if (!result.ok) return false;
+    }, { critical: true });
+    if (!ok && result.ok) result = { ok: false, error: 'Muutosta ei voitu tallentaa. Yritä uudelleen.' };
+  }
+  historyMessage = result.ok ? '' : result.error;
+  render();
+  if (historyMessage) announce(historyMessage);
+}
+
 document.addEventListener('change', async (e) => {
   const t = e.target;
   if (t.dataset.rf) {
@@ -2588,6 +2642,7 @@ document.addEventListener('change', async (e) => {
     return;
   }
   if (t.dataset.hedit) { enqueueAction(() => commitHistoryEdit(t)); return; }
+  if (t.dataset.hwod) { enqueueAction(() => commitHistoryWod(t)); return; }
   if (t.dataset.statFilter || t.dataset.statDate) {
     const field = t.dataset.statFilter || t.dataset.statDate;
     statisticsFilters[field] = t.value;

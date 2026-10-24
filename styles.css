@@ -634,6 +634,17 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .clock-lap-info { color: var(--muted); font-size: 14px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .clock-controls-2 { grid-template-columns: repeat(2, minmax(0, 150px)); }
 .clock-board { display: grid; gap: var(--control-gap); }
+
+/* Home, history and records for functional programs */
+.routine-last { margin: 0 0 var(--control-gap); color: var(--muted); overflow-wrap: anywhere; }
+.routine-last .eyebrow { display: block; }
+.routine-last strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.routine-meta > .badge { padding: 2px 8px; }
+.history-wods { margin: var(--space-2) 0 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); font-size: 14px; overflow-wrap: anywhere; }
+.history-wods strong { font-weight: 650; }
+.board-lines { margin: 0 0 var(--space-2); }
+.history-edit-wod { display: grid; gap: var(--control-gap); }
+.record-heading { margin: var(--space-4) 0 var(--space-2); font-size: 18px; }
 @media (max-width: 380px) {
 	.wod-add-row { grid-template-columns: 1fr; }
 }

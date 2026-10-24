@@ -1,5 +1,6 @@
 import { buildStatistics, buildRecords, calculateIndex, indexCandidate, indexTimeline, localDateKey, LOAD_TYPES } from './statistics.js';
 import { formatDuration, progress } from './core.js';
+import { wodRecords, formatScore, DIVISIONS } from './wod.js';
 
 export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const esc = escapeHtml;
@@ -93,8 +94,17 @@ function recordSession(h, key) {
   return `<details class="history-log record-session" data-session-id="${esc(h.id)}"><summary data-key="${esc(key)}">Näytä ennätyspainon treeni</summary><div class="record-session-content"><p><strong>${esc(h.name)}</strong></p><p class="muted">${esc(metadata)}</p>${historySets(h)}</div></details>`;
 }
 
+// Best score per version of every WOD that has been logged, with the date and the number of attempts.
+function wodRecordsSection(history) {
+  const rows = wodRecords(history).map((r) => {
+    const bests = Object.keys(DIVISIONS).filter((d) => r.best[d]).map((d) => `<div class="record-estimate"><span>${DIVISIONS[d]} <strong>${esc(formatScore(r.best[d].result, { long: true }))}</strong></span> <span class="muted record-date">${esc(date(r.best[d].at))}</span></div>`).join('');
+    return `<li class="record-row"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <span class="muted record-date">${r.attempts.length} ${r.attempts.length === 1 ? 'kirjaus' : 'kirjausta'}</span></div>${bests}</li>`;
+  }).join('');
+  return rows ? `<h2 class="record-heading">WOD-ennätykset</h2><ul class="card record-list wod-record-list" aria-label="WOD-ennätykset">${rows}</ul>` : '';
+}
+
 export function recordsView(state) {
-  const records = buildRecords(state.history);
+  const records = buildRecords(state.history), wodSection = wodRecordsSection(state.history);
   const sessions = new Map();
   for (const h of state.history ?? []) if (h && !sessions.has(h.id)) sessions.set(h.id, h);
   const rows = records.map((r) => {
@@ -104,7 +114,7 @@ export function recordsView(state) {
     }).join('');
     return `<li class="record-row"><div class="record-result"><span class="record-name">${esc(r.name)}</span> <strong>${esc(fmt(r.weight, 2))} kg</strong> <span class="muted record-date">${esc(date(r.at))}</span></div>${estimates}${recordSession(sessions.get(r.sessionId), `record-weight-${r.key}`)}</li>`;
   }).join('');
-  return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin viimeksi. Yksi tehty sarja riittää ennätykseen.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla.</p>'}`;
+  return `<div class="stat-heading"><h1 tabindex="-1">Ennätykset</h1><p class="muted">Suurin kirjattu kuorma jokaisessa liikkeessä ja päivä, jolloin se saavutettiin viimeksi. Yksi tehty sarja riittää ennätykseen.</p></div>${records.length ? `<ul class="card record-list" aria-label="Ennätykset liikkeittäin">${rows}</ul>` : wodSection ? '' : '<p class="card" role="status">Ei vielä ennätyksiä. Ne ilmestyvät, kun kirjaat tehtyjä sarjoja painoilla tai WOD-tuloksia.</p>'}${wodSection}`;
 }
 
 export function statisticsView(state, filters) {
