@@ -95,6 +95,19 @@ try {
             await gaps(page, '.type-choices > li', 12, 'program type choices');
             await cardPadding(page, '.type-choice', padding);
             await fits(page, 'program type chooser');
+            await page.locator('[data-action="newtemplate"]').click();
+            const twoColumns = width >= 700;
+            for (const group of ['format', 'benchmark']) {
+              await page.locator(`[data-action="templategroup"][data-group="${group}"]`).click();
+              await gaps(page, '#app > :not(.sr-only):not(.sr)', 16, `${group} gallery sections`);
+              await gaps(page, '.gallery-controls > *', 12, `${group} gallery controls`);
+              // Cards in a two-column row stretch to the row height, so only the first card's text blocks keep the 12 px rhythm there.
+              await gaps(page, `.template-list > li:first-child > ${twoColumns ? ':not(.btn)' : '*'}`, 12, `${group} template card content`);
+              await gaps(page, `.template-list > li${twoColumns ? ':nth-child(odd)' : ''}`, 12, `${group} template cards`);
+              await cardPadding(page, '.gallery-controls, .template-card', padding);
+              await fits(page, `${group} template gallery`);
+            }
+            await page.locator('[data-key="gallery-back"]').click();
             await page.locator('[data-action="newfunctional"]').click();
             await page.locator('[data-key="addblock-warmup"]').click();
             await page.locator('.move-scaled > summary').first().click();

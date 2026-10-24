@@ -155,6 +155,11 @@ async function suite(name, type, device) {
 
     await tap(button('Luo treeniohjelma'));
     await views(page, name, 'newtype');
+    await tap(button('Aloita mallista'));
+    await views(page, name, 'gallery');
+    await tap(button('Vertailutreenit'));
+    await views(page, name, 'gallery-benchmarks');
+    await tap(button('Takaisin'));
     await tap(button('Kuntosalitreeni'));
     await tap(button('Tallenna harjoitus')); check(await page.locator('#err').isVisible(), 'validation errors visible');
     await page.locator('[data-f="rname"]').fill('<img src=x onerror=window.__xss=1>');

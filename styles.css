@@ -445,7 +445,7 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .home-programs > *, .home-aside > *, .progression-controls > *, .history-list > li > *,
 .settings-body > *, .rest-settings > *, .session-end > *, .edit > *,
 .library-filters > *, .custom-exercise form > *, .stat-filters > *, .editor-section > *, .wod-moves > *, .wod-move > *,
-.wod-params > *, .move-scaled-body > *, .wod-board > *, .wod-guide-body > * { margin-block: 0; }
+.wod-params > *, .move-scaled-body > *, .wod-board > *, .wod-guide-body > *, .gallery-controls > *, .gallery-loads > *, .template-card > * { margin-block: 0; }
 @media (max-width: 700px) {
 	.stat-columns { grid-template-columns: 1fr; }
 	.stat-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -503,7 +503,7 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 	.track-muscle { display: none; }
 	.set.done .icon { color: Highlight; }
 	.appearance-option:has(input:checked) { border: 3px solid Highlight; }
-	.format-option:has(input:checked), .chip[aria-pressed="true"] { border: 3px solid Highlight; }
+	.format-option:has(input:checked), .chip[aria-pressed="true"], .segmented [aria-pressed="true"] { border: 3px solid Highlight; }
 }
 
 /* Interval timer */
@@ -587,6 +587,18 @@ button.stat-tile { font: inherit; text-align: inherit; color: inherit; padding: 
 .wod-guide-body { display: grid; gap: var(--space-2); padding-block: var(--control-gap) var(--card-padding); border-top: 1px solid var(--line); font-size: 13px; }
 .wod-guide-body ol { display: grid; gap: var(--space-1); padding-left: 20px; }
 .block-minutes { max-width: 200px; }
+/* Template gallery ("Aloita mallista") */
+#app.view-gallery { max-width: 820px; }
+.gallery-controls, .gallery-loads { display: grid; gap: var(--control-gap); min-width: 0; }
+.gallery-loads { gap: var(--space-2); }
+.segmented { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.segmented > .btn.secondary { flex: 1 1 auto; width: auto; }
+.segmented [aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.template-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.template-card { display: flex; flex-direction: column; gap: var(--control-gap); }
+.template-card h2 { overflow-wrap: anywhere; }
+.template-card > .btn { margin-top: auto; }
+.template-parts { color: var(--muted); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 @media (max-width: 380px) {
 	.wod-add-row { grid-template-columns: 1fr; }
 }

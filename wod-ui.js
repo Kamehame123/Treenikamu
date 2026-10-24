@@ -13,7 +13,7 @@ import {
   MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, FORMAT_DEFAULTS,
   SCHEME_CHIPS, MODALITY_LABELS, sanitizeWod, parseScheme, boardLines, modalities, movementLine, wodMinutes, wodPartLabel,
 } from './wod.js';
-import { DEFAULT_WARMUP, DEFAULT_COOLDOWN } from './wod-templates.js';
+import { DEFAULT_WARMUP, DEFAULT_COOLDOWN, TEMPLATES, TEMPLATE_GROUPS, SEXES, templateWod, templateRoutine } from './wod-templates.js';
 
 export const FORMAT_TAGLINES = Object.freeze({
   fortime: 'Nopein aika', amrap: 'Kierrokset ajassa', emom: 'Joka minuutti', intervals: 'Työ ja lepo', maxload: 'Raskain nosto',
@@ -92,7 +92,7 @@ export function normalizeFunctionalDraft(d) {
 export function typeChoices(icon) {
   // The note is the button's description, not part of its name, so voice control can say just the type.
   const choice = (action, glyph, name, note) => `<li><button class="type-choice" data-action="${action}" data-key="${action}" aria-describedby="${action}-note"><span class="choice-icon">${icon(glyph)}</span><span class="grow"><strong>${name}</strong><span class="choice-meta" id="${action}-note" aria-hidden="true">${note}</span></span>${icon('arrow')}</button></li>`;
-  return `<ul class="list type-choices">${choice('newgym', 'weight', 'Kuntosalitreeni', 'Liikkeet, sarjat, toistot ja painot. Tavoitteet kehittyvät tulostesi mukaan.')}${choice('newfunctional', 'stopwatch', 'Toiminnallinen treeni', 'Lämmittely, voima tai taito ja ajastettu WOD: aikaa vastaan, AMRAP, EMOM tai intervallit.')}</ul>`;
+  return `<ul class="list type-choices">${choice('newgym', 'weight', 'Kuntosalitreeni', 'Liikkeet, sarjat, toistot ja painot. Tavoitteet kehittyvät tulostesi mukaan.')}${choice('newfunctional', 'stopwatch', 'Toiminnallinen treeni', 'Lämmittely, voima tai taito ja ajastettu WOD: aikaa vastaan, AMRAP, EMOM tai intervallit.')}${choice('newtemplate', 'board', 'Aloita mallista', 'Toiminnallinen treeni valmiista rakenteesta tai tunnetusta vertailutreenistä. Muokattavissa ennen tallennusta.')}</ul>`;
 }
 
 export function wodGuide(open = false) {
@@ -197,4 +197,36 @@ export function paintWodEditor(w, wi) {
     const summary = document.getElementById(`mscaled-sum-${wi}-${mi}`), text = scaledSummary(m);
     if (summary && summary.textContent !== text) summary.textContent = text;
   });
+}
+
+// ---- Template gallery ("Aloita mallista") ----
+
+const GROUP_NOTES = {
+  format: 'Valmis rakenne. Vaihda liikkeet ja määrät omiksesi ennen tallennusta.',
+  benchmark: 'Tunnettuja treenejä, jotka tehdään aina samoin, jotta tulosta voi verrata aiempaan.',
+};
+export const isTemplateGroup = (v) => typeof v === 'string' && Object.hasOwn(TEMPLATE_GROUPS, v);
+export const isSex = (v) => typeof v === 'string' && Object.hasOwn(SEXES, v);
+
+// Every template starts with the default warm-up and cool-down, so only a whole class lists its parts.
+function templateParts(t) {
+  if (!t.warmup && !t.exercises?.length) return '';
+  const r = templateRoutine(t);
+  const parts = [`Lämmittely ${r.warmup.minutes} min`, ...r.exercises.map((e) => `${e.name} ${e.sets} × ${e.reps}`), 'WOD', `Loppuverryttely ${r.cooldown.minutes} min`];
+  return `<p class="template-parts">${parts.map(esc).join(' · ')}</p>`;
+}
+
+function templateCard(t, sex, icon) {
+  const wod = sanitizeWod(templateWod(t, sex));
+  const [headline, ...lines] = boardLines(wod, 'rx');
+  const minutes = wodMinutes(wod);
+  const board = `<div class="wod-board">${headline === t.name ? '' : `<p class="board-headline">${esc(headline)}</p>`}<ul class="board-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul><p class="board-meta"><span>${minutes ? `Kesto noin ${decimal(minutes)} min` : 'Kesto riippuu tahdista'}</span>${modalities(wod).map((k) => `<span class="pill">${MODALITY_LABELS[k]}</span>`).join('')}</p></div>`;
+  return `<li class="card template-card"><h2>${esc(t.name)}</h2>${templateParts(t)}${board}${wod.stimulus ? `<p class="board-stimulus">${esc(wod.stimulus)}</p>` : ''}${wod.notes ? `<p class="field-hint">${esc(wod.notes)}</p>` : ''}<button class="btn secondary" data-action="usetemplate" data-template="${esc(t.id)}" data-key="use-${esc(t.id)}">Käytä mallia<span class="sr"> ${esc(t.name)}</span> ${icon('arrow')}</button></li>`;
+}
+
+// group: a key of TEMPLATE_GROUPS; sex: a key of SEXES (only the suggested loads differ).
+export function templateGallery(group, sex, icon) {
+  const toggles = (action, attr, options, current, labelling) => `<div class="segmented" role="group" ${labelling}>${Object.entries(options).map(([value, text]) => `<button class="btn secondary" data-action="${action}" data-${attr}="${value}" data-key="${action}-${value}" aria-pressed="${current === value}">${text}</button>`).join('')}</div>`;
+  const cards = TEMPLATES.filter((t) => t.group === group).map((t) => templateCard(t, sex, icon)).join('');
+  return `<section class="card gallery-controls" aria-label="Mallien valinta">${toggles('templategroup', 'group', TEMPLATE_GROUPS, group, 'aria-label="Mallien ryhmä"')}<p class="field-hint">${GROUP_NOTES[group]}</p><div class="gallery-loads"><span class="eyebrow" id="gallery-loads">Ehdotetut kuormat</span>${toggles('templatesex', 'sex', SEXES, sex, 'aria-labelledby="gallery-loads"')}</div></section><ul class="list template-list" aria-label="${TEMPLATE_GROUPS[group]}">${cards}</ul>`;
 }

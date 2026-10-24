@@ -9,7 +9,8 @@ import { buildStatistics, configureIndex, libraryTracking, localDateKey, shiftDa
 import { escapeHtml as esc, statisticsView, recordsView, trackingEditor, historySets } from './statistics-ui.js';
 import { TIMER_MAX_INTERVALS, TIMER_MAX_SEQUENCES, TIMER_PRESETS, defaultTimerName, buildTimer, newInterval, draftFrom, phaseAt, runElapsed, sanitizeRun, intervalLabel, intervalSeconds, presetKind, presetSeconds, totalSeconds, formatClock, formatLength } from './timer.js';
 import { MAX_WODS, MAX_MOVEMENTS, WOD_FORMATS, FORMAT_LABELS, FORMAT_HELP, SCORE_LABELS, FORMAT_SCORES, parseScheme, wodPartLabel } from './wod.js';
-import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor } from './wod-ui.js';
+import { BLOCK_KINDS, WOD_TEXT_FIELDS, editorMovement, newEditorWod, switchFormat, newBlock, normalizeFunctionalDraft, typeChoices, wodGuide, blockSection, wodEditor, paintWodEditor, templateGallery, isTemplateGroup, isSex } from './wod-ui.js';
+import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateById, templateRoutine } from './wod-templates.js';
 
 // Views restore their own position; browser reload restoration must not undo it.
 history.scrollRestoration = 'manual';
@@ -37,6 +38,7 @@ const paths = {
   sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   feather: 'M20 4c-9 0-14 5-14 11v5M6 20 15 11M20 4c0 7-4 11-10 11',
   flame: 'M12 3c.5 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2.5-4.5 0 1.5.5 2.5 1.5 3 0-3 0-5 1-8.5z',
+  board: 'M4 4h16v11H4zM8 8h8M8 11h5M9 15l-2 5M15 15l2 5',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.weight}"/></svg>`;
 let announceId;
@@ -115,6 +117,11 @@ const HOME_PERIODS = ['week', 'month', 'year'];
 const HOME_PERIOD_KEY = 'gym-tracker-home-period';
 let homePeriod = 'week';
 try { const saved = localStorage.getItem(HOME_PERIOD_KEY); if (HOME_PERIODS.includes(saved)) homePeriod = saved; } catch { /* Defaults to week. */ }
+// "Aloita mallista": the chosen group lasts for the visit; the load choice is a per-device preference.
+const TEMPLATE_SEX_KEY = 'gym-tracker-template-loads';
+let galleryGroup = 'format';
+let templateSex = 'women';
+try { const saved = localStorage.getItem(TEMPLATE_SEX_KEY); if (isSex(saved)) templateSex = saved; } catch { /* Defaults to women's loads. */ }
 let renderedView;
 let editError = '';
 let settingsOpen = false;
@@ -1026,7 +1033,11 @@ function functionalEditView() {
 }
 
 function newTypeView() {
-  return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="newtype-back">${icon('back')} Peruuta</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Uusi treeniohjelma</p><h1 tabindex="-1">Millainen ohjelma?</h1><p class="editor-copy">Molemmat tallentuvat, näkyvät historiassa ja kulkevat varmuuskopiossa samalla tavalla.</p></div>${typeChoices(icon)}`;
+  return `<header class="editor-header"><button class="btn ghost back" data-action="home" data-key="newtype-back">${icon('back')} Peruuta</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Uusi treeniohjelma</p><h1 tabindex="-1">Millainen ohjelma?</h1><p class="editor-copy">Kumpikin ohjelmatyyppi tallentuu, näkyy historiassa ja kulkee varmuuskopiossa samalla tavalla.</p></div>${typeChoices(icon)}`;
+}
+
+function galleryView() {
+  return `<header class="editor-header"><button class="btn ghost back" data-action="galleryback" data-key="gallery-back">${icon('back')} Takaisin</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Aloita mallista</p><h1 tabindex="-1">Valitse malli</h1><p class="editor-copy">Malli avautuu toiminnallisena treeninä, jossa on valmiina lämmittely ja loppuverryttely. Voit muuttaa kaiken ennen tallennusta.</p></div>${templateGallery(galleryGroup, templateSex, icon)}`;
 }
 
 // Disclosure + native radios avoid mobile WebKit's CSP-blocked select shadow styles.
@@ -1156,7 +1167,7 @@ function render() {
   const changed = renderedView !== view;
   $app.className = `view-${view}`;
   $app.toggleAttribute('data-entering', changed);
-  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : homeView();
+  $app.innerHTML = view === 'history' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="history-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${historyView()}</div>` : view === 'records' ? `${brand()}${warn()}<button class="btn ghost back" data-action="home" data-key="records-back">${icon('back')} Harjoituksiin</button><div class="statistics-content">${recordsView(state)}</div>` : view === 'statistics' ? `${brand()}${warn()}<button class="btn ghost back" data-action="showhistory" data-key="statistics-back">${icon('back')} Historiaan</button><div class="statistics-content">${statisticsView(state, statisticsFilters)}</div>` : view === 'timer' ? timerView() : view === 'workout' ? workoutView() : view === 'library' ? libraryView() : view === 'edit' && draft ? editView() : view === 'newtype' ? newTypeView() : view === 'gallery' ? galleryView() : homeView();
   const target = key && document.querySelector(`[data-key="${CSS.escape(key)}"]`);
   if (!changed && target) {
     target.focus({ preventScroll: true });
@@ -1762,6 +1773,27 @@ const actions = {
   new() { view = 'newtype'; editError = ''; render(); },
   newgym() { openDraft({ id: core.uid(), name: '', exercises: [blankEx()] }, true); },
   newfunctional() { openDraft({ id: core.uid(), name: '', type: 'functional', exercises: [], warmup: null, wods: [newEditorWod()], cooldown: null }, true); },
+  newtemplate() { view = 'gallery'; render(); },
+  galleryback() { view = 'newtype'; render(); document.querySelector('[data-key="newtemplate"]')?.focus(); },
+  templategroup(t) {
+    if (!isTemplateGroup(t.dataset.group) || t.dataset.group === galleryGroup) return;
+    galleryGroup = t.dataset.group; render();
+    // Safari does not focus tapped buttons, so keep keyboard and screen-reader users on the toggle they pressed.
+    document.querySelector(`[data-key="${CSS.escape(t.dataset.key)}"]`)?.focus({ preventScroll: true });
+    announce(`${TEMPLATE_GROUPS[galleryGroup]}: ${TEMPLATES.filter((x) => x.group === galleryGroup).length} mallia.`);
+  },
+  templatesex(t) {
+    if (!isSex(t.dataset.sex) || t.dataset.sex === templateSex) return;
+    templateSex = t.dataset.sex;
+    try { localStorage.setItem(TEMPLATE_SEX_KEY, templateSex); } catch { /* Display preference only. */ }
+    render();
+    document.querySelector(`[data-key="${CSS.escape(t.dataset.key)}"]`)?.focus({ preventScroll: true });
+    announce(`Kuormat päivitetty: ${SEXES[templateSex]}.`);
+  },
+  usetemplate(t) {
+    const template = templateById(t.dataset.template);
+    if (template) openDraft(core.sanitizeRoutine(templateRoutine(template, templateSex)), true);
+  },
   edit(t) { const r = byId(t.dataset.id); if (r) openDraft(r, false); },
   addex() { if (draft.exercises.length >= 60) return; openLibrary(draft.exercises.find((e) => !e.name.trim())?.id ?? null); },
   pickex(t) { openLibrary(t.dataset.id, false); },

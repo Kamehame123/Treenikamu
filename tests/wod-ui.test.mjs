@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as ui from '../wod-ui.js';
 import * as w from '../wod.js';
 import * as c from '../core.js';
-import { TEMPLATES, SEXES, templateRoutine, DEFAULT_WARMUP, DEFAULT_COOLDOWN } from '../wod-templates.js';
+import { TEMPLATES, TEMPLATE_GROUPS, SEXES, templateRoutine, DEFAULT_WARMUP, DEFAULT_COOLDOWN } from '../wod-templates.js';
 
 const icon = (name) => `<svg data-icon="${name}"></svg>`;
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -156,9 +156,11 @@ test('the type chooser and the guide describe both program types without brand n
   const choices = ui.typeChoices(icon);
   assert.match(choices, /data-action="newgym"[^>]*aria-describedby="newgym-note"/);
   assert.match(choices, /data-action="newfunctional"[^>]*aria-describedby="newfunctional-note"/);
+  assert.match(choices, /data-action="newtemplate"[^>]*aria-describedby="newtemplate-note"/);
   assert.doesNotMatch(choices, /aria-label=/, 'the visible type name is the accessible name');
   assert.match(choices, /<strong>Kuntosalitreeni<\/strong><span class="choice-meta" id="newgym-note" aria-hidden="true">/);
   assert.match(choices, /<strong>Toiminnallinen treeni<\/strong><span class="choice-meta" id="newfunctional-note" aria-hidden="true">/);
+  assert.match(choices, /<strong>Aloita mallista<\/strong><span class="choice-meta" id="newtemplate-note" aria-hidden="true">/);
   const guide = ui.wodGuide(true);
   assert.match(guide, /<details class="wod-guide card" open>/);
   assert.match(guide, /Lämmittely 10–15 min/);
@@ -166,4 +168,47 @@ test('the type chooser and the guide describe both program types without brand n
   const all = [choices, guide, ui.wodEditor(ui.newEditorWod(), 0, 1, { icon }), ui.blockSection('warmup', null, icon)].join('');
   assert.doesNotMatch(all, /crossfit/i);
   assert.match(ui.blockSection('cooldown', null, icon), /data-action="addblock" data-block="cooldown" data-key="addblock-cooldown"/);
+});
+
+const templateCard = (html, name) => html.split('<li class="card template-card">').find((chunk) => chunk.startsWith(`<h2>${name}</h2>`)) ?? '';
+
+test('the gallery shows one group at a time and marks the chosen group and loads', () => {
+  for (const group of Object.keys(TEMPLATE_GROUPS)) {
+    const html = ui.templateGallery(group, 'women', icon);
+    assert.deepEqual([...html.matchAll(/data-action="usetemplate" data-template="([^"]+)"/g)].map((m) => m[1]), TEMPLATES.filter((t) => t.group === group).map((t) => t.id), group);
+    assert.match(html, new RegExp(`data-group="${group}" data-key="templategroup-${group}" aria-pressed="true"`));
+    assert.match(html, /data-sex="women" data-key="templatesex-women" aria-pressed="true"/);
+    assert.equal(html.match(/aria-pressed="true"/g).length, 2, 'one group and one load choice');
+    assert.match(html, /<span class="eyebrow" id="gallery-loads">Ehdotetut kuormat<\/span><div class="segmented" role="group" aria-labelledby="gallery-loads">/);
+    assert.doesNotMatch(html, /crossfit/i);
+  }
+  assert.equal(new Set(TEMPLATES.map((t) => t.id)).size, TEMPLATES.length, 'template ids are unique');
+  assert.equal(ui.isTemplateGroup('benchmark'), true);
+  assert.equal(ui.isSex('men'), true);
+  for (const bad of ['', 'toString', '__proto__', null, 1]) {
+    assert.equal(ui.isTemplateGroup(bad), false, String(bad));
+    assert.equal(ui.isSex(bad), false, String(bad));
+  }
+});
+
+test('a gallery card previews the whiteboard with the chosen loads and names its button', () => {
+  const women = templateCard(ui.templateGallery('benchmark', 'women', icon), 'Fran');
+  const men = templateCard(ui.templateGallery('benchmark', 'men', icon), 'Fran');
+  assert.match(women, /<p class="board-headline">21-15-9 aikaa vastaan · aikaraja 10 min<\/p>/);
+  assert.match(women, /<li>Kyykkypunnerrus tangolla \(29 kg\)<\/li><li>Leuanveto myötäotteella<\/li>/);
+  assert.match(men, /<li>Kyykkypunnerrus tangolla \(43 kg\)<\/li>/);
+  assert.match(women, /Kesto noin 10 min/);
+  assert.match(women, /<p class="board-stimulus">Lyhyt ja erittäin kova/);
+  assert.match(women, /data-template="fran" data-key="use-fran">Käytä mallia<span class="sr"> Fran<\/span> <svg data-icon="arrow"><\/svg><\/button>/);
+  assert.doesNotMatch(women, /template-parts/, 'a WOD-only template does not list class parts');
+
+  const murph = (sex) => templateCard(ui.templateGallery('benchmark', sex, icon), 'Murph');
+  assert.match(murph('women'), /<p class="field-hint">Rx tehdään 6 kg painoliivin kanssa\./);
+  assert.match(murph('men'), /<p class="field-hint">Rx tehdään 9 kg painoliivin kanssa\./);
+  assert.match(murph('women'), /Kesto riippuu tahdista/);
+
+  const formats = ui.templateGallery('format', 'women', icon);
+  assert.doesNotMatch(templateCard(formats, 'AMRAP 12 min'), /board-headline/, 'a headline equal to the name is not repeated');
+  assert.match(templateCard(formats, 'Kokonainen tunti'), /<p class="template-parts">Lämmittely 12 min · Takakyykky 5 × 5 · WOD · Loppuverryttely 8 min<\/p>/);
+  assert.match(templateCard(formats, 'Tabata'), /<p class="field-hint">Perinteinen tulos on heikoimman jakson toistot\./);
 });
