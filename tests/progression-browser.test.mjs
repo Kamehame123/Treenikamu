@@ -195,7 +195,7 @@ try {
           const state = fixture({ autoProgress: true });
           state.settings.autoRest = true;
           await seed(page, state);
-          assert.match(await page.locator('#exercise-0 .target').innerText(), /Lepo 2:30/);
+          assert.equal(await page.locator('#exercise-0 .target').count(), 0);
           await tap(page.locator('[data-key="reps-plus-0-0"]'));
           await tap(page.locator('[data-key="reps-plus-0-0"]'));
           await tap(page.locator('[data-key="reps-plus-0-1"]'));
