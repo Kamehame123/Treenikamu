@@ -4,6 +4,8 @@
 
 - After every completed, verified update, commit the task-related changes and
   push the current branch to its configured remote.
+- Do not wait for a separate request to commit or push. Before reporting an
+  update as complete, verify that the remote branch contains the new commit.
 - Preserve unrelated local changes. Do not force-push or amend existing commits.
 - If committing or pushing is blocked, report the blocker explicitly rather than
   treating the update as delivered.
