@@ -232,7 +232,8 @@ test('warm-up and cool-down cards show the plan and a "Valmis" toggle named for 
 test('a WOD card shows the whiteboard of the chosen version and the next step', () => {
   const wod = franWod();
   const html = ui.sessionWodCard(wod, 0, { count: 1, history: [], current: true, icon });
-  assert.match(html, /^<li class="card wod-card current" id="wod-0"><div class="exercise-heading"><span class="exercise-index">WOD<\/span><h2 class="grow">Fran<\/h2><span class="badge now">Vuorossa<\/span><\/div>/);
+  assert.match(html, /^<li class="card wod-card current" id="wod-0"><div class="exercise-heading"><span class="exercise-index">WOD<\/span><h2 class="grow">Fran<\/h2><\/div>/);
+  assert.doesNotMatch(html, /Vuorossa|badge now/);
   assert.match(html, /<div class="segmented" role="group" aria-label="Näytettävä versio: Fran">/);
   assert.match(html, new RegExp(`data-action="wodversion" data-w="0" data-division="rx" data-key="wodversion-${wod.id}-rx" aria-pressed="true">Rx</button>`));
   assert.match(html, /data-division="scaled"[^>]*aria-pressed="false">Skaalattu<\/button>/);
@@ -495,4 +496,3 @@ test('the records view lists the best result of each WOD and version', () => {
   assert.match(html, /Rx <strong>4:32<\/strong><\/span> <span class="muted record-date">5\.3\.2025<\/span>/);
   assert.match(html, /Skaalattu <strong>4:10<\/strong>/);
 });
-

@@ -209,6 +209,8 @@ try {
             const before = await raw(page);
             const done = page.locator('[data-key="s0-0"]');
             const pending = page.locator('[data-key="s0-1"]');
+            assert.equal(await page.locator('#exercise-0 .exercise-heading .badge').count(), 0);
+            assert.equal(await page.getByText('Vuorossa', { exact: true }).count(), 0);
             for (const width of [320, 390, 1040]) {
               await page.setViewportSize({ width, height: 900 });
               assert.equal((await done.innerText()).trim(), 'Sarja 1');

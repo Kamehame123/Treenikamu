@@ -268,7 +268,6 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .target { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
 .weight-pill { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 750; border: 1px solid var(--line-hi); }
 .badge { display: inline-flex; align-items: center; flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 750; font-variant-numeric: tabular-nums; }
-.badge.now { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .badge.done-badge { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .sets { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--control-gap); }
 .sets > .cheer { grid-column: 1 / -1; margin: 0; }

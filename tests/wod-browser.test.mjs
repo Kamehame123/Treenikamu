@@ -580,7 +580,8 @@ try {
           await startProgram(p, ['fran']);
           const stat = p.locator('.session-stat'), wod = p.locator('#wod-0'), field = (name) => wod.locator(`[data-rf="${name}"]`);
           assert.equal(await stat.textContent(), '0/1\u00a0WOD · 0%');
-          assert.equal(await wod.locator('.badge.now').textContent(), 'Vuorossa');
+          assert.equal(await wod.evaluate((el) => el.classList.contains('current')), true);
+          assert.equal(await wod.locator('.badge.now').count(), 0);
           assert.equal(await wod.locator('.wod-past').textContent(), 'Ensimmäinen kerta: tulos on lähtötasosi.');
 
           const warmup = button(p, 'Lämmittely: Valmis');
@@ -691,7 +692,8 @@ try {
           const set = (si) => p.locator(`[data-action="set"][data-e="0"][data-s="${si}"]`);
           const wodInView = () => p.waitForFunction(() => { const top = document.getElementById('wod-0').getBoundingClientRect().top; return top > 0 && top < innerHeight / 2; });
           assert.equal(await stat.textContent(), '0/5\u00a0sarjaa · 0/1\u00a0WOD · 0%');
-          assert.equal(await p.locator('#exercise-0 .badge.now').count(), 1, 'the sets come first');
+          assert.equal(await p.locator('#exercise-0').evaluate((el) => el.classList.contains('current')), true, 'the sets come first');
+          assert.equal(await p.locator('#exercise-0 .badge.now').count(), 0);
           assert.equal(await wod.locator('.badge.now').count(), 0);
           assert.deepEqual(await answer(p.locator('[data-action="finish"]'), false), ['Mitään ei ole vielä kirjattu, joten harjoitusta ei tallenneta historiaan. Lopetetaanko ilman tallennusta?', 'Lopeta tallentamatta']);
 
@@ -704,7 +706,8 @@ try {
           await tap(set(4));
           await wodInView();
           assert.equal(await stat.textContent(), '5/5\u00a0sarjaa · 0/1\u00a0WOD · 83%');
-          assert.equal(await wod.locator('.badge.now').textContent(), 'Vuorossa');
+          assert.equal(await wod.evaluate((el) => el.classList.contains('current')), true);
+          assert.equal(await wod.locator('.badge.now').count(), 0);
           const rail = p.locator('[data-action="jumpwod"]');
           assert.equal(await rail.getAttribute('aria-current'), 'step');
           assert.equal(await rail.getAttribute('aria-label'), `WOD: ${title}, vuorossa`);

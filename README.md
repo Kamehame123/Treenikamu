@@ -360,6 +360,8 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   preferences disable the pulse. Screen
   readers retain the completion state, reps, weight and target. This is a visual
   change only; saved workouts, history and storage formats are unchanged.
+- Exercise and WOD headings omit the "Vuorossa" badge; current-card highlighting
+  and the progress rail still identify the active part.
 - Use the **- / + buttons below each set** in training mode to adjust actual reps
   one at a time, before or after marking the set done. The first adjustment starts
   from that set's target (the upper end for a rep range). Further adjustments use

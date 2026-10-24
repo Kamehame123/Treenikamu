@@ -319,7 +319,7 @@ function clockActions(w, wi, title, icon, now) {
 // One WOD part of a running workout. current: the part to do next; form: the open result form's fields.
 export function sessionWodCard(w, wi, { count, history = [], current = false, form = null, error = '', cheer = '', advanced = false, icon, now = Date.now() }) {
   const id = esc(w.id), title = wodTitle(w), division = w.division === 'scaled' ? 'scaled' : 'rx';
-  const badge = w.result ? '<span class="badge done-badge">Kirjattu</span>' : current ? '<span class="badge now">Vuorossa</span>' : '';
+  const badge = w.result ? '<span class="badge done-badge">Kirjattu</span>' : '';
   const versions = `<div class="segmented" role="group" aria-label="Näytettävä versio: ${esc(title)}">${Object.entries(DIVISIONS).map(([value, text]) => `<button class="btn secondary" data-action="wodversion" data-w="${wi}" data-division="${value}" data-key="wodversion-${id}-${value}" aria-pressed="${division === value}">${text}</button>`).join('')}</div>`;
   const unwritten = division === 'scaled' && !w.movements.some((m) => m.scaled) ? '<p class="field-hint">Skaalattua versiota ei ole kirjoitettu. Kevennä kuormaa, määrää tai liikettä niin, että tuntuma säilyy.</p>' : '';
   // The form opened from an ended clock says what the clock measured; the fields are prefilled from it.

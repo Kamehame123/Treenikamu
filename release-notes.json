@@ -1,4 +1,7 @@
 [
+  { "version": 89, "date": "2026-10-24", "changes": [
+    "Vuorossa-merkki on poistettu liikkeiden ja WOD-osien otsikoista. Nykyisen liikkeen korostus ja treenin eteneminen toimivat ennallaan. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 88, "date": "2026-10-24", "changes": [
     "Klikkaa tehdyksi -painikkeen syke on nyt selkeämpi ja hohtaa painikkeen sisään, ei sen ulkopuolelle. Painike ei kasva eikä siirry. Vähennetyn liikkeen asetus toimii edelleen. Tallennetut treenit ja historia säilyvät."
   ] },
