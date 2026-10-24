@@ -4,6 +4,61 @@ import * as t from '../wod-templates.js';
 import * as w from '../wod.js';
 import * as c from '../core.js';
 import { EXERCISES } from '../exercises.js';
+import { GYM_PROGRAMS, gymProgramById, gymProgramRoutine } from '../gym-programs.js';
+import { gymProgramGallery } from '../wod-ui.js';
+
+test('all seven gym templates generate fresh, valid routines and preserve saved data', () => {
+  assert.equal(GYM_PROGRAMS.length, 7);
+  assert.equal(new Set(GYM_PROGRAMS.map((p) => p.id)).size, 7);
+  const source = structuredClone(GYM_PROGRAMS);
+  let id = 0;
+  const uid = () => `gym-${++id}`;
+  for (const program of GYM_PROGRAMS) {
+    const raw = gymProgramRoutine(program, uid);
+    assert.deepEqual(c.validateRoutine(raw), [], program.id);
+    const routine = c.sanitizeRoutine(raw);
+    const other = gymProgramRoutine(program, uid);
+    assert.notEqual(other.id, routine.id);
+    assert.ok(other.exercises.every((e) => !routine.exercises.some((saved) => saved.id === e.id)));
+    assert.equal(routine.autoProgress, false);
+    assert.ok(routine.exercises.every((e) => e.weight === ''));
+    const state = c.defaultState();
+    state.routines = [routine];
+    const session = c.startSession(routine, 1000);
+    session.exercises[0].sets[0].done = true;
+    state.history = [c.summarize(session, 2000)];
+    const before = structuredClone(state);
+    const store = new Map();
+    c.saveState({ setItem: (k, v) => store.set(k, v) }, state);
+    assert.deepEqual(c.loadState({ getItem: (k) => store.get(k) ?? null }), before);
+    gymProgramRoutine(program, uid);
+    assert.deepEqual(state, before);
+  }
+  assert.deepEqual(GYM_PROGRAMS, source);
+  assert.equal(gymProgramById('unknown'), null);
+});
+
+test('gym templates keep the reviewed work-set budgets, movement balance and explicit side counts', () => {
+  const totals = Object.fromEntries(GYM_PROGRAMS.map((p) => [p.id, p.exercises.reduce((n, e) => n + e.sets, 0)]));
+  assert.deepEqual(totals, { 'fullbody-a': 11, 'fullbody-b': 13, push: 11, pull: 10, legs: 11, upper: 14, core: 8 });
+  for (const id of ['fullbody-a', 'fullbody-b']) {
+    assert.ok(gymProgramById(id).exercises.some((e) => /penkkipunnerrus/i.test(e.name)));
+  }
+  assert.ok(!gymProgramById('fullbody-a').exercises.some((e) => /Pystypunnerrus/.test(e.name)));
+  const legs = gymProgramById('legs').exercises;
+  assert.ok(legs.some((e) => e.name === 'Romanialainen maastaveto'));
+  assert.ok(legs.some((e) => e.name === 'Reidenkoukistus istuen'));
+  const core = gymProgramById('core');
+  assert.deepEqual(core.exercises.filter((e) => e.name.startsWith('Sivulankku')).map((e) => [e.name, e.sets, e.reps]),
+    [['Sivulankku, vasen', 2, '20 s'], ['Sivulankku, oikea', 2, '20 s']]);
+  assert.match(core.note, /4\/puoli/);
+  assert.ok(!core.exercises.some((e) => /Vatsapyörä|Roikkuva/.test(e.name)));
+  const html = gymProgramGallery(() => '');
+  assert.equal((html.match(/data-action="usegymprogram"/g) ?? []).length, 7);
+  assert.match(html, /2–3 kertaa viikossa/);
+  assert.match(html, /2–3 toistoa varalle/);
+  assert.match(html, /ACSM 2026/);
+});
 
 const LIBRARY = new Map(EXERCISES.map((e) => [e.id, e]));
 const SEXES = Object.keys(t.SEXES);

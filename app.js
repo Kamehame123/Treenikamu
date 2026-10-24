@@ -1243,7 +1243,7 @@ function newTypeView() {
 }
 
 function gymGalleryView() {
-  return `<header class="editor-header"><button class="btn ghost back" data-action="galleryback" data-key="gallery-back">${icon('back')} Takaisin</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Valmis kuntosaliohjelma</p><h1 tabindex="-1">Valitse ohjelma</h1><p class="editor-copy">Yleisiä perusohjelmia aloittelijalle. Lisää painot itse ja muokkaa liikkeet ennen tallennusta.</p></div>${gymProgramGallery(icon)}`;
+  return `<header class="editor-header"><button class="btn ghost back" data-action="galleryback" data-key="gallery-back">${icon('back')} Takaisin</button></header>${warn()}<div class="editor-top"><p class="eyebrow accent">Valmis kuntosaliohjelma</p><h1 tabindex="-1">Valitse ohjelma</h1><p class="editor-copy">Yleisiä perusohjelmia eri viikkorytmeihin. Aloittelijalle ensisijaisesti Koko keho A/B. Lisää painot itse ja muokkaa liikkeet ennen tallennusta.</p></div>${gymProgramGallery(icon)}`;
 }
 
 function galleryView() {

@@ -1,44 +1,43 @@
-// Generic gym programs ("Valmiit kuntosaliohjelmat"). Each one is a single workout built from
-// well-known beginner structures: alternating full-body A/B (StrongLifts 5x5 / Starting Strength
-// style) and the push / pull / legs split. Loads are left empty; the user enters their own.
+// Original general-purpose templates, not copies of named commercial programs.
+// Updates affect new selections only; saved routines and history are never rewritten.
 
 const ex = (name, sets, reps) => ({ name, sets, reps });
 
 export const GYM_PROGRAMS = Object.freeze([
   {
     id: 'fullbody-a', name: 'Koko keho A',
-    note: 'Aloittelijan perusohjelma 3 kertaa viikossa vuorotellen B-treenin kanssa (A–B–A, seuraavalla viikolla B–A–B). Lepopäivä treenien välissä.',
-    exercises: [ex('Takakyykky', 3, '5'), ex('Penkkipunnerrus', 3, '5'), ex('Kulmasoutu', 3, '5'), ex('Pystypunnerrus', 2, '8'), ex('Lankku', 3, '30 s')],
+    note: 'Ensisijainen aloitusohjelma: koko keho 2–3 kertaa viikossa vuorotellen B-treenin kanssa. Esimerkiksi ma A, ke B, pe A; seuraavalla viikolla B–A–B. Pidä lepopäivä välissä. Lankussa hengitä normaalisti ja lopeta pito ennen asennon pettämistä.',
+    exercises: [ex('Takakyykky', 3, '8'), ex('Penkkipunnerrus tangolla', 3, '8'), ex('Alataljasoutu', 3, '10'), ex('Lankku', 2, '20 s')],
   },
   {
     id: 'fullbody-b', name: 'Koko keho B',
-    note: 'Vuorottele A-treenin kanssa. Nosta painoa vähän, kun kaikki toistot onnistuvat hyvällä tekniikalla.',
-    exercises: [ex('Maastaveto', 1, '5'), ex('Pystypunnerrus', 3, '5'), ex('Ylätalja', 3, '8'), ex('Askelkyykky', 2, '10'), ex('Vatsarutistus', 3, '12')],
+    note: 'Vuorottele A-treenin kanssa 2–3 kertaa viikossa, lepopäivä välissä. Mukana sekä rintapunnerrus että pystypunnerrus. Opettele romanialaisen maastavedon lonkkataitto kevyesti ja tarvittaessa ohjaajan kanssa.',
+    exercises: [ex('Romanialainen maastaveto', 3, '8'), ex('Jalkaprässi', 3, '10'), ex('Vinopenkkipunnerrus käsipainoilla', 2, '10'), ex('Ylätalja leveällä otteella', 3, '10'), ex('Pystypunnerrus käsipainoilla', 2, '8')],
   },
   {
     id: 'push', name: 'Työntävät lihakset',
-    note: 'Rinta, olkapäät ja ojentajat. Työntö–veto–jalat-jaon ensimmäinen päivä: tee kolme treeniä kiertäen tai kuusi kahdesti viikossa.',
-    exercises: [ex('Penkkipunnerrus', 4, '6–8'), ex('Pystypunnerrus', 3, '8–10'), ex('Vinopenkkipunnerrus käsipainoilla', 3, '8–12'), ex('Sivunosto', 3, '12–15'), ex('Ojentajapunnerrus taljassa', 3, '10–12')],
+    note: 'Rinta, olkapäät ja ojentajat. Jaetun ohjelman päivä, ei koko viikon ohjelma. Kokeneemmalle esimerkkikierto: työntö, veto, jalat, lepo, toista. Kolmella salikerralla viikossa aloittelijalle ensisijaisesti Koko keho A/B.',
+    exercises: [ex('Penkkipunnerrus tangolla', 3, '8'), ex('Pystypunnerrus käsipainoilla', 2, '10'), ex('Vinopenkkipunnerrus käsipainoilla', 2, '10'), ex('Vipunosto sivulle', 2, '12'), ex('Ojentajapunnerrus taljassa', 2, '12')],
   },
   {
     id: 'pull', name: 'Vetävät lihakset',
-    note: 'Selkä, takaolkapäät ja hauikset. Pidä lapaluut vakaina ja liike hallittuna.',
-    exercises: [ex('Leuanveto tai ylätalja', 4, '6–10'), ex('Kulmasoutu', 3, '8–10'), ex('Istuen alatalja', 3, '10–12'), ex('Takaolkapäänosto', 3, '12–15'), ex('Hauiskääntö', 3, '10–12')],
+    note: 'Selkä, takaolkapäät ja hauikset. Yhdistä Työntävät- ja Jalat-päiviin, esimerkiksi työntö, veto, jalat, lepo, toista palautumisen mukaan. Kolmen päivän viikossa kukin ryhmä saa pääosin yhden harjoituskerran; aloittelijalle ensisijaisesti Koko keho A/B.',
+    exercises: [ex('Ylätalja leveällä otteella', 3, '10'), ex('Alataljasoutu', 3, '10'), ex('Vipunosto taakse', 2, '12'), ex('Hauiskääntö käsipainoilla', 2, '12')],
   },
   {
     id: 'legs', name: 'Jalat',
-    note: 'Reidet, pakarat ja pohkeet. Aloita kevyellä lämmittelyllä ja pidä tekniikka puhtaana.',
-    exercises: [ex('Takakyykky', 4, '6–8'), ex('Romanialainen maastaveto', 3, '8–10'), ex('Jalkaprässi', 3, '10–12'), ex('Reiden ojennus', 3, '10–12'), ex('Pohkeennosto', 4, '12–15')],
+    note: 'Reidet, pakarat ja pohkeet. Takareisille sekä lonkanojennus että polvenkoukistus. Sopii Yläkroppa-päivän pariksi: ma yläkroppa, ti jalat, to yläkroppa, pe jalat. Vaihtoehtoisesti Työntävät/Vetävät-jaon jalkapäiväksi, ei molempia jakoja päällekkäin.',
+    exercises: [ex('Takakyykky', 3, '8'), ex('Romanialainen maastaveto', 2, '10'), ex('Jalkaprässi', 2, '10'), ex('Reidenkoukistus istuen', 2, '12'), ex('Pohjenousu seisten laitteessa', 2, '12')],
   },
   {
     id: 'upper', name: 'Yläkroppa',
-    note: 'Rinta, selkä, olkapäät ja kädet samassa treenissä. Sopii esimerkiksi ylä- ja alakropan jakoon 4 kertaa viikossa yhdessä Jalat-treenin kanssa.',
-    exercises: [ex('Penkkipunnerrus', 4, '6–8'), ex('Kulmasoutu', 4, '8–10'), ex('Pystypunnerrus', 3, '8–10'), ex('Ylätalja', 3, '10–12'), ex('Hauiskääntö', 2, '10–12'), ex('Ojentajapunnerrus taljassa', 2, '10–12')],
+    note: 'Rinta, selkä, olkapäät ja kädet. Neljän päivän vaihtoehto: ma yläkroppa, ti jalat, to yläkroppa, pe jalat. Älä lisää samaan viikkoon erillisiä Työntävät/Vetävät-päiviä. Aloittelija voi aloittaa yhdellä sarjalla vähemmän liikettä kohti.',
+    exercises: [ex('Penkkipunnerrus tangolla', 3, '8'), ex('Alataljasoutu', 3, '10'), ex('Pystypunnerrus käsipainoilla', 2, '10'), ex('Ylätalja leveällä otteella', 2, '10'), ex('Hauiskääntö käsipainoilla', 2, '12'), ex('Ojentajapunnerrus taljassa', 2, '12')],
   },
   {
     id: 'core', name: 'Core',
-    note: 'Keskivartalon perustreeni. Sopii omaksi lyhyeksi treeniksi tai voimatreenin lisäksi 2 kertaa viikossa. Pidä selkä neutraalina.',
-    exercises: [ex('Lankku', 3, '30–45 s'), ex('Sivulankku', 3, '20–30 s'), ex('Vatsarutistus', 3, '12–15'), ex('Roikkuva polvennosto', 3, '8–12'), ex('Selän ojennus', 3, '12'), ex('Vatsapyörä', 2, '8–10')],
+    note: 'Lyhyt keskivartalon lisäharjoitus 1–2 kertaa viikossa muun treenin jälkeen. Sivulankun puolet kirjataan erikseen: 2 sarjaa kummallekin puolelle. Dead bug: 8 vuorottelevaa toistoa yhteensä eli 4/puoli. Hengitä normaalisti; helpota lankkuja polvet maassa ja lyhennä pitoa tarvittaessa.',
+    exercises: [ex('Lankku', 2, '20 s'), ex('Sivulankku, vasen', 2, '20 s'), ex('Sivulankku, oikea', 2, '20 s'), ex('Dead bug', 2, '8')],
   },
 ]);
 

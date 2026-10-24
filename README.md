@@ -486,6 +486,26 @@ conservative software heuristics, **not a clinically validated coaching model** 
 a guarantee of hypertrophy. The app does not measure muscle growth, infer maximum
 strength from completed-set counts, diagnose overtraining, or insist on failure.
 
+### Ready-made gym programs
+
+The seven gym templates are original general-purpose starting points, not
+StrongLifts or Starting Strength programs or individualized coaching.
+Choose one schedule: full-body A/B on 2-3 nonconsecutive days (beginner default),
+upper/lower on four days, or push/pull/legs/rest repeated for more experienced
+trainees who recover adequately. Do not stack these schedules.
+Core is an optional short accessory session on 1-2 days, with each side plank
+listed separately and dead bug repetitions counted in total (8 = 4 per side).
+Work-set totals are A 11, B 13, push 11, pull 10, legs 11, upper 14, and core 8
+(including both sides). These are product starting doses, not clinical limits.
+The gallery explains warm-up sets, effort, rest, progression and the
+[ACSM 2026](https://pubmed.ncbi.nlm.nih.gov/41843416/) and
+[UKK Institute](https://ukkinstituutti.fi/liikkuminen/liikkumisen-suositukset/aikuisten-liikkumisen-suositus/)
+recommendations behind the general approach.
+Changes apply only when choosing a new template. Existing saved routines,
+exercise IDs, sessions, history and backups are not rewritten.
+Template regression tests run with `npm test`; end-to-end gym selection, saving
+and data-preservation checks run with `node --test tests\gym-browser.test.mjs`.
+
 ### Evidence
 
 - [ACSM 2026 Position Stand](https://doi.org/10.1249/MSS.0000000000003897)

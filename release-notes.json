@@ -1,4 +1,7 @@
 [
+  { "version": 94, "date": "2026-10-24", "changes": [
+    "Valmiiden kuntosaliohjelmien sarjamääriä on maltillistettu, koko kehon A/B-jakoa ja jalkatreenin lihastasapainoa korjattu sekä viikkorytmejä selkeytetty. Core on nyt lyhyt lisäharjoitus, jonka puolet kirjataan erikseen. Muutokset koskevat uusia mallivalintoja: tallennetut omat ohjelmat ja historia säilyvät ennallaan."
+  ] },
   { "version": 93, "date": "2026-10-24", "changes": [
     "Automaattisen kehityksen oletuspainoaskel on nyt 1 kg. Omat tallennetut painoaskeleet ja harjoitustiedot säilyvät."
   ] },
