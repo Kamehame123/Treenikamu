@@ -160,6 +160,42 @@ try {
         });
 
         for (const appearance of ['dark', 'aurora']) {
+          await run(`${appearance}: only the next unfinished set gently pulses, without layout movement`, async (context) => {
+            const state = core.defaultState();
+            state.settings.autoRest = false;
+            state.settings.cheers = false;
+            state.session = core.startSession(state.routines[0]);
+            const page = await seed(context, { appearance, state, ready: '.ex' });
+            const before = await raw(page);
+            const first = page.locator('[data-key="s0-0"]');
+            const second = page.locator('[data-key="s0-1"]');
+            assert.deepEqual(await first.evaluate((el) => {
+              const style = getComputedStyle(el);
+              return [style.animationName, style.animationDuration, style.animationIterationCount];
+            }), ['set-pulse', '2.8s', 'infinite']);
+            assert.equal(await second.evaluate((el) => getComputedStyle(el).animationName), 'none');
+            const pulse = await first.evaluate((el) => {
+              const animation = el.getAnimations().find((a) => a.animationName === 'set-pulse');
+              animation.pause();
+              animation.currentTime = 0;
+              const start = getComputedStyle(el).boxShadow;
+              const box = el.getBoundingClientRect().toJSON();
+              animation.currentTime = 1400;
+              return { start, peak: getComputedStyle(el).boxShadow, box, peakBox: el.getBoundingClientRect().toJSON() };
+            });
+            assert.notEqual(pulse.start, pulse.peak, 'the ring visibly changes over the cycle');
+            assert.deepEqual(pulse.box, pulse.peakBox, 'the button never scales or shifts');
+            assert.equal(await raw(page), before, 'the animation never rewrites training data');
+            await first.click();
+            await page.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+            assert.equal(await first.evaluate((el) => getComputedStyle(el).animationName), 'none');
+            assert.equal(await second.evaluate((el) => getComputedStyle(el).animationName), 'set-pulse');
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            assert.equal(await second.evaluate((el) => getComputedStyle(el).animationName), 'none');
+            await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'active' });
+            assert.equal(await second.evaluate((el) => getComputedStyle(el).animationName), 'none');
+          }, { reducedMotion: 'no-preference', serviceWorkers: 'block' });
+
           await run(`${appearance}: completed sets use a quiet check badge without changing pending buttons or stored results`, async (context) => {
             const state = core.defaultState();
             state.settings.autoRest = false;

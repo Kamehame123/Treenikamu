@@ -1,4 +1,7 @@
 [
+  { "version": 87, "date": "2026-10-24", "changes": [
+    "Seuraavan Klikkaa tehdyksi -painikkeen ympärillä on nyt hillitty, hitaasti sykkivä korostus. Tehdyt sarjat pysyvät paikallaan. Korostus ei liiku, jos laitteen asetuksissa on vähennetty liikettä. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 86, "date": "2026-10-24", "changes": [
     "Tehdyt sarjat näkyvät nyt pelkistettynä: pyöreä merkki ja pieni sarjanumero ilman suurta kehystä tai Tehty!-tekstiä. Klikkaa tehdyksi -painike ja sarjojen pystysuuntainen asettelu säilyvät ennallaan. Merkinnän voi perua napauttamalla. Tallennetut treenit ja historia säilyvät."
   ] },

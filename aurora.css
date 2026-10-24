@@ -134,7 +134,7 @@ html[data-theme="aurora"] .wod-board { background: #ffffffcc; border-color: #b9a
 html[data-theme="aurora"] .segmented [aria-pressed="true"], html[data-theme="aurora"] .block-done[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
 /* Motion: short, opacity-only entrances on real view changes, and one check pop on an explicit set log.
-   Never loops, and never applies transforms or filters to anything that contains fixed or sticky UI. */
+   These theme effects never loop or transform anything that contains fixed or sticky UI. */
 @keyframes aurora-rise { from { opacity: 0; } to { opacity: 1; } }
 @keyframes aurora-check { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 html[data-theme="aurora"] #app[data-entering] :is(.stats > *, .routine-list > li, .home-aside > *, .statistics-content > *, .timer-card, .timer-item, .ex, .wod-card, .block-card, .history-list > li) { animation: aurora-rise .26s ease-out both; }

@@ -300,6 +300,13 @@ footer > span, footer > p { flex-basis: 100%; text-align: center; font-size: 10p
 .step-value small { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
 .set.next { border: 2px solid var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-ring); }
 .set.next .set-foot { color: var(--accent); font-weight: 800; }
+@keyframes set-pulse {
+	0%, 100% { box-shadow: 0 0 0 2px var(--accent-ring); }
+	50% { box-shadow: 0 0 0 5px var(--accent-ring); }
+}
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+	.set.next:not(.done) { animation: set-pulse 2.8s ease-in-out infinite; }
+}
 .set-label { font-size: 10px; color: var(--muted); font-weight: 750; letter-spacing: .06em; }
 .set-value { font-size: 14px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; max-width: 100%; }
 .set-foot .icon { height: 16px; width: 16px; stroke-width: 2.4; }

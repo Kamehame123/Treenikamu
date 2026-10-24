@@ -353,7 +353,10 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 - Sets always stack vertically. Unfinished set buttons show "Klikkaa" above
   "tehdyksi"; completed buttons show a small circular check badge with the set
   number underneath, without a large outline or repeated result text. Their full
-  tap area stays the same size, and tapping again undoes completion. Screen
+  tap area stays the same size, and tapping again undoes completion. The next
+  unfinished button has a gentle 2.8-second pulsing ring, without scaling or
+  moving the layout; other sets stay still. Reduced-motion and forced-colors
+  preferences disable the pulse. Screen
   readers retain the completion state, reps, weight and target. This is a visual
   change only; saved workouts, history and storage formats are unchanged.
 - Use the **- / + buttons below each set** in training mode to adjust actual reps
