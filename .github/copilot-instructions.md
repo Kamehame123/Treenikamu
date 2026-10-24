@@ -38,3 +38,5 @@
   failed migrations, and retries. Update migration documentation with the
   behavior. If existing data cannot be preserved or recovered from the browser,
   stop and report the blocker rather than ship a data-losing change.
+- Every commit that changes app files must also bump `VERSION` in `sw.js`
+  (increment by one), otherwise installed devices keep serving cached old files.
