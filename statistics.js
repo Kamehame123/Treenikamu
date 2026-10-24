@@ -159,7 +159,7 @@ export function buildRecords(history, now = Date.now()) {
 function emptyTotals() {
   return { workouts: 0, partial: 0, sets: 0, workingSets: 0, reps: 0, repSets: 0, volume: 0,
     volumeSets: 0, seconds: 0, timedSets: 0, duration: 0, durationSessions: 0, fatigue: 0, pain: 0,
-    unclassifiedSets: 0, missingReps: 0, missingLoad: 0, legacy: 0, activeDays: 0 };
+    unclassifiedSets: 0, missingReps: 0, missingLoad: 0, legacy: 0, activeDays: 0, functional: 0, wodResults: 0 };
 }
 
 export function buildStatistics(history, options = {}) {
@@ -215,8 +215,10 @@ export function buildStatistics(history, options = {}) {
         rows.push(row);
       }
     }
-    const legacy = !h.exercises?.length;
-    if (rows.length || (legacy && h.setsDone > 0)) sessions.push({ ...h, rows, legacy });
+    // WOD parts count as a workout, day and time but never as sets, reps or volume: their movements form one timed score.
+    const wodResults = (h.wods ?? []).filter((w) => w?.result).length;
+    const legacy = !h.exercises?.length && !h.wods?.length;
+    if (rows.length || wodResults || (legacy && h.setsDone > 0)) sessions.push({ ...h, rows, legacy, wodResults });
   }
   sessions.sort((a, b) => a.endedAt - b.endedAt);
   for (const group of groups.values()) {
@@ -236,11 +238,12 @@ export function buildStatistics(history, options = {}) {
     const totals = emptyTotals(), days = new Set();
     for (const h of items) {
       totals.workouts++; days.add(localDateKey(h.endedAt));
-      const completed = h.legacy ? h.setsDone : sum(h.rows, (r) => r.sets);
-      const prescribed = h.legacy ? h.setsTotal : sum(h.exercises, (e) => e.sets.length);
+      const completed = h.legacy ? h.setsDone : sum(h.rows, (r) => r.sets) + h.wodResults;
+      const prescribed = h.legacy ? h.setsTotal : sum(h.exercises ?? [], (e) => e.sets.length) + (h.wods?.length ?? 0);
       totals.partial += completed < prescribed ? 1 : 0;
       totals.duration += h.endedAt - h.startedAt; totals.durationSessions++;
       totals.fatigue += h.fatigued ? 1 : 0;
+      if (h.wods?.length) { totals.functional++; totals.wodResults += h.wodResults; }
       if (h.legacy) { totals.sets += h.setsDone; totals.legacy++; continue; }
       for (const row of rowsFor(h)) {
         for (const key of ['sets', 'workingSets', 'reps', 'repSets', 'volume', 'volumeSets', 'seconds',

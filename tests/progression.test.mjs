@@ -629,3 +629,29 @@ test('a session exercise swapped out of the program holds that slot and never pr
   assert.deepEqual(state.routines[0].exercises, before);
   assert.equal(decision(state).kind, 'hold');
 });
+
+test('functional programs revise only their strength part like a gym program and a WOD-only program is a clean no-op', () => {
+  const cindy = { id: 'w1', name: 'Cindy', format: 'amrap', minutes: 20, score: 'roundsReps',
+    movements: [{ id: 'm1', name: 'Leuanveto', amount: '5' }, { id: 'm2', name: 'Etunojapunnerrus', amount: '10' }, { id: 'm3', name: 'Kehonpainokyykky', amount: '15' }] };
+  const functional = (exercises) => ({ ...core.defaultState(), routines: [core.sanitizeRoutine({
+    id: 'routine', name: 'Toiminnallinen', type: 'functional', warmup: { text: 'Soutu', minutes: 8 }, exercises, wods: [cindy] })] });
+  const gym = fixture('10'), mixed = functional(structuredClone(gym.routines[0].exercises));
+  record(gym);
+  record(mixed).wods[0].result = { kind: 'roundsReps', rounds: 20, reps: 3, division: 'rx' };
+  const { wods, warmup } = structuredClone(mixed.routines[0]);
+  assert.equal(revise(gym).ok, true);
+  assert.equal(revise(mixed).ok, true);
+  assert.deepEqual(mixed.routines[0].exercises, gym.routines[0].exercises);
+  assert.deepEqual(mixed.routines[0].revision.changes, gym.routines[0].revision.changes);
+  assert.deepEqual(mixed.routines[0].wods, wods);
+  assert.deepEqual(mixed.routines[0].warmup, warmup);
+  assert.equal(p.undoRevision(mixed, 'routine').ok, true);
+  assert.deepEqual(mixed.routines[0].wods, wods);
+
+  const wodOnly = functional([]);
+  record(wodOnly).wods[0].result = { kind: 'roundsReps', rounds: 18, reps: 0, division: 'scaled' };
+  const before = structuredClone(wodOnly);
+  assert.equal(revise(wodOnly).ok, false);
+  assert.deepEqual(wodOnly, before);
+  assert.deepEqual(p.lightenRoutine(wodOnly.routines[0]), wodOnly.routines[0]);
+});

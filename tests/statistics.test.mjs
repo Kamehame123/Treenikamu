@@ -555,3 +555,63 @@ test('shared history sets render actual reps, durations, explicit zeros and miss
   assert.doesNotMatch(html, /<img|8 toistoa|10 toistoa|60 s|arvioitu/);
   assert.deepEqual(h, before);
 });
+
+function functionalWorkout(id = 'functional', at = NOW, { strength = true, result = { kind: 'time', seconds: 272, division: 'rx' } } = {}) {
+  const routine = core.sanitizeRoutine({
+    id: 'fr', name: 'Toiminnallinen', type: 'functional',
+    exercises: strength ? [{ id: 'e1', name: 'Takakyykky', sets: 2, reps: '5', weight: '80 kg',
+      tracking: { sourceId: 'lib-takakyykky', category: 'Etureidet', equipment: 'Levytanko', loadType: 'external', variant: '' } }] : [],
+    wods: [{ id: 'w1', name: 'Fran', format: 'fortime', scheme: '21-15-9', minutes: 10, score: 'time',
+      movements: [{ id: 'm1', name: 'Kyykkypunnerrus tangolla', load: '43 kg' }, { id: 'm2', name: 'Leuanveto myötäotteella' }] }],
+  });
+  const session = core.startSession(routine, at - 3600000);
+  session.id = id;
+  session.exercises.forEach((e) => e.sets.forEach((s) => Object.assign(s, { done: true, actualReps: '5', kind: 'working' })));
+  if (result) session.wods[0].result = result;
+  return core.summarize(session, at);
+}
+
+test('functional sessions count as workouts, days and time while WOD movements never become sets, volume or weight records', () => {
+  const wodOnly = functionalWorkout('wod-only', NOW - DAY, { strength: false });
+  const mixed = functionalWorkout('mixed', NOW);
+  assert.equal(wodOnly.exercises, undefined);
+  const history = [wodOnly, mixed, workout('gym', NOW - 2 * DAY)], before = structuredClone(history);
+  const data = dataFor(history);
+  assert.equal(data.totals.workouts, 3);
+  assert.equal(data.totals.activeDays, 3);
+  assert.equal(data.totals.durationSessions, 3);
+  assert.equal(data.totals.duration, 3 * 3600000);
+  assert.equal(data.totals.legacy, 0);
+  assert.equal(data.totals.partial, 0);
+  assert.equal(data.totals.functional, 2);
+  assert.equal(data.totals.wodResults, 2);
+  assert.equal(data.totals.sets, 6, 'four gym sets and two squat sets; the 43 kg thrusters are not sets');
+  assert.equal(data.totals.reps, 34);
+  assert.equal(data.totals.volume, 2400 + 800);
+  assert.equal(data.weeks.reduce((n, w) => n + w.workouts, 0), 3);
+  assert.deepEqual(data.allGroups.map((g) => g.name), ['Kulmasoutu tangolla', 'Penkkipunnerrus', 'Takakyykky']);
+  assert.deepEqual(stats.buildRecords([wodOnly, mixed], NOW).map((r) => [r.name, r.weight]), [['Takakyykky', 80]]);
+  const routineData = dataFor(history, { routineId: 'fr' });
+  assert.equal(routineData.totals.workouts, 2);
+  assert.equal(routineData.totals.sets, 2);
+  assert.deepEqual(history, before);
+});
+
+test('an unlogged WOD part makes a functional session partial and a session without any logged work is not counted', () => {
+  const data = dataFor([functionalWorkout('no-result', NOW, { result: null }), functionalWorkout('nothing', NOW - DAY, { strength: false, result: null })]);
+  assert.equal(data.totals.workouts, 1);
+  assert.equal(data.totals.partial, 1);
+  assert.equal(data.totals.functional, 1);
+  assert.equal(data.totals.wodResults, 0);
+  assert.equal(data.totals.legacy, 0);
+});
+
+test('statistics explain how functional sessions are counted only when there are some', () => {
+  const state = { ...core.defaultState(), history: [functionalWorkout('wod-only', NOW - DAY, { strength: false }), functionalWorkout('mixed', NOW)] };
+  const html = statisticsView(state, { now: NOW, range: 'all', routineId: '', exerciseKey: '' });
+  assert.match(html, /aktiivista päivää · 2 toiminnallista/);
+  assert.match(html, /2 toiminnallista treeniä, 2 kirjattua WOD-tulosta/);
+  assert.doesNotMatch(html, /NaN|undefined|Infinity/);
+  const gym = statisticsView({ ...core.defaultState(), history: [workout()] }, { now: NOW, range: 'all', routineId: '', exerciseKey: '' });
+  assert.doesNotMatch(gym, /toiminnallista|WOD/);
+});
