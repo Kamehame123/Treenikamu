@@ -1,4 +1,7 @@
 [
+  { "version": 96, "date": "2026-10-25", "changes": [
+    "Liikekirjastossa jokaisen liikkeen vieressä näkyy nyt sen lihasryhmän symboli yleisen painosymbolin sijaan. Kestävyys- ja liikkuvuusliikkeillä on edelleen yleinen symboli. Tallennetut treenit ja historia säilyvät."
+  ] },
   { "version": 95, "date": "2026-10-25", "changes": [
     "Ohjelmien järjestystä voi nyt muuttaa: vedä ohjelma kortin vasemman reunan pisteistä, käytä nuolinäppäimiä tai avatun ohjelman Siirrä ylös- ja Siirrä alas -painikkeita. Toiminnalliset ohjelmat näkyvät nyt korallinvärisinä, ja Koko keho -liikkeillä on oma symbolinsa. Tallennetun treenin kortti poistuu etusivulta 30 sekunnin kuluttua. Tallennetut treenit ja historia säilyvät."
   ] },

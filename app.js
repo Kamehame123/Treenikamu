@@ -1268,7 +1268,8 @@ function hasLibraryFilters() { return !!(picker.query || picker.category || pick
 function libraryResults(rows) {
   return rows.slice(0, picker.limit).map((e) => {
     const added = picker.added.includes(e.id);
-    return `<li><button class="exercise-choice" data-action="chooseex" data-id="${esc(e.id)}" data-key="choice-${esc(e.id)}" ${added ? 'aria-disabled="true"' : ''}><span class="choice-icon">${icon('weight')}</span><span class="grow"><span class="sr">${added ? `Lisätty ${picker.mode === 'wod' ? 'WOD-osaan' : 'harjoitukseen'}: ` : 'Valitse liike: '}</span><strong>${esc(e.name)}</strong><span class="choice-meta">${added ? 'Lisätty · ' : ''}${esc(e.category)} · ${esc(e.equipment)}${e.custom ? ' · Oma liike' : ''}</span></span>${icon(added ? 'check' : 'plus')}</button></li>`;
+    const muscle = RAIL_MUSCLE[e.category];
+    return `<li><button class="exercise-choice" data-action="chooseex" data-id="${esc(e.id)}" data-key="choice-${esc(e.id)}" ${added ? 'aria-disabled="true"' : ''}><span class="choice-icon">${muscle ? muscleGlyph(muscle, 'muscle-icon') : icon('weight')}</span><span class="grow"><span class="sr">${added ? `Lisätty ${picker.mode === 'wod' ? 'WOD-osaan' : 'harjoitukseen'}: ` : 'Valitse liike: '}</span><strong>${esc(e.name)}</strong><span class="choice-meta">${added ? 'Lisätty · ' : ''}${esc(e.category)} · ${esc(e.equipment)}${e.custom ? ' · Oma liike' : ''}</span></span>${icon(added ? 'check' : 'plus')}</button></li>`;
   }).join('');
 }
 function libraryView() {

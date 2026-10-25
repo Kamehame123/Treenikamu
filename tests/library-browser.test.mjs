@@ -34,6 +34,16 @@ try {
           assert.match(await p.locator('#err').innerText(), /Anna harjoitukselle nimi/);
           assert.equal(await p.locator('#err').evaluate((e) => e === document.activeElement), true);
         });
+        await run('library rows show their muscle-group icon, and unmapped groups keep the generic one', async (p) => {
+          await open(p);
+          const glyph = (id) => p.locator(`[data-id="${id}"] .choice-icon`).evaluate((e) => e.querySelector('.muscle-icon') ? 'muscle' : e.querySelector('svg') ? 'generic' : 'none');
+          await p.locator('#exercise-search').fill('bench press');
+          assert.equal(await glyph('lib-penkkipunnerrus'), 'muscle');
+          await p.locator('#exercise-search').fill('juoksumatto');
+          const first = p.locator('.exercise-choice').first();
+          assert.match(await first.locator('.choice-meta').innerText(), /Kestävyys/);
+          assert.equal(await first.locator('.choice-icon').evaluate((e) => e.querySelector('.muscle-icon') ? 'muscle' : 'generic'), 'generic');
+        });
         await run('search retains focus and supports aliases, accents and combined filters', async (p) => {
           await open(p);
           await p.locator('#exercise-search').fill('bench press');

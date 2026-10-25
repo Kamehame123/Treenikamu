@@ -356,7 +356,8 @@ Intervening exercise edits disable undo rather than overwriting those edits.
   including named WOD movements. Counts are exercises, not sets or individual
   anatomical muscles; cardio, mobility and unknown moves are not
   assigned guessed muscle groups. Icons reuse the workout rail graphics and
-  have accessible group names and counts.
+  have accessible group names and counts. The exercise library rows use the same
+  group icons (cardio and mobility keep the generic weight icon).
 - With two or more programs, the home order is user-defined. Drag a card by
   the dotted grip on its left edge (touch, pen or mouse; the list auto-scrolls
   near the screen edges, and Escape or a cancelled touch leaves the order
