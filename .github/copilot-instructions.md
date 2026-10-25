@@ -40,5 +40,16 @@
   failed migrations, and retries. Update migration documentation with the
   behavior. If existing data cannot be preserved or recovered from the browser,
   stop and report the blocker rather than ship a data-losing change.
-- Every commit that changes app files must also bump `VERSION` in `sw.js`
-  (increment by one), otherwise installed devices keep serving cached old files.
+
+## Release every app change (mandatory, before committing)
+
+- Every commit that changes app files (`app.js`, `core.js`, `*.css`, `*.html`,
+  data/template modules, icons, `README`-independent assets) must, in the same
+  commit, bump `VERSION` in `sw.js` by one and add a matching newest-first
+  entry to `release-notes.json` (Finnish, ends with a sentence that saved
+  workouts and history are preserved). Without this, installed devices keep
+  serving cached old files and the user sees no update.
+- Do this before the first commit of a task, not as a follow-up. Run
+  `node --test tests/assets.test.mjs` to confirm the version and notes match.
+- Never report an update as delivered until it is committed, version-bumped and
+  pushed.
