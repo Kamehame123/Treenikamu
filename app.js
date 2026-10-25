@@ -152,6 +152,9 @@ let historyEditing = null;
 let historyMessage = '';
 let lastDeleted = null;
 let savedId = null;
+const SAVED_CARD_MS = 30000;
+// The home program being dragged by its grip, or null.
+let routineDrag = null;
 let shareMessage = '';
 let importMode = 'merge';
 let offlineReady = false;
@@ -948,6 +951,7 @@ function homeView() {
   const resumeProgress = s && core.progress(s);
   const resumeDone = !s ? '' : isFunctional(s) ? [resumeProgress.total ? `${resumeProgress.done}/${resumeProgress.total} sarjaa` : '', resumeProgress.wodsTotal ? `${resumeProgress.wodsDone}/${resumeProgress.wodsTotal} WOD` : ''].filter(Boolean).join(' · ') : `${resumeProgress.done}/${resumeProgress.total} sarjaa`;
   const resume = s ? `<section class="resume card"><div class="row"><span class="eyebrow accent"><span class="pulse" aria-hidden="true"></span> HARJOITUS KESKEN</span><span class="badge now">${resumeProgress.pct}%</span></div><h2>${esc(s.name)}</h2><p class="muted">${resumeDone} tehty · Jatka siitä, mihin jäit.</p>${progressBar(resumeProgress)}<button class="btn primary big" data-action="resume" data-key="resume">Jatka harjoitusta ${icon('arrow')}</button></section>` : '';
+  const sortable = state.routines.length > 1;
   const routines = state.routines.map((r, i) => {
     const functional = isFunctionalRoutine(r), strength = r.exercises.length > 0;
     const pills = routineWodPills(r) + r.exercises.map((e) => `<li class="pill">${esc(e.name)} <b>${e.setReps ? esc(e.setReps.join(' / ')) : `${e.sets}×${esc(e.reps)}`}${e.weight ? ` @ ${esc(e.weight)}` : ''}</b></li>`).join('');
@@ -957,14 +961,16 @@ function homeView() {
     const lightNote = functional ? 'Voima -15 %, WOD skaalattuna' : 'Toistot ja painot -15 %';
     const variants = !functional || strength ? `<div class="routine-variants"><button class="btn secondary variant-light" data-action="start" data-mode="light" data-key="start-light-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Kevennetty ${lightNote}: ${esc(r.name)}"><span class="variant-title">${icon('feather')}Kevennetty</span> <span class="variant-note">${lightNote}</span></button>`
       + `<button class="btn secondary variant-super" data-action="start" data-mode="super" data-key="start-super-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Super Lisäsarja liikkeisiin: ${esc(r.name)}"><span class="variant-title">${icon('flame')}Super</span> <span class="variant-note">Lisäsarja liikkeisiin</span></button></div>` : '';
-    return `<li class="card routine" data-tone="${[...r.id].reduce((n, c) => n + c.charCodeAt(0), 0) % 3}">
+    const grip = sortable ? `<button type="button" class="routine-grip" data-id="${esc(r.id)}" data-key="grip-${esc(r.id)}" aria-label="Siirrä ohjelmaa: ${esc(r.name)}, kohta ${i + 1}/${state.routines.length}" aria-describedby="routine-grip-help"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></button>` : '';
+    const order = sortable ? `<div class="routine-order mini" role="group" aria-label="Järjestys: ${esc(r.name)}"><button class="btn ghost" data-action="routineup" data-id="${esc(r.id)}" data-key="rup-${esc(r.id)}" ${i === 0 ? 'disabled' : ''}>↑ Siirrä ylös</button><button class="btn ghost" data-action="routinedown" data-id="${esc(r.id)}" data-key="rdown-${esc(r.id)}" ${i === state.routines.length - 1 ? 'disabled' : ''}>↓ Siirrä alas</button></div>` : '';
+    return `<li class="card routine" data-kind="${functional ? 'functional' : 'gym'}" data-id="${esc(r.id)}">${grip}
       <button class="quick-start" data-action="start" data-key="quick-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Aloita: ${esc(r.name)}">${icon('play')} <span>Aloita</span></button>
       <details class="routine-details" data-routine-panel="${esc(r.id)}" ${openRoutines.has(r.id) ? 'open' : ''}>
         <summary><h2>${esc(r.name)}</h2>
           <span class="routine-meta">${meta}</span>
           ${routineMuscles(r)}
         </summary>
-        <div class="routine-body">${routineLastResults(r, state.history)}<ul class="routine-pills" aria-label="${functional ? 'Sisältö' : 'Liikkeet'}: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div>${variants}${strength || !functional ? progressionControls(r) : ''}</div>
+        <div class="routine-body">${routineLastResults(r, state.history)}<ul class="routine-pills" aria-label="${functional ? 'Sisältö' : 'Liikkeet'}: ${esc(r.name)}">${pills}</ul><div class="routine-actions"><button class="btn ${i === 0 ? 'primary' : 'secondary'} big" data-action="start" data-key="start-${esc(r.id)}" data-id="${esc(r.id)}">Aloita harjoitus ${icon('arrow')}</button><button class="btn secondary icon-button" data-action="edit" data-key="edit-${esc(r.id)}" data-id="${esc(r.id)}" aria-label="Muokkaa: ${esc(r.name)}">${icon('edit')}</button></div>        ${variants}${strength || !functional ? progressionControls(r) : ''}${order}</div>
       </details></li>`;
   }).join('');
   const ios = (/iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) && !navigator.standalone;
@@ -972,7 +978,7 @@ function homeView() {
   return `${brand()}${warn()}${savedCard()}${resume}<h1 class="sr-only" tabindex="-1">Treenipäiväkirja</h1>
     <div class="stats"><button type="button" class="stat-tile" data-action="homeperiod" data-key="homeperiod"><strong>${thisWeek}</strong> <span>${periodLabel}</span></button><div><strong>${totalSets}</strong><span>kirjattua sarjaa</span></div><div><strong>${state.history.length}</strong><span>valmista treeniä</span></div></div>
     <div class="stats-links"><button class="btn secondary stats-launch" data-action="showhistory" data-key="history-top">Historia</button><button class="btn secondary stats-launch" data-action="timer" data-key="timer-top">${icon('stopwatch')} Ajastin</button><button class="btn secondary stats-launch" data-action="records" data-key="records-top">Ennätykset</button></div>
-    <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat"><ul class="list routine-list">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Luo treeniohjelma</button></section>
+    <div class="home-grid"><section class="home-programs" aria-label="Ohjelmat">${sortable ? '<p id="routine-grip-help" class="sr-only">Vedä ohjelma uuteen kohtaan, tai siirrä sitä nuolinäppäimillä ylös ja alas.</p>' : ''}<ul class="list routine-list${sortable ? ' sortable' : ''}">${routines}</ul><button class="btn secondary add-workout" data-action="new" data-key="new">${icon('plus')} Luo treeniohjelma</button></section>
     <div class="home-aside">
     <details class="settings card" ${settingsOpen ? 'open' : ''}><summary>${icon('settings')}<h2>Asetukset</h2>${backupFlag()}<span class="settings-chevron" aria-hidden="true">⌄</span></summary>
       <div class="settings-body">
@@ -1064,18 +1070,19 @@ function recoveryNote(s) {
   return `<p class="notice" role="status">${light ? lightText : 'Palautuminen on merkitty heikoksi. Tätä treeniä ei ole kevennetty automaattisesti: valitse kuormat itse ja lopeta, jos olo huononee.'}</p>`;
 }
 
-// Only the largest muscle groups get a rail graphic; whole-body, cardio, mobility and unknown moves stay plain.
-const RAIL_MUSCLE = { Etureidet: 'legs', Takareidet: 'legs', Pakarat: 'legs', Pohkeet: 'legs', Selkä: 'back', Rinta: 'chest', Hartiat: 'shoulders', Hauis: 'arms', Ojentajat: 'arms', Keskivartalo: 'core' };
+// The largest muscle groups and whole-body moves get a rail graphic; cardio, mobility and unknown moves stay plain.
+const RAIL_MUSCLE = { Etureidet: 'legs', Takareidet: 'legs', Pakarat: 'legs', Pohkeet: 'legs', Selkä: 'back', Rinta: 'chest', Hartiat: 'shoulders', Hauis: 'arms', Ojentajat: 'arms', Keskivartalo: 'core', 'Koko keho': 'body' };
 const MUSCLE_GLYPHS = {
   legs: 'M6 2h12l-.6 7L16 20h1.5a1.2 1.2 0 0 1 0 2.4h-3.7L12.6 11h-1.2l-1.2 11.4H6.5a1.2 1.2 0 0 1 0-2.4H8L6.6 9 6 2z',
   back: 'M3.5 3.5h17l-3.3 9.5-1.6 7.5H8.4L6.8 13 3.5 3.5zM11.3 6v12h1.4V6h-1.4z',
   chest: 'M2.5 6.5c3-2.4 6.3-2.6 8.8-1V15c-2.6 1.8-6.2 1.6-8.2-.9-1.1-1.7-1.2-5.6-.6-7.6zM21.5 6.5c-3-2.4-6.3-2.6-8.8-1V15c2.6 1.8 6.2 1.6 8.2-.9 1.1-1.7 1.2-5.6.6-7.6z',
   shoulders: 'M12 1.5a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4zM2.5 19c0-6.5 2.7-10 6.5-10h6c3.8 0 6.5 3.5 6.5 10v3h-3.3v-4.5c0-1-.4-2-1.2-2.6V22H7V14.9c-.8.6-1.2 1.6-1.2 2.6V22H2.5v-3z',
   arms: 'M2 21v-6c0-4 3-6 6.5-6 2.5 0 4 1 5 2.5l.5-3.5-.8-2c-.6-1.6.4-3 2-3H18c1.3 0 2 1 1.8 2.2l-.5 2.3c1.7 3.5 2.2 7.5 1.2 10.5-.7 2-2.5 3-4.5 3H2z',
+  body: 'M12 1a2.6 2.6 0 1 1 0 5.2A2.6 2.6 0 0 1 12 1zM12 7.5c2 0 3.2.6 5 1.6l4.5-1.6 1 1.9-4.4 2.4-1.4 1.1L19 22h-2.6L12 15.5 7.6 22H5l2.3-9.6-1.4-1.1L1.5 8.9l1-1.9L7 9.1c1.8-1 3-1.6 5-1.6z',
   core: 'M6.5 3.5h5v5h-5zM12.5 3.5h5v5h-5zM6.5 9.5h5v5h-5zM12.5 9.5h5v5h-5zM6.5 15.5h5v5h-5zM12.5 15.5h5v5h-5z',
 };
 const railMuscle = (e) => RAIL_MUSCLE[core.sessionExerciseCategory(e, state.customExercises)] || '';
-const MUSCLE_LABELS = { legs: 'Jalat', back: 'Selkä', chest: 'Rinta', shoulders: 'Hartiat', arms: 'Kädet', core: 'Keskivartalo' };
+const MUSCLE_LABELS = { legs: 'Jalat', back: 'Selkä', chest: 'Rinta', shoulders: 'Hartiat', arms: 'Kädet', core: 'Keskivartalo', body: 'Koko keho' };
 
 function muscleGlyph(muscle, className) {
   return `<svg class="${className}" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true" focusable="false"><path d="${MUSCLE_GLYPHS[muscle]}"/></svg>`;
@@ -1364,6 +1371,8 @@ function chooseWodMovement(exercise) {
 }
 
 function render() {
+  // A redraw replaces the dragged card, so a drag in progress is dropped without saving.
+  if (routineDrag) stopRoutineDrag(false);
   const previous = document.activeElement;
   const key = previous?.dataset?.key;
   const selection = previous?.tagName === 'INPUT' && previous.type === 'text' ? [previous.selectionStart, previous.selectionEnd] : null;
@@ -1526,6 +1535,25 @@ function moveMovement(t, direction) {
   announce(`Liike siirretty kohtaan ${target + 1}.`);
 }
 function sessionOptions() { return { sessionId: state.session?.id }; }
+
+// Moves a program to `to` in the home list. Works by id, so another tab's changes cannot move the wrong one.
+// `fallbackKey` takes focus when the pressed control turned disabled (the program reached the top or bottom).
+async function moveRoutine(id, to, fallbackKey = null) {
+  let name = '', index = -1, total = 0;
+  const ok = await mutate((next) => {
+    const from = next.routines.findIndex((r) => r.id === id);
+    total = next.routines.length;
+    index = Math.max(0, Math.min(to, total - 1));
+    if (from < 0 || index === from) return false;
+    name = next.routines[from].name;
+    next.routines.splice(index, 0, ...next.routines.splice(from, 1));
+  });
+  if (!ok) return;
+  if (fallbackKey && (!document.activeElement || document.activeElement === document.body)) document.querySelector(`[data-key="${CSS.escape(fallbackKey)}"]`)?.focus({ preventScroll: true });
+  document.activeElement?.closest?.('.routine')?.scrollIntoView({ block: 'nearest' });
+  announce(`${name} siirretty kohtaan ${index + 1}/${total}.`);
+}
+const routineIndex = (id) => state.routines.findIndex((r) => r.id === id);
 
 async function changeRevision(id, undo = false) {
   let result;
@@ -2011,6 +2039,7 @@ const actions = {
       resultDraft = null; resultError = ''; wodCheer = null; clockWodId = null; wodCue = null;
       if (revisionResult) { revisionMessages.set(routineId, revisionResult.message); openRoutines.add(routineId); }
       view = 'home'; savedId = newId; historyEditing = null; historyMessage = ''; render();
+      if (newId) setTimeout(() => { if (savedId === newId) { savedId = null; render(); } }, SAVED_CARD_MS);
       announce(newId ? `Harjoitus tallennettu. Hienoa työtä! ${revisionResult?.message ?? ''}` : 'Harjoitus lopetettu. Mitään ei tallennettu historiaan.');
     }
   },
@@ -2053,6 +2082,8 @@ const actions = {
     if (template) openDraft(core.sanitizeRoutine(templateRoutine(template, templateSex)), true);
   },
   edit(t) { const r = byId(t.dataset.id); if (r) openDraft(r, false); },
+  routineup(t) { const id = t.dataset.id; return moveRoutine(id, routineIndex(id) - 1, `rdown-${id}`); },
+  routinedown(t) { const id = t.dataset.id; return moveRoutine(id, routineIndex(id) + 1, `rup-${id}`); },
   addex() { if (draft.exercises.length >= 60) return; openLibrary(draft.exercises.find((e) => !e.name.trim())?.id ?? null); },
   pickex(t) { openLibrary(t.dataset.id, false); },
   backedit() {
@@ -2521,10 +2552,71 @@ document.addEventListener('pointerdown', (e) => {
   holdTimer = setTimeout(() => { holdRepeating = true; repeat(); }, HOLD_DELAY_MS);
 });
 for (const type of ['pointerup', 'pointercancel', 'blur']) (type === 'blur' ? window : document).addEventListener(type, stopHold);
-document.addEventListener('contextmenu', (e) => { if (e.target.closest?.('.step-btn')) e.preventDefault(); });
+document.addEventListener('contextmenu', (e) => { if (e.target.closest?.('.step-btn, .routine-grip')) e.preventDefault(); });
 document.addEventListener('click', (e) => {
   if (holdSuppressClick && e.target.closest?.('.step-btn')) { e.stopImmediatePropagation(); e.preventDefault(); holdSuppressClick = false; }
 }, true);
+
+// Dragging a program's grip reorders the home list. Other cards slide aside, the page scrolls near
+// the screen edges, and the new order is saved on release. Escape or a cancelled pointer leaves it unchanged.
+const DRAG_EDGE = 64;
+function paintRoutineDrag() {
+  const d = routineDrag, first = d.rects[0], last = d.rects.at(-1), own = d.rects[d.from];
+  const dy = Math.max(first.top - own.top, Math.min(last.bottom - own.bottom, d.y + scrollY - d.startY));
+  const center = own.mid + dy;
+  d.to = d.rects.reduce((n, r, i) => n + (i !== d.from && r.mid < center ? 1 : 0), 0);
+  const shift = own.height + d.gap;
+  d.cards.forEach((card, i) => {
+    const offset = i === d.from ? dy : d.from < i && i <= d.to ? -shift : d.to <= i && i < d.from ? shift : 0;
+    card.style.transform = offset ? `translateY(${offset}px)` : '';
+  });
+}
+function scrollRoutineDrag() {
+  const d = routineDrag;
+  if (!d) return;
+  const speed = d.y < DRAG_EDGE ? (d.y - DRAG_EDGE) / 4 : d.y > innerHeight - DRAG_EDGE ? (d.y - innerHeight + DRAG_EDGE) / 4 : 0;
+  if (speed) { scrollBy(0, speed); paintRoutineDrag(); }
+  d.frame = requestAnimationFrame(scrollRoutineDrag);
+}
+function stopRoutineDrag(commit) {
+  const d = routineDrag;
+  if (!d) return;
+  routineDrag = null;
+  cancelAnimationFrame(d.frame);
+  const clear = () => { d.list.classList.remove('dragging'); d.cards.forEach((card) => { card.style.transform = ''; card.classList.remove('lifted'); }); };
+  if (!commit || d.to === d.from) { clear(); return; }
+  // Keep the dropped layout until the saved order is drawn, so the card does not jump back first.
+  enqueueAction(async () => { try { await moveRoutine(d.id, d.to); } finally { if (d.list.isConnected) clear(); } });
+}
+document.addEventListener('pointerdown', (e) => {
+  const grip = e.target.closest?.('.routine-grip');
+  if (!grip || e.button !== 0 || !e.isPrimary || routineDrag) return;
+  e.preventDefault();
+  const list = grip.closest('.routine-list'), cards = [...list.children], card = grip.closest('.routine');
+  const rects = cards.map((c) => {
+    const r = c.getBoundingClientRect(), top = r.top + scrollY;
+    return { top, bottom: top + r.height, height: r.height, mid: top + r.height / 2 };
+  });
+  const from = cards.indexOf(card);
+  routineDrag = { id: grip.dataset.id, pointerId: e.pointerId, list, cards, rects, from, to: from, startY: e.clientY + scrollY, y: e.clientY, gap: cards.length > 1 ? rects[1].top - rects[0].bottom : 0 };
+  // Capture only keeps the grip as the event target; moves are read on document either way.
+  try { grip.setPointerCapture(e.pointerId); } catch {}
+  list.classList.add('dragging'); card.classList.add('lifted');
+  routineDrag.frame = requestAnimationFrame(scrollRoutineDrag);
+});
+document.addEventListener('pointermove', (e) => { if (routineDrag?.pointerId === e.pointerId) { routineDrag.y = e.clientY; paintRoutineDrag(); } });
+document.addEventListener('pointerup', (e) => { if (routineDrag?.pointerId === e.pointerId) stopRoutineDrag(true); });
+document.addEventListener('pointercancel', (e) => { if (routineDrag?.pointerId === e.pointerId) stopRoutineDrag(false); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && routineDrag) { e.preventDefault(); stopRoutineDrag(false); return; }
+  const grip = e.target.closest?.('.routine-grip');
+  if (!grip || routineDrag) return;
+  const from = routineIndex(grip.dataset.id);
+  const to = { ArrowUp: from - 1, ArrowDown: from + 1, Home: 0, End: state.routines.length - 1 }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  enqueueAction(() => moveRoutine(grip.dataset.id, to));
+});
 document.addEventListener('submit', (e) => {
   // Enter in a result field clicks "Tallenna tulos", which the click handler runs; this catches any other submit.
   if (e.target.classList?.contains('result-form')) {

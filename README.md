@@ -321,8 +321,8 @@ and set completion indicators remain unchanged.
 
 Each box in the right-side exercise rail shows a faint, decorative muscle-group
 icon behind its set count: legs (front/back thighs, glutes, calves), back, chest,
-shoulders, arms (biceps/triceps) and core. The group comes from the exercise's
-saved category, a matching custom exercise or the library. Whole-body, cardio,
+shoulders, arms (biceps/triceps), core and whole body. The group comes from the
+exercise's saved category, a matching custom exercise or the library. Cardio,
 mobility and uncategorised exercises show no icon. The icons are inline SVG,
 hidden from screen readers and in forced-colors mode, and change no saved data.
 
@@ -352,11 +352,21 @@ Intervening exercise edits disable undo rather than overwriting those edits.
 
 - Home routine cards omit the expand chevron; tapping the heading still opens
   editing, variants and progression options. Muscle symbols left of "Aloita"
-  count exercises per primary group (legs, back, chest, shoulders, arms, core),
+  count exercises per primary group (legs, back, chest, shoulders, arms, core, whole body),
   including named WOD movements. Counts are exercises, not sets or individual
-  anatomical muscles; whole-body, cardio, mobility and unknown moves are not
+  anatomical muscles; cardio, mobility and unknown moves are not
   assigned guessed muscle groups. Icons reuse the workout rail graphics and
   have accessible group names and counts.
+- With two or more programs, the home order is user-defined. Drag a card by
+  the dotted grip on its left edge (touch, pen or mouse; the list auto-scrolls
+  near the screen edges, and Escape or a cancelled touch leaves the order
+  unchanged). A focused grip also moves with Arrow up/down, Home and End. An
+  opened program has "Siirrä ylös" / "Siirrä alas" buttons. The order is saved
+  with the programs and kept in backups; the first program stays the primary
+  "Aloita harjoitus" one.
+- Functional (WOD) programs have a coral left stripe and background fade, and
+  gym programs use the accent colour, so the two kinds are easy to tell apart.
+  In Aurora every gym program is purple; the earlier rotating card tones are gone.
 - Sets always stack vertically. Unfinished set buttons show "Klikkaa" above
   "tehdyksi"; completed buttons show a small circular check badge with the set
   number underneath, without a large outline or repeated result text. Their full

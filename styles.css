@@ -3,6 +3,7 @@
 	--bg: #0d1110; --card: #151b19; --card-hi: #1b2420; --surface: #1f2824; --input: #101514;
 	--text: #f2f7f4; --muted: #9eb0a7; --line: #2c3833; --line-hi: #3d4f47;
 	--accent: #a8f09c; --accent-ink: #0f2915; --accent-soft: #1f3524; --accent-ring: #a8f09c38;
+	--functional: #ff9a8b; --functional-soft: #3a2422;
 	--danger: #ffb4ab; --danger-bg: #3b211f; --focus: #9bc8ff;
 	--shadow: 0 10px 28px #00000033;
 	--space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px;
@@ -73,7 +74,24 @@ h3 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .update-actions { display: flex; flex-wrap: wrap; gap: var(--control-gap); margin-top: var(--control-gap); }
 @media (min-width: 1040px) { .update-notice { margin-inline: auto; } }
 .card.routine { position: relative; border-color: var(--line-hi); border-left: 4px solid var(--accent); background: linear-gradient(115deg, var(--accent-soft), var(--card) 75%); }
+.card.routine[data-kind="functional"] { border-left-color: var(--functional); background: linear-gradient(115deg, var(--functional-soft), var(--card) 75%); }
 .routine:focus-within { border-color: var(--accent); }
+.card.routine[data-kind="functional"]:focus-within { border-left-color: var(--functional); }
+/* Drag grip: a slim strip along the card's left edge, inside its padding. */
+/* The visible strip stays slim, but the 48 px hit area reaches 16 px into the page gutter. */
+.sortable > .card.routine { padding-left: 34px; }
+.routine-grip { position: absolute; inset-block: 0; left: -16px; z-index: 1; display: grid; place-items: center; width: 48px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.routine-grip svg { position: relative; width: 16px; height: 16px; opacity: .7; }
+.routine-grip::before { content: ''; position: absolute; inset: 6px 16px; border-radius: 10px; }
+.routine-grip:focus-visible { outline: none; }
+.routine-grip:focus-visible::before { outline: 3px solid var(--focus); }
+@media (hover: hover) { .routine-grip:hover svg { opacity: 1; } }
+.routine-list.dragging { user-select: none; -webkit-user-select: none; }
+.routine-list.dragging > .routine { transition: transform .16s ease; }
+.routine-list.dragging > .routine.lifted { z-index: 3; transition: none; box-shadow: 0 16px 36px #00000059; }
+.routine-list.dragging .routine-grip { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .routine-list.dragging > .routine { transition: none; } }
+.routine-order { justify-content: flex-end; margin-top: var(--control-gap); }
 .progression-controls { display: grid; gap: var(--control-gap); border-top: 1px solid var(--line); margin-top: var(--control-gap); padding-top: var(--control-gap); }
 .revision-report { margin-top: var(--control-gap); font-size: 12px; overflow-wrap: anywhere; }
 .revision-report ul, .history-log ul { padding-left: 18px; }

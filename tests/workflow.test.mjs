@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as core from '../core.js';
+import { templateRoutine, templateById } from '../wod-templates.js';
 import { configuredState } from './statistics-fixtures.mjs';
-import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm, openSettings } from './support.mjs';
+import { chromium, webkit, devices, AxeBuilder, startServer, tap, tapConfirm, openSettings, expandRoutines } from './support.mjs';
 
 const { server, url } = await startServer();
 const button = (page, name) => page.getByRole('button', { name, exact: true });
@@ -716,6 +717,132 @@ try {
           assert.equal(await p.locator('[data-hist] .history-editor').count(), 1, 'the saved workout opens for editing');
           await tap(button(p, 'Harjoituksiin'));
           assert.equal(await p.locator('.hist').count(), 0);
+        });
+
+        await run('the saved-workout card disappears after 30 seconds', async (p) => {
+          const state = core.defaultState();
+          const session = core.startSession(state.routines[0], 1000);
+          session.exercises.forEach((e) => e.sets.forEach((set) => { set.done = true; }));
+          state.session = session;
+          await p.clock.install();
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          await tap(button(p, 'Tallenna harjoitus'));
+          await p.locator('.saved-card').waitFor();
+          await p.clock.runFor(29000);
+          assert.equal(await p.locator('.saved-card').count(), 1);
+          await p.clock.runFor(1500);
+          assert.equal(await p.locator('.saved-card').count(), 0);
+        });
+
+        const seedPrograms = async (p, routines) => {
+          const state = core.defaultState();
+          state.routines = routines.map((r) => core.sanitizeRoutine(r.type === 'functional' ? r : { exercises: [{ id: `${r.id}-e`, name: 'Penkkipunnerrus', sets: 3, reps: '8' }], ...r }));
+          await p.goto(url);
+          await p.evaluate((value) => localStorage.setItem('gym-tracker-v1', JSON.stringify(value)), state);
+          await p.reload();
+          await p.locator('.routine').first().waitFor();
+        };
+        const programOrder = (p) => p.locator('.routine h2').allTextContents();
+        const savedOrder = async (p) => (await saved(p)).routines.map((r) => r.name);
+        const idle = (p) => p.waitForFunction(() => document.getElementById('app').getAttribute('aria-busy') !== 'true');
+        const fourPrograms = ['A', 'B', 'C', 'D'].map((name) => ({ id: name.toLowerCase(), name }));
+
+        await run('programs move by dragging their grip, and the order is saved and survives a reload', async (p) => {
+          await seedPrograms(p, fourPrograms);
+          assert.equal(await p.locator('.routine-grip').count(), 4);
+          const grip = await p.locator('[data-key="grip-c"]').boundingBox();
+          const first = await p.locator('.routine').first().boundingBox();
+          await p.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+          await p.mouse.down();
+          for (let step = 1; step <= 8; step++) await p.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + (first.y + 4 - (grip.y + grip.height / 2)) * step / 8);
+          assert.match(await p.locator('.routine').nth(2).getAttribute('style'), /translateY\(-/, 'the dragged card follows the pointer');
+          await p.mouse.up();
+          await idle(p);
+          assert.deepEqual(await programOrder(p), ['C', 'A', 'B', 'D']);
+          assert.deepEqual(await savedOrder(p), ['C', 'A', 'B', 'D']);
+          assert.equal(await p.locator('.routine[style*="translate"], .routine-list.dragging, .routine.lifted').count(), 0, 'no drag styling is left behind');
+          await p.reload();
+          await p.locator('.routine').first().waitFor();
+          assert.deepEqual(await programOrder(p), ['C', 'A', 'B', 'D']);
+        });
+
+        await run('Escape or a cancelled pointer leaves the program order unchanged', async (p) => {
+          await seedPrograms(p, fourPrograms);
+          const grip = await p.locator('[data-key="grip-a"]').boundingBox();
+          await p.mouse.move(grip.x + grip.width / 2, grip.y + 10);
+          await p.mouse.down();
+          await p.mouse.move(grip.x + grip.width / 2, grip.y + 400, { steps: 6 });
+          await p.keyboard.press('Escape');
+          await p.mouse.up();
+          await idle(p);
+          assert.deepEqual(await programOrder(p), ['A', 'B', 'C', 'D']);
+          assert.deepEqual(await savedOrder(p), ['A', 'B', 'C', 'D']);
+          assert.equal(await p.locator('.routine[style*="translate"], .routine-list.dragging, .routine.lifted').count(), 0);
+          const cancelled = await p.evaluate(() => {
+            const grip = document.querySelector('[data-key="grip-a"]'), box = grip.getBoundingClientRect();
+            const at = (y) => ({ pointerId: 7, isPrimary: true, button: 0, bubbles: true, clientX: box.left + 5, clientY: y });
+            grip.dispatchEvent(new PointerEvent('pointerdown', at(box.top + 5)));
+            document.dispatchEvent(new PointerEvent('pointermove', at(box.top + 400)));
+            document.dispatchEvent(new PointerEvent('pointercancel', at(box.top + 400)));
+            return document.querySelectorAll('.routine[style*="translate"], .routine.lifted').length;
+          });
+          assert.equal(cancelled, 0);
+          assert.deepEqual(await savedOrder(p), ['A', 'B', 'C', 'D']);
+        });
+
+        await run('the grip moves a program with arrow, Home and End keys and keeps focus on it', async (p) => {
+          await seedPrograms(p, fourPrograms);
+          const grip = p.locator('[data-key="grip-b"]');
+          assert.equal(await grip.getAttribute('aria-label'), 'Siirrä ohjelmaa: B, kohta 2/4');
+          assert.match(await p.locator(`#${await grip.getAttribute('aria-describedby')}`).textContent(), /nuolinäppäimillä/);
+          await grip.focus();
+          for (const [key, order] of [['ArrowUp', 'BACD'], ['ArrowUp', 'BACD'], ['End', 'ACDB'], ['ArrowUp', 'ACBD'], ['Home', 'BACD'], ['ArrowDown', 'ABCD']]) {
+            await p.keyboard.press(key);
+            await idle(p);
+            assert.deepEqual(await savedOrder(p), [...order], `${key} → ${order}`);
+            assert.equal(await p.evaluate(() => document.activeElement?.dataset.key), 'grip-b', `focus stays on the grip after ${key}`);
+          }
+          await p.waitForFunction(() => /B siirretty kohtaan 2\/4/.test(document.getElementById('live').textContent));
+        });
+
+        await run('opened programs offer move up and down buttons that stop at the ends', async (p) => {
+          await seedPrograms(p, fourPrograms.slice(0, 3));
+          await tap(p.locator('[data-key="rdown-a"]'));
+          assert.deepEqual(await savedOrder(p), ['B', 'A', 'C']);
+          await tap(p.locator('[data-key="rdown-a"]'));
+          assert.deepEqual(await savedOrder(p), ['B', 'C', 'A']);
+          assert.equal(await p.locator('[data-key="rdown-a"]').isDisabled(), true);
+          assert.equal(await p.evaluate(() => document.activeElement?.dataset.key), 'rup-a', 'focus moves to the other button at the end');
+          assert.equal(await p.locator('[data-key="rup-b"]').isDisabled(), true);
+          await tap(p.locator('[data-key="rup-a"]'));
+          assert.deepEqual(await savedOrder(p), ['B', 'A', 'C']);
+          const results = await new AxeBuilder({ page: p }).include('.home-programs').analyze();
+          assert.deepEqual(results.violations.map((v) => v.id), []);
+        });
+
+        await run('a single program has no grip or move buttons', async (p) => {
+          await seedPrograms(p, fourPrograms.slice(0, 1));
+          await expandRoutines(p);
+          assert.equal(await p.locator('.routine-grip, .routine-order, .routine-list.sortable, #routine-grip-help').count(), 0);
+        });
+
+        await run('functional programs have a coral stripe and fade, gym programs keep one accent colour', async (p) => {
+          await seedPrograms(p, [
+            { id: 'g1', name: 'Gym 1' }, { id: 'g2', name: 'Gym 2' }, { id: 'g3', name: 'Gym 3' },
+            { ...templateRoutine(templateById('fran'), 'women'), id: 'f', name: 'WOD' },
+          ]);
+          assert.deepEqual(await p.locator('.routine').evaluateAll((cards) => cards.map((c) => c.dataset.kind)), ['gym', 'gym', 'gym', 'functional']);
+          for (const [appearance, coral] of [['dark', 'rgb(255, 154, 139)'], ['aurora', 'rgb(241, 118, 118)']]) {
+            await p.evaluate((value) => window.TrackerAppearance.set(value), appearance);
+            const looks = await p.locator('.routine').evaluateAll((cards) => cards.map((c) => { const s = getComputedStyle(c); return { stripe: s.borderLeftColor, fade: s.backgroundImage }; }));
+            const [gym, ...rest] = looks, functional = looks[3];
+            assert.equal(functional.stripe, coral, `${appearance}: functional stripe is coral`);
+            assert.notEqual(functional.fade, gym.fade, `${appearance}: functional fade differs`);
+            for (const other of rest.slice(0, 2)) assert.deepEqual(other, gym, `${appearance}: every gym program looks the same`);
+            assert.notEqual(gym.stripe, coral);
+          }
         });
 
         await run('the previous result of each movement is shown, and unknown values stay unknown', async (p) => {

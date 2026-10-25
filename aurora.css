@@ -39,9 +39,10 @@ html[data-theme="aurora"] .stats > :nth-child(1) strong { color: var(--accent); 
 html[data-theme="aurora"] .stats > :nth-child(2) strong { color: var(--success); }
 html[data-theme="aurora"] .stats > :nth-child(3) strong { color: var(--coral-ink); }
 html[data-theme="aurora"] .card.routine { border-left-width: 5px; border-color: var(--line-hi); border-left-color: var(--accent); background: linear-gradient(115deg, #ece6ff, #ffffff 75%); }
-html[data-theme="aurora"] .card.routine[data-tone="1"] { border-left-color: var(--success-bright); background: linear-gradient(115deg, #dcf4ea, #ffffff 75%); }
-html[data-theme="aurora"] .card.routine[data-tone="2"] { border-left-color: var(--coral); background: linear-gradient(115deg, #ffe9e4, #ffffff 75%); }
+html[data-theme="aurora"] .card.routine[data-kind="functional"] { border-left-color: var(--coral); background: linear-gradient(115deg, #ffe9e4, #ffffff 75%); }
 html[data-theme="aurora"] .routine:focus-within { border-color: var(--accent); }
+html[data-theme="aurora"] .card.routine[data-kind="functional"]:focus-within { border-left-color: var(--coral); }
+html[data-theme="aurora"] .routine-list.dragging > .routine.lifted { box-shadow: 0 16px 36px #4b2fb333; }
 html[data-theme="aurora"] button.quick-start { background: linear-gradient(135deg, #6a49e0, #5a3cc8); border-color: #5a3cc8; box-shadow: 0 6px 16px #6544d840; }
 html[data-theme="aurora"] .routine-meta > span { background: #ffffffb3; }
 html[data-theme="aurora"] .pill { background: #ffffffcc; border-color: var(--line-hi); }

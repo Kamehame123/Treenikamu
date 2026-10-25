@@ -199,7 +199,7 @@ try {
           const boxes = p.locator('.track-box');
           await boxes.first().waitFor();
           const before = (await saved(p)).session;
-          assert.deepEqual(await boxes.evaluateAll((list) => list.map((b) => b.dataset.muscle || '')), ['legs', 'legs', 'back', 'chest', 'shoulders', 'arms', 'arms', 'core', '', '']);
+          assert.deepEqual(await boxes.evaluateAll((list) => list.map((b) => b.dataset.muscle || '')), ['legs', 'legs', 'back', 'chest', 'shoulders', 'arms', 'arms', 'core', 'body', '']);
           assert.deepEqual(await boxes.allInnerTexts(), names.map(() => '3'));
           assert.equal(await boxes.nth(0).getAttribute('aria-label'), 'Liike 1: Takakyykky, 3 sarjaa, tehty');
           for (const theme of ['dark', 'aurora']) {
